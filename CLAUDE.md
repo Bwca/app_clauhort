@@ -13,6 +13,16 @@ Chorus Mentium: a multi-agent Claude chat app. Each chat participant ("agent") i
 
 Requires Node 22.13+ (see `.nvmrc` — v22.13.0) and the `claude` CLI installed, authenticated, and on `PATH`.
 
+## Commit workflow
+
+Commit early and often — don't let work pile up into one large, hard-to-review commit. As soon as a self-contained, working piece of a task is done (one function, one file, one route, one test suite), commit it before moving to the next piece, rather than batching the whole task into a single commit at the end.
+
+- Each commit should be small and do exactly one thing — a change someone could review and understand on its own, independent of what comes before or after it.
+- Prefer several narrow commits over one broad one, even within a single task (e.g. a new route, its wiring into the router, and its test can each be their own commit).
+- Write commit messages that say *why*, not just what, when the reason isn't obvious from the diff itself.
+- This repo's own history (`git log`) was built this way — one concern per commit, in dependency order — and later work should keep following that pattern rather than reverting to large batched commits.
+- Only commit when the user asks (see the global git safety rules) — this section governs *how* to shape commits once asked, not a standing permission to commit unprompted.
+
 ## Commands
 
 ```bash
