@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.DS_Store
+*.log
+server/store/data.json
+server/store/*.sqlite3
+server/store/*.sqlite3-wal
+server/store/*.sqlite3-shm
