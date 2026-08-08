@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en-CA">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Chorus Mentium</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="app">
+    <aside id="sidebar">
+      <div id="sidebar-header">
+        <span id="app-title">Chorus Mentium</span>
+        <div id="sidebar-header-right">
+          <a id="help-btn" data-testid="help-btn" data-i18n-title="common.help" title="Help" href="https://github.com/Bwca/app_chorus-mentium" target="_blank" rel="noopener noreferrer">?</a>
+          <button id="settings-btn" data-testid="settings-btn" data-i18n-title="common.settings" title="Settings">⚙</button>
+          <span id="conn-dot" data-testid="conn-dot" data-i18n-title="conn.disconnected" title="Disconnected"></span>
+        </div>
+      </div>
+      <div id="chats-section">
+        <span class="section-label" data-i18n="sidebar.chatsLabel">Chats</span>
+        <button id="new-chat-btn" data-testid="new-chat-btn" data-i18n-title="sidebar.newChatTitle" title="New chat">+</button>
+      </div>
+      <form id="new-chat-form" hidden>
+        <input id="new-chat-input" data-testid="new-chat-input" data-i18n-placeholder="sidebar.chatNamePlaceholder" placeholder="Chat name…" autocomplete="off" />
+      </form>
+      <ul id="chat-list" data-testid="chat-list"></ul>
+    </aside>
+
+    <main id="chat-area">
+      <div id="empty-state" data-testid="empty-state" data-i18n="chat.emptyState">Select a chat or create one</div>
+      <div id="chat-view" hidden>
+        <div id="chat-topbar">
+          <div id="chat-topbar-left">
+            <span id="chat-topbar-name" data-testid="chat-topbar-name"></span>
+            <div id="scheduled-wrapper">
+              <button id="scheduled-btn" data-testid="scheduled-btn" hidden></button>
+              <ul id="scheduled-panel" data-testid="scheduled-panel" hidden></ul>
+            </div>
+          </div>
+          <span id="reconnecting-notice" data-i18n="chat.reconnecting" hidden>Reconnecting…</span>
+        </div>
+        <div id="message-filter-bar" data-testid="message-filter-bar" hidden></div>
+        <div id="message-list" data-testid="message-list"></div>
+        <div id="input-area">
+          <div id="mention-dropdown" data-testid="mention-dropdown" hidden></div>
+          <div id="attachment-chips" data-testid="attachment-chips" hidden></div>
+          <p id="attachment-error" data-testid="attachment-error" class="error-text" hidden></p>
+          <div id="input-row">
+            <textarea id="msg-input" data-testid="msg-input" data-i18n-placeholder="chat.messagePlaceholder" placeholder="Message… (@ to mention)" rows="1"></textarea>
+            <button id="schedule-btn" data-testid="schedule-btn" data-i18n-title="schedule.btnTitle" title="Schedule message">🕐</button>
+            <button id="send-btn" data-testid="send-btn">↑</button>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <aside id="agent-panel">
+      <div id="agent-panel-header" data-i18n="agentPanel.header">Agents</div>
+      <div id="no-chat-notice" data-testid="no-chat-notice" data-i18n="agentPanel.noChatSelected">No chat selected</div>
+      <ul id="agent-list" data-testid="agent-list" hidden></ul>
+      <div id="agent-actions" hidden>
+        <div id="add-agent-wrapper">
+          <button id="add-agent-btn" data-testid="add-agent-btn" data-i18n="agentPanel.addAgent">+ Add agent</button>
+          <ul id="add-agent-menu" data-testid="add-agent-menu" hidden></ul>
+        </div>
+        <p id="agent-panel-error" data-testid="agent-panel-error" class="error-text" hidden></p>
+        <button id="new-agent-btn" data-testid="new-agent-btn" data-i18n="agentPanel.newAgent">+ New agent</button>
+      </div>
+    </aside>
+  </div>
+
+  <!-- Create agent modal -->
+  <div id="modal-overlay" data-testid="modal-overlay" hidden>
+    <div id="modal">
+      <div id="modal-header">
+        <span data-i18n="agentModal.title">New Agent</span>
+        <button id="modal-close" data-testid="modal-close">×</button>
+      </div>
+      <form id="agent-form">
+        <label class="field-label"><span data-i18n="agentModal.nameLabel">Name</span>
+          <div id="agent-name-row">
+            <input id="agent-name" data-testid="agent-name-input" data-i18n-placeholder="agentModal.namePlaceholder" placeholder="e.g. Claudia" autocomplete="off" required />
+            <button type="button" id="agent-name-generate" data-testid="agent-name-generate" data-i18n-title="agentModal.generateNameTitle" title="Generate a name">🎲</button>
+          </div>
+        </label>
+        <label class="field-label"><span data-i18n="agentModal.workingDirLabel">Working Directory</span>
+          <div id="agent-dir-row">
+            <input id="agent-dir" data-testid="agent-dir-input" data-i18n-placeholder="agentModal.workingDirPlaceholder" placeholder="/home/you/projects/myapp" autocomplete="off" required />
+            <button type="button" id="agent-dir-browse" data-testid="agent-dir-browse" data-i18n="agentModal.browseBtn">Browse…</button>
+          </div>
+          <div id="agent-dir-recent-wrap" data-testid="agent-dir-recent-wrap" hidden>
+            <span class="field-hint" data-i18n="agentModal.recentDirsLabel">Recent:</span>
+            <div id="agent-dir-recent" class="chip-row" data-testid="agent-dir-recent"></div>
+          </div>
+        </label>
+        <label class="field-label"><span data-i18n="agentModal.resumeIdLabel">Resume ID</span> <span class="field-hint" data-i18n-html="agentModal.resumeIdHint">(optional — from <code>claude --resume</code>)</span>
+          <input id="agent-resume" data-testid="agent-resume-input" data-i18n-placeholder="agentModal.resumePlaceholder" placeholder="e.g. multi-agent-claude-chat" autocomplete="off" />
+        </label>
+        <div class="field-label"><span data-i18n="agentModal.colorLabel">Color</span>
+          <div id="color-grid" class="color-grid" data-testid="color-grid"></div>
+        </div>
+        <label id="yolo-mode-label" class="check-label check-label-danger">
+          <input id="yolo-mode-check" data-testid="yolo-mode-check" type="checkbox" />
+          <span>
+            <span data-i18n="agentModal.yoloModeLabel">⚡ YOLO mode</span>
+            <span class="field-hint" data-i18n="agentModal.yoloModeHint">skips ALL permission checks — no denials, no grant prompts, ever</span>
+          </span>
+        </label>
+        <label id="observer-mode-label" class="check-label">
+          <input id="observer-mode-check" data-testid="observer-mode-check" type="checkbox" />
+          <span>
+            <span data-i18n="agentModal.observerModeLabel">👁 Observer</span>
+            <span class="field-hint" data-i18n="agentModal.observerModeHint">only responds when @mentioned — never to broadcast messages — and sees the full chat history, not just the recent window</span>
+          </span>
+        </label>
+        <label id="add-to-chat-label" class="check-label">
+          <input id="add-to-chat-check" data-testid="add-to-chat-check" type="checkbox" checked />
+          <span data-i18n="agentModal.addToChatLabel">Add to current chat</span>
+        </label>
+        <p id="agent-error" data-testid="agent-error" class="error-text" hidden></p>
+        <div id="modal-footer">
+          <button type="button" id="modal-cancel" data-testid="modal-cancel" data-i18n="common.cancel">Cancel</button>
+          <button type="submit" id="modal-submit" data-testid="modal-submit" data-i18n="agentModal.createBtn">Create</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Folder browser, opened from the New Agent modal's Browse button -->
+  <div id="browse-overlay" data-testid="browse-overlay" hidden>
+    <div id="browse-modal">
+      <div id="browse-header">
+        <span data-i18n="browseModal.title">Select Working Directory</span>
+        <button type="button" id="browse-close" data-testid="browse-close">×</button>
+      </div>
+      <div id="browse-path-row">
+        <input id="browse-path-input" data-testid="browse-path-input" autocomplete="off" />
+        <button type="button" id="browse-path-go" data-testid="browse-path-go" data-i18n="browseModal.goBtn">Go</button>
+      </div>
+      <p id="browse-error" data-testid="browse-error" class="error-text" hidden></p>
+      <ul id="browse-list" data-testid="browse-list"></ul>
+      <div id="browse-footer">
+        <button type="button" id="browse-cancel" data-testid="browse-cancel" data-i18n="common.cancel">Cancel</button>
+        <button type="button" id="browse-select" data-testid="browse-select" data-i18n="browseModal.selectBtn">Select This Folder</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Settings modal -->
+  <div id="settings-overlay" data-testid="settings-overlay" hidden>
+    <div id="settings-modal">
+      <div id="settings-header">
+        <span data-i18n="common.settings">Settings</span>
+        <button id="settings-close" data-testid="settings-close">×</button>
+      </div>
+      <form id="settings-form">
+        <label class="field-label"><span data-i18n="settingsModal.displayNameLabel">Your display name</span>
+          <input id="settings-display-name" data-testid="settings-display-name-input" data-i18n-placeholder="settingsModal.displayNamePlaceholder" placeholder="You" autocomplete="off" required />
+        </label>
+        <div class="field-label"><span data-i18n="settingsModal.colorLabel">Your message color</span>
+          <div id="settings-color-grid" class="color-grid" data-testid="settings-color-grid"></div>
+        </div>
+        <label class="field-label"><span data-i18n="settingsModal.languageLabel">Language</span>
+          <select id="settings-language" data-testid="settings-language-select">
+            <option value="en-CA">English (Canada)</option>
+            <option value="fr-CA">Français (Canada)</option>
+          </select>
+        </label>
+        <p id="settings-error" data-testid="settings-error" class="error-text" hidden></p>
+        <div id="settings-footer">
+          <button type="button" id="settings-cancel" data-testid="settings-cancel" data-i18n="common.cancel">Cancel</button>
+          <button type="submit" id="settings-save" data-testid="settings-save" data-i18n="settingsModal.saveBtn">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Schedule message modal, opened from the 🕐 button next to Send -->
+  <div id="schedule-overlay" data-testid="schedule-overlay" hidden>
+    <div id="schedule-modal">
+      <div id="schedule-header">
+        <span data-i18n="schedule.modalTitle">Schedule message</span>
+        <button type="button" id="schedule-close" data-testid="schedule-close">×</button>
+      </div>
+      <form id="schedule-form">
+        <label class="field-label"><span data-i18n="schedule.timeLabel">Send at</span>
+          <input type="datetime-local" id="schedule-time-input" data-testid="schedule-time-input" step="1" required />
+        </label>
+        <p id="schedule-error" data-testid="schedule-error" class="error-text" hidden></p>
+        <div id="schedule-footer">
+          <button type="button" id="schedule-cancel" data-testid="schedule-cancel" data-i18n="common.cancel">Cancel</button>
+          <button type="submit" id="schedule-submit" data-testid="schedule-submit" data-i18n="schedule.submitBtn">Schedule</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Generic confirmation dialog, used for irreversible actions (delete chat/agent) -->
+  <div id="confirm-overlay" data-testid="confirm-overlay" hidden>
+    <div id="confirm-modal">
+      <p id="confirm-message" data-testid="confirm-message"></p>
+      <div id="confirm-footer">
+        <button type="button" id="confirm-cancel" data-testid="confirm-cancel" data-i18n="common.cancel">Cancel</button>
+        <button type="button" id="confirm-ok" data-testid="confirm-ok" data-i18n="confirm.deleteBtn">Delete</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js" type="module"></script>
+</body>
+</html>
