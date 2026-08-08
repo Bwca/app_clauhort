@@ -1,0 +1,15 @@
+{
+  "name": "chorus-mentium-tests",
+  "version": "1.0.0",
+  "description": "Puppeteer E2E tests for Chorus Mentium",
+  "type": "module",
+  "scripts": {
+    "test": "node run.js"
+  },
+  "dependencies": {
+    "puppeteer": "^24.0.0"
+  },
+  "allowScripts": {
+    "puppeteer@24.43.1": true
+  }
+}
