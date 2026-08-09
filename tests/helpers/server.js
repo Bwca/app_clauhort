@@ -24,12 +24,12 @@ export async function startServer() {
     // fileURLToPath, not raw `.pathname` — see tests/run.js for why.
     cwd: fileURLToPath(new URL('../../server', import.meta.url)),
     stdio: 'pipe',
-    // CHORUS_TRANSCRIPT_LOG explicitly cleared, not just left unset — it
+    // APP_TRANSCRIPT_LOG explicitly cleared, not just left unset — it
     // spreads from the CURRENT process.env first, so if whoever's running
     // the suite happens to have it set globally for their own debugging,
     // test runs would otherwise non-deterministically start writing
     // transcript files to disk.
-    env: { ...process.env, PORT: String(TEST_PORT), CHORUS_DB_FILE: ':memory:', CHORUS_LOG_LEVEL: 'silent', CHORUS_TRANSCRIPT_LOG: '' },
+    env: { ...process.env, PORT: String(TEST_PORT), APP_DB_FILE: ':memory:', APP_LOG_LEVEL: 'silent', APP_TRANSCRIPT_LOG: '' },
   });
 
   serverProcess.stderr.on('data', (d) => process.stderr.write(`[server] ${d}`));

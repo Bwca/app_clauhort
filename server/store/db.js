@@ -17,7 +17,7 @@ import { logger } from '../logger.js';
 const log = logger.child({ component: 'db' });
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const DATA_FILE = process.env.CHORUS_DB_FILE ?? join(__dirname, 'data.sqlite3');
+const DATA_FILE = process.env.APP_DB_FILE ?? join(__dirname, 'data.sqlite3');
 const JSON_DATA_FILE = join(__dirname, 'data.json');
 
 /** @type {import('node:sqlite').DatabaseSync} */

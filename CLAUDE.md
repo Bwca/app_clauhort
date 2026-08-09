@@ -28,7 +28,7 @@ Commit early and often — don't let work pile up into one large, hard-to-review
 ```bash
 cd server && npm install && node index.js   # run the app — http://localhost:3001
 npm run dev                                  # node --watch, auto-restart
-npm run debug                                # + CHORUS_TRANSCRIPT_LOG and CHORUS_LOG_LEVEL=debug
+npm run debug                                # + APP_TRANSCRIPT_LOG and APP_LOG_LEVEL=debug
 npm run dev:debug                            # both together
 PORT=4000 node index.js                      # different port
 ```
@@ -49,7 +49,7 @@ Each E2E file starts/stops its own server instance and shares port 3099 — neve
 
 There is no lint/typecheck script configured (JSDoc types only, no TypeScript build).
 
-Key env vars (see README for the full table): `PORT`, `CLAUDE_BIN` (override the `claude` binary name/path), `CHORUS_DB_FILE` (`:memory:` in tests), `CHORUS_LOG_DIR`, `CHORUS_LOG_LEVEL`, `CHORUS_TRANSCRIPT_LOG` (full per-chat prompt/response logging, off by default).
+Key env vars (see README for the full table): `PORT`, `CLAUDE_BIN` (override the `claude` binary name/path), `APP_DB_FILE` (`:memory:` in tests), `APP_LOG_DIR`, `APP_LOG_LEVEL`, `APP_TRANSCRIPT_LOG` (full per-chat prompt/response logging, off by default).
 
 ## Architecture
 
@@ -95,4 +95,4 @@ Single `app.js` (~2500 lines, no bundler) drives the whole UI via plain DOM APIs
 
 ### Logging
 
-`server/logger.js` (pino) — every module gets its own `logger.child({ component: '<name>' })` rather than repeating fields by hand. File logging is structured JSON with daily rotation; console output stays at `info`+ regardless of `CHORUS_LOG_LEVEL`. `server/transcriptLog.js` is separate and off by default (`CHORUS_TRANSCRIPT_LOG`) — the only place full prompt/response content is ever written to disk, since it's a debugging-only, opt-in log distinct from the always-on structured log.
+`server/logger.js` (pino) — every module gets its own `logger.child({ component: '<name>' })` rather than repeating fields by hand. File logging is structured JSON with daily rotation; console output stays at `info`+ regardless of `APP_LOG_LEVEL`. `server/transcriptLog.js` is separate and off by default (`APP_TRANSCRIPT_LOG`) — the only place full prompt/response content is ever written to disk, since it's a debugging-only, opt-in log distinct from the always-on structured log.

@@ -58,7 +58,7 @@ A few convenience scripts wrap the common combinations:
 ```bash
 npm start        # node index.js
 npm run dev      # node --watch index.js — auto-restarts on file changes
-npm run debug    # node index.js, with CHORUS_TRANSCRIPT_LOG and CHORUS_LOG_LEVEL=debug both on
+npm run debug    # node index.js, with APP_TRANSCRIPT_LOG and APP_LOG_LEVEL=debug both on
 npm run dev:debug # both of the above together
 ```
 
@@ -68,10 +68,10 @@ Other environment variables:
 |----------|---------|---------|
 | `PORT` | `3001` | HTTP/WebSocket port |
 | `CLAUDE_BIN` | `claude` (resolved via `PATH`) | Override if `claude` isn't on `PATH` under that name |
-| `CHORUS_DB_FILE` | `server/store/data.sqlite3` | Override the SQLite file path (tests use `:memory:`) |
-| `CHORUS_LOG_DIR` | `server/logs` | Where structured log files (and, if enabled, per-chat transcripts — see below) are written |
-| `CHORUS_LOG_LEVEL` | `info` | Minimum level written to the log file: `debug`, `info`, `warn`, `error`, or `silent` to disable file logging entirely. The console always stays at `info`+ regardless of this setting |
-| `CHORUS_TRANSCRIPT_LOG` | unset (off) | Set to any truthy value to enable a separate, plain-text, per-chat transcript log at `<CHORUS_LOG_DIR>/chats/<chatId>.log` — the exact content sent to and received from each agent on every turn, for debugging without needing to `claude --resume` a session in a real terminal. Off by default: unlike the structured log above, this can contain full conversation content |
+| `APP_DB_FILE` | `server/store/data.sqlite3` | Override the SQLite file path (tests use `:memory:`) |
+| `APP_LOG_DIR` | `server/logs` | Where structured log files (and, if enabled, per-chat transcripts — see below) are written |
+| `APP_LOG_LEVEL` | `info` | Minimum level written to the log file: `debug`, `info`, `warn`, `error`, or `silent` to disable file logging entirely. The console always stays at `info`+ regardless of this setting |
+| `APP_TRANSCRIPT_LOG` | unset (off) | Set to any truthy value to enable a separate, plain-text, per-chat transcript log at `<APP_LOG_DIR>/chats/<chatId>.log` — the exact content sent to and received from each agent on every turn, for debugging without needing to `claude --resume` a session in a real terminal. Off by default: unlike the structured log above, this can contain full conversation content |
 
 ## Agent options
 

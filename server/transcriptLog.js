@@ -3,7 +3,7 @@
  * exact content sent to and received from each agent, per chat, for
  * debugging without needing to `claude --resume` a session in a real
  * terminal to see what it actually saw. Off by default: set
- * CHORUS_TRANSCRIPT_LOG (any truthy value) to enable.
+ * APP_TRANSCRIPT_LOG (any truthy value) to enable.
  *
  * Deliberately separate from the structured operational logger
  * (logger.js), for two reasons: this can contain full conversation
@@ -39,7 +39,7 @@ function renderContent(content) {
 }
 
 /**
- * Appends one entry to `<CHORUS_LOG_DIR>/chats/<chatId>.log` — one file per
+ * Appends one entry to `<APP_LOG_DIR>/chats/<chatId>.log` — one file per
  * chat, since the bugs this exists to help debug (agents confused about
  * their identity or roster, a relay misfiring, ...) are chat-level
  * phenomena: you need every agent's sent/received content in that chat,
@@ -47,16 +47,16 @@ function renderContent(content) {
  * ever been in.
  *
  * A complete no-op — not even a directory check — when
- * CHORUS_TRANSCRIPT_LOG isn't set. Checked fresh on every call rather than
+ * APP_TRANSCRIPT_LOG isn't set. Checked fresh on every call rather than
  * cached at module load, so tests (or a running server) can toggle it
  * without a process restart.
  * @param {{ chatId: string, agentId: string, agentName: string, streamId: string, direction: 'SENT' | 'RECEIVED', content: import('./services/agentRunner.js').ContentBlock[] | string }} entry
  * @returns {void}
  */
 export function logTranscript({ chatId, agentId, agentName, streamId, direction, content }) {
-  if (!process.env.CHORUS_TRANSCRIPT_LOG) return;
+  if (!process.env.APP_TRANSCRIPT_LOG) return;
 
-  const logDir = join(process.env.CHORUS_LOG_DIR || join(__dirname, 'logs'), 'chats');
+  const logDir = join(process.env.APP_LOG_DIR || join(__dirname, 'logs'), 'chats');
   mkdirSync(logDir, { recursive: true });
 
   const text = typeof content === 'string' ? content : renderContent(content);

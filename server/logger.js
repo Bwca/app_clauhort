@@ -19,11 +19,11 @@ import { fileURLToPath } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-const LOG_DIR = process.env.CHORUS_LOG_DIR || join(__dirname, 'logs');
+const LOG_DIR = process.env.APP_LOG_DIR || join(__dirname, 'logs');
 // Minimum level actually written to the file. The console below is
 // deliberately NOT tied to this — it always stays at info+ regardless, so
 // raising file verbosity for a deep-dive never floods the terminal.
-const FILE_LEVEL = process.env.CHORUS_LOG_LEVEL || 'info';
+const FILE_LEVEL = process.env.APP_LOG_LEVEL || 'info';
 
 mkdirSync(LOG_DIR, { recursive: true });
 
