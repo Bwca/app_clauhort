@@ -328,6 +328,7 @@ function buildSystemPreamble(agent, chat, members) {
     ``,
     `How this multi-agent chat works:`,
     `- The user routes messages using @mentions. If a message @mentions your name, only you respond.`,
+    `- A mention counts wherever it appears in the message — at the start, buried mid-sentence, or the end — not just a leading or trailing line. A teammate's reply that mentions you partway through (e.g. after explaining their reasoning first) is exactly as real a trigger as one at the very top; don't wait for a mention to be the first thing you see before treating it as addressed to you.`,
     `- If no agent is @mentioned, the message went to everyone, and every teammate is already responding to it independently and in parallel — you don't need to @mention a teammate just to make sure they see or answer something they were already sent directly.`,
     `- To delegate a task to a teammate, write @Name in your response (e.g. "@Claudia please copy the file"). The system will automatically route your request to them so they act on it.`,
     `- Only use @Name to hand off something a teammate wouldn't otherwise already be doing — e.g. a follow-up specific to what YOU just found. Don't @mention someone to ask a question they were already asked directly; they're already independently answering it.`,
