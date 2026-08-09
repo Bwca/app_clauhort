@@ -17,6 +17,7 @@ import { handleConnection } from './ws/handler.js';
 import { initScheduler } from './services/scheduler.js';
 import { spawnForAgent, killAll } from './services/agentProcessManager.js';
 import { logger } from './logger.js';
+import { APP_NAME } from './public/appName.js';
 
 const log = logger.child({ component: 'index' });
 
@@ -113,5 +114,5 @@ await loadDb();
 initScheduler(wss);
 initAgentProcesses();
 server.listen(PORT, () => {
-  log.info({ port: PORT }, `Chorus Mentium running on http://localhost:${PORT}`);
+  log.info({ port: PORT }, `${APP_NAME} running on http://localhost:${PORT}`);
 });

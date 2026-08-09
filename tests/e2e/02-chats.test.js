@@ -190,7 +190,7 @@ describe('Chat management', () => {
     await createChat(page, 'Chat B'); // ends up active — createChat selects what it creates
 
     assert.equal(new URL(page.url()).search, '', 'the chat id must never be exposed as a URL query param');
-    const storedId = await page.evaluate((key) => sessionStorage.getItem(key), 'chorusMentium.activeChatId');
+    const storedId = await page.evaluate((key) => sessionStorage.getItem(key), 'app.activeChatId');
     assert.ok(storedId, 'expected the active chat id to be persisted in sessionStorage');
 
     await reloadAndWaitForConnection(page);
@@ -202,7 +202,7 @@ describe('Chat management', () => {
 
   test('deleting the active chat clears its sessionStorage entry', async () => {
     await createChat(page, 'Ephemeral Chat');
-    const storedIdBefore = await page.evaluate((key) => sessionStorage.getItem(key), 'chorusMentium.activeChatId');
+    const storedIdBefore = await page.evaluate((key) => sessionStorage.getItem(key), 'app.activeChatId');
     assert.ok(storedIdBefore, 'sanity check: sessionStorage should have a chat id before deleting');
 
     const chatItem = await page.$(tid('chat-item'));
@@ -218,17 +218,17 @@ describe('Chat management', () => {
       () => !document.querySelector('[data-testid="empty-state"]')?.hidden,
       { timeout: 3000 }
     );
-    const storedIdAfter = await page.evaluate((key) => sessionStorage.getItem(key), 'chorusMentium.activeChatId');
+    const storedIdAfter = await page.evaluate((key) => sessionStorage.getItem(key), 'app.activeChatId');
     assert.equal(storedIdAfter, null, 'the stored chat id should be gone once its chat is deleted');
   });
 
   test('a stale sessionStorage entry (chat since deleted) is dropped, not restored', async () => {
-    await page.evaluate((key) => sessionStorage.setItem(key, 'does-not-exist'), 'chorusMentium.activeChatId');
+    await page.evaluate((key) => sessionStorage.setItem(key, 'does-not-exist'), 'app.activeChatId');
     await reloadAndWaitForConnection(page);
 
     const emptyVisible = await page.$eval(tid('empty-state'), (el) => !el.hidden);
     assert.ok(emptyVisible, 'a stale stored chat id should fall back to the empty state, not error out');
-    const storedId = await page.evaluate((key) => sessionStorage.getItem(key), 'chorusMentium.activeChatId');
+    const storedId = await page.evaluate((key) => sessionStorage.getItem(key), 'app.activeChatId');
     assert.equal(storedId, null, 'the stale entry should be cleared, not left sitting in storage');
   });
 });

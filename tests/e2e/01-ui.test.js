@@ -6,6 +6,7 @@ import { test, describe, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { startServer, stopServer, resetData } from '../helpers/server.js';
 import { launchBrowser, closeBrowser, openPage, closePage, tid } from '../helpers/browser.js';
+import { APP_NAME } from '../../server/public/appName.js';
 
 describe('Initial UI', () => {
   /** @type {import('puppeteer').Page} */
@@ -24,8 +25,8 @@ describe('Initial UI', () => {
     await stopServer();
   });
 
-  test('page title is Chorus Mentium', async () => {
-    assert.equal(await page.title(), 'Chorus Mentium');
+  test('page title is APP_NAME', async () => {
+    assert.equal(await page.title(), APP_NAME);
   });
 
   test('connection dot is green (WebSocket connected)', async () => {

@@ -5,6 +5,7 @@
 
 import { DICTS, DEFAULT_LOCALE, translate } from './i18n/index.js';
 import { renderMarkdown } from './markdown.js';
+import { APP_NAME } from './appName.js';
 
 // ─── Types (JSDoc only) ─────────────────────────────────────────────────────
 
@@ -194,6 +195,7 @@ const CLA_NAMES = [
 
 const $ = /** @param {string} sel */ (sel) => document.querySelector(sel);
 
+const appTitleEl       = $('#app-title');
 const connDot          = $('#conn-dot');
 const chatList         = $('#chat-list');
 const newChatBtn       = $('#new-chat-btn');
@@ -1432,7 +1434,7 @@ function renderAgentPanel() {
 
 /** sessionStorage key for the last-active chat — per-tab, cleared when the
  * tab closes, and never visible in the URL/address bar. */
-const ACTIVE_CHAT_STORAGE_KEY = 'chorusMentium.activeChatId';
+const ACTIVE_CHAT_STORAGE_KEY = 'app.activeChatId';
 
 /**
  * Clears the chat view back to "no chat selected" — used when deleting the
@@ -2478,6 +2480,9 @@ browseSelect.addEventListener('click', () => {
 // ─── Bootstrap ────────────────────────────────────────────────────────────────
 
 async function init() {
+  document.title = APP_NAME;
+  appTitleEl.textContent = APP_NAME;
+
   renderColorGrid(colorGrid, selectedColor, (c) => { selectedColor = c; });
 
   const [agentsRes, chatsRes, settingsRes] = await Promise.all([
