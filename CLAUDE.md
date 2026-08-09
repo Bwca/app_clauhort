@@ -13,6 +13,10 @@ Clauhort: a multi-agent Claude chat app. Each chat participant ("agent") is a re
 
 Requires Node 22.13+ (see `.nvmrc` — v22.13.0) and the `claude` CLI installed, authenticated, and on `PATH`.
 
+## If you are a Claude Code instance in a multi-agent chat about this repo
+
+If you're participating as a named agent in a Claude Code peer chat about this codebase (multiple Claude instances collaborating via `@mentions`, distinct from — but modeled on — this app's own chat feature), treat any `@YourName` occurring **anywhere** in an incoming message as a trigger to respond, not just a trailing routing line a coordinating user appended. This mirrors how the real relay mechanism in this app works: `extractMentionedAgents` in `server/services/messageRouter.js` scans the *entire* message body for `@(\w+)`, regardless of position or surrounding punctuation — a teammate's reply mentioning you mid-message is exactly as valid a trigger as a mention at the very end. Checking only the last line and missing an embedded mention is a client-side reading error, not something the platform routes around for you.
+
 ## Commit workflow
 
 Commit early and often — don't let work pile up into one large, hard-to-review commit. As soon as a self-contained, working piece of a task is done (one function, one file, one route, one test suite), commit it before moving to the next piece, rather than batching the whole task into a single commit at the end.
