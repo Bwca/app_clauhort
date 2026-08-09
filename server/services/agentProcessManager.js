@@ -321,7 +321,7 @@ function createTurnAccumulator({ onChunk, onStatus } = {}) {
 
 /**
  * Registers the handler to call whenever this agent's persistent process
- * produces a full turn's worth of output WITHOUT Chorus having written a
+ * produces a full turn's worth of output WITHOUT Clauhort having written a
  * new turn to its stdin — i.e. the CLI's own background-task-completion
  * feature resuming and reporting on its own initiative.
  *

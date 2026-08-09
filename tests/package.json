@@ -1,7 +1,7 @@
 {
-  "name": "chorus-mentium-tests",
+  "name": "clauhort-tests",
   "version": "1.0.0",
-  "description": "Puppeteer E2E tests for Chorus Mentium",
+  "description": "Puppeteer E2E tests for Clauhort",
   "type": "module",
   "scripts": {
     "test": "node run.js"

@@ -1,5 +1,5 @@
 {
-  "name": "chorus-mentium-server",
+  "name": "clauhort-server",
   "version": "1.0.0",
   "description": "Multi-agent Claude chat server",
   "type": "module",

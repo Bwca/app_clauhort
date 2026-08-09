@@ -1,5 +1,5 @@
 /**
- * @fileoverview Chorus Mentium — plain JS frontend.
+ * @fileoverview Clauhort — plain JS frontend.
  * No build step. Talks to the server via REST + WebSocket.
  */
 

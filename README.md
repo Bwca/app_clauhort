@@ -1,4 +1,4 @@
-# Chorus Mentium
+# Clauhort
 
 A multi-agent Claude chat app. Each participant in a conversation is a Claude Code CLI instance running in its own working directory — think MS Teams, but the participants are AI agents.
 
