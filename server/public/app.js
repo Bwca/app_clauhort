@@ -100,13 +100,17 @@ const unreadChatIds = new Set();
 
 /**
  * Agent IDs currently "spotlighted" via the agent panel's filter toggle —
- * when non-empty, only the user's own messages and messages from these
- * agents stay visible in the message list; everything else (other agents'
- * messages, their streaming bubbles, their permission cards) is hidden
- * in-place rather than re-fetched. Empty = show everything (the default).
- * Resets whenever the active chat changes (see selectChat) — a filter
- * scoped to one chat's roster carrying over to an unrelated chat would be
- * confusing, not convenient.
+ * when non-empty, only messages from these agents stay visible, plus the
+ * user's own messages that are actually relevant to them: a broadcast (no
+ * @mention) or one that @mentions a spotlighted agent. A user message
+ * @mentioning someone else entirely (e.g. a private aside to a different
+ * teammate) is hidden like anything else unrelated — see
+ * isVisibleUnderMessageFilter. Everything hidden (other agents' messages,
+ * their streaming bubbles, their permission cards) is hidden in-place rather
+ * than re-fetched. Empty = show everything (the default). Resets whenever
+ * the active chat changes (see selectChat) — a filter scoped to one chat's
+ * roster carrying over to an unrelated chat would be confusing, not
+ * convenient.
  * @type {Set<string>}
  */
 const messageFilterAgentIds = new Set();
@@ -836,14 +840,41 @@ function scrollToBottom() {
 }
 
 /**
+ * Client-side mirror of server/services/messageRouter.js's
+ * extractMentionedAgents — same unanchored `@(\w+)` scan, so a mention
+ * counts wherever it sits in the text, matching how the server actually
+ * routes it. Kept as a separate small copy rather than sharing a module: the
+ * server's version returns Agent objects from its own DB-backed lookup,
+ * this one just needs the subset of matching ids for filter comparisons.
+ * @param {string} content
+ * @param {Agent[]} members
+ * @returns {string[]}
+ */
+function extractMentionedAgentIds(content, members) {
+  const mentionRegex = /@(\w+)/g;
+  const mentioned = new Set([...content.matchAll(mentionRegex)].map((m) => m[1].toLowerCase()));
+  return members.filter((a) => mentioned.has(a.name.toLowerCase())).map((a) => a.id);
+}
+
+/**
  * Whether something authored by `agentId` (null for the user's own
  * messages) should be visible under the current message filter. See
  * messageFilterAgentIds's own docs for what "the filter" means.
+ *
+ * `mentionedIds` only matters for the user's own messages (agentId null) —
+ * it's how a message you sent to a DIFFERENT agent gets correctly hidden
+ * instead of always tagging along just because you authored it. An agent's
+ * own messages ignore it entirely; their visibility is purely "is this
+ * agent spotlighted," same as always.
  * @param {string | null} agentId
+ * @param {string[]} [mentionedIds] - Agent ids this message @mentions,
+ *   pre-resolved at render time (see buildMessageEl). Empty = broadcast.
  * @returns {boolean}
  */
-function isVisibleUnderMessageFilter(agentId) {
-  return messageFilterAgentIds.size === 0 || !agentId || messageFilterAgentIds.has(agentId);
+function isVisibleUnderMessageFilter(agentId, mentionedIds = []) {
+  if (messageFilterAgentIds.size === 0) return true;
+  if (agentId) return messageFilterAgentIds.has(agentId);
+  return mentionedIds.length === 0 || mentionedIds.some((id) => messageFilterAgentIds.has(id));
 }
 
 /**
@@ -854,12 +885,14 @@ function isVisibleUnderMessageFilter(agentId) {
  * buildPermissionCard only decide visibility once, at creation time. Each
  * of those tags its root element with data-agent-id (empty string for the
  * user's own messages) specifically so this can re-derive the right answer
- * later without keeping a parallel registry in sync.
+ * later without keeping a parallel registry in sync. data-mentioned-ids
+ * (user messages only — see buildMessageEl) rides along the same way.
  * @returns {void}
  */
 function applyMessageFilterToDom() {
   for (const el of messageList.querySelectorAll('[data-agent-id]')) {
-    el.hidden = !isVisibleUnderMessageFilter(el.dataset.agentId || null);
+    const mentionedIds = el.dataset.mentionedIds ? el.dataset.mentionedIds.split(',') : [];
+    el.hidden = !isVisibleUnderMessageFilter(el.dataset.agentId || null, mentionedIds);
   }
 }
 
@@ -926,13 +959,21 @@ function buildMessageEl(msg) {
   // "*not markdown*" shouldn't have it silently reinterpreted.
   const contentHtml = msg.role === 'agent' ? renderMarkdown(msg.content) : escHtml(msg.content);
 
+  // Only matters for a user message (agentId null) — see
+  // isVisibleUnderMessageFilter's docs for why an agent's own messages
+  // don't need this at all.
+  const mentionedIds = msg.agentId
+    ? []
+    : extractMentionedAgentIds(msg.content, (activeChat()?.memberAgentIds ?? []).map(agentById).filter(Boolean));
+
   const el = document.createElement('div');
   el.className = 'msg';
   el.dataset.msgId = msg.id;
   el.dataset.testid = 'message';
   el.dataset.role = msg.role;
   el.dataset.agentId = msg.agentId ?? '';
-  el.hidden = !isVisibleUnderMessageFilter(msg.agentId);
+  el.dataset.mentionedIds = mentionedIds.join(',');
+  el.hidden = !isVisibleUnderMessageFilter(msg.agentId, mentionedIds);
   el.style.setProperty('--author-color', color);
   el.innerHTML = `
     <div class="msg-avatar" style="background:${color}">${initial}</div>

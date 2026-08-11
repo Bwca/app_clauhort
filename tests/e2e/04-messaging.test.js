@@ -364,4 +364,37 @@ describe('Messaging', () => {
     assert.match(errorText, /working directory no longer exists/i);
     assert.ok(errorText.includes(dir), `error should include the missing path, got: "${errorText}"`);
   });
+
+  test('spotlighting an agent hides your own messages addressed to someone else', async () => {
+    await createChat(page, 'Filter Test');
+    await createAgent(page, { name: 'Claudia', workingDir: agentDir('claudia'), addToChat: true });
+    await createAgent(page, { name: 'Clauditor', workingDir: agentDir('clauditor'), addToChat: true });
+
+    // Real agent turns fire in the background for these (broadcast reaches
+    // both, a mention reaches its target) — irrelevant here, since the
+    // filter only needs each user message to have rendered, not any reply.
+    await sendMessage(page, 'hello everyone');
+    await sendMessage(page, '@Claudia only for you');
+    await sendMessage(page, '@Clauditor only for you');
+
+    await page.waitForFunction(
+      () => document.querySelectorAll('[data-testid="message"][data-role="user"]').length === 3,
+      { timeout: 5000 }
+    );
+
+    // Spotlight Claudia only.
+    await page.evaluate(() => {
+      const items = [...document.querySelectorAll('[data-testid="agent-item"]')];
+      const item = items.find((el) => el.querySelector('[data-testid="agent-name"]')?.textContent.trim() === 'Claudia');
+      item.querySelector('.agent-filter-btn').click();
+    });
+
+    const visibleTexts = await page.$$eval(
+      '[data-testid="message"][data-role="user"]:not([hidden]) [data-testid="msg-content"]',
+      (els) => els.map((el) => el.textContent.trim())
+    );
+    assert.ok(visibleTexts.includes('hello everyone'), `broadcast should stay visible under filter, got: ${JSON.stringify(visibleTexts)}`);
+    assert.ok(visibleTexts.includes('@Claudia only for you'), `message mentioning the spotlighted agent should stay visible, got: ${JSON.stringify(visibleTexts)}`);
+    assert.ok(!visibleTexts.includes('@Clauditor only for you'), `message addressed to a different agent should be hidden, got: ${JSON.stringify(visibleTexts)}`);
+  });
 });
