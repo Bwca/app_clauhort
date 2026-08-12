@@ -66,6 +66,9 @@ export default {
   'settingsModal.displayNamePlaceholder': 'Vous',
   'settingsModal.colorLabel': 'La couleur de vos messages',
   'settingsModal.languageLabel': 'Langue',
+  'settingsModal.themeLabel': 'Thème',
+  'settingsModal.themeOptionDark': 'Sombre',
+  'settingsModal.themeOptionLight': 'Clair',
   'settingsModal.saveBtn': 'Enregistrer',
 
   'confirm.deleteChat': 'Supprimer la discussion « {name} »? Cette action est irréversible.',
@@ -126,6 +129,7 @@ export default {
   'errors.displayNameRequired': "le nom d'affichage est requis",
   'errors.invalidColor': 'la couleur doit être une couleur hexadécimale comme « #a6adc8 »',
   'errors.invalidLocale': "la langue doit être l'une des suivantes : {locales}",
+  'errors.invalidTheme': "le thème doit être l'un des suivants : {themes}",
   'errors.cantReadDirectory': 'Impossible de lire le répertoire : {message}',
   'errors.claudeExitCode': "Le processus Claude s'est arrêté avec le code {code}",
   'errors.claudeSpawnFailed': 'Échec du démarrage de Claude : {message}',

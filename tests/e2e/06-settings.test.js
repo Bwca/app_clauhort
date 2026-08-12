@@ -5,7 +5,7 @@
 import { test, describe, before, after, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { startServer, stopServer, resetData, TEST_PORT } from '../helpers/server.js';
-import { launchBrowser, closeBrowser, openPage, closePage, tid, createChat, sendMessage } from '../helpers/browser.js';
+import { launchBrowser, closeBrowser, openPage, closePage, tid, createChat, sendMessage, reloadAndWaitForConnection } from '../helpers/browser.js';
 
 describe('Settings', () => {
   /** @type {import('puppeteer').Page} */
@@ -197,6 +197,52 @@ describe('Settings', () => {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ userDisplayName: 'You', userColor: 'not-a-color' }),
+    });
+    assert.equal(res.status, 400);
+  });
+
+  test('defaults to dark theme, with no data-theme attribute on <html>', async () => {
+    const theme = await page.evaluate(() => document.documentElement.dataset.theme);
+    assert.equal(theme, undefined, 'dark is the attribute-less default — see applyTheme in app.js');
+
+    const res = await fetch(`http://localhost:${TEST_PORT}/api/settings`);
+    const settings = await res.json();
+    assert.equal(settings.theme, 'dark');
+  });
+
+  test('switching to light theme applies immediately, persists server-side, and survives a reload', async () => {
+    await page.click(tid('settings-btn'));
+    await page.waitForFunction(
+      () => !document.querySelector('[data-testid="settings-overlay"]')?.hidden,
+      { timeout: 3000 }
+    );
+    await page.select(tid('settings-theme-select'), 'light');
+    await page.click(tid('settings-save'));
+    await page.waitForFunction(
+      () => document.querySelector('[data-testid="settings-overlay"]')?.hidden,
+      { timeout: 3000 }
+    );
+
+    const themeRightAfterSave = await page.evaluate(() => document.documentElement.dataset.theme);
+    assert.equal(themeRightAfterSave, 'light', 'should apply immediately, without needing a reload');
+
+    const res = await fetch(`http://localhost:${TEST_PORT}/api/settings`);
+    const settings = await res.json();
+    assert.equal(settings.theme, 'light');
+
+    // The inline no-FOUC snippet in index.html's <head> reads localStorage,
+    // not a fetch — confirms that fast path actually works, not just the
+    // eventual /api/settings-driven correction in init().
+    await reloadAndWaitForConnection(page);
+    const themeAfterReload = await page.evaluate(() => document.documentElement.dataset.theme);
+    assert.equal(themeAfterReload, 'light', 'should survive a reload via the localStorage fast path');
+  });
+
+  test('PUT /api/settings rejects an invalid theme', async () => {
+    const res = await fetch(`http://localhost:${TEST_PORT}/api/settings`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userDisplayName: 'You', theme: 'not-a-theme' }),
     });
     assert.equal(res.status, 400);
   });

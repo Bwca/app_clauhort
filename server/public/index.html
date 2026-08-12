@@ -4,6 +4,13 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Clauhort</title>
+  <!-- Applies a saved light-theme preference before first paint, so a
+       reload doesn't flash dark (the default) before the async /api/settings
+       fetch in app.js's init() resolves and corrects it. Synchronous and
+       blocking on purpose — must run before style.css is applied. -->
+  <script>
+    if (localStorage.getItem('theme') === 'light') document.documentElement.dataset.theme = 'light';
+  </script>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
@@ -165,6 +172,12 @@
           <select id="settings-language" data-testid="settings-language-select">
             <option value="en-CA">English (Canada)</option>
             <option value="fr-CA">Français (Canada)</option>
+          </select>
+        </label>
+        <label class="field-label"><span data-i18n="settingsModal.themeLabel">Theme</span>
+          <select id="settings-theme" data-testid="settings-theme-select">
+            <option value="dark" data-i18n="settingsModal.themeOptionDark">Dark</option>
+            <option value="light" data-i18n="settingsModal.themeOptionLight">Light</option>
           </select>
         </label>
         <p id="settings-error" data-testid="settings-error" class="error-text" hidden></p>

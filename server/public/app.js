@@ -126,10 +126,11 @@ let selectedUserColor = '#a6adc8';
  * @property {string} userDisplayName
  * @property {string} userColor - Hex color string, e.g. "#a6adc8"
  * @property {string} locale - UI language, e.g. "en-CA" or "fr-CA"
+ * @property {string} theme - UI theme, "dark" or "light"
  */
 
 /** @type {Settings} */
-let userSettings = { userDisplayName: 'You', userColor: '#a6adc8', locale: DEFAULT_LOCALE };
+let userSettings = { userDisplayName: 'You', userColor: '#a6adc8', locale: DEFAULT_LOCALE, theme: 'dark' };
 
 /** @type {string} the UI's currently active language */
 let currentLocale = DEFAULT_LOCALE;
@@ -158,6 +159,22 @@ function applyTranslations() {
   document.querySelectorAll('[data-i18n-html]').forEach((el) => { el.innerHTML = t(el.dataset.i18nHtml); });
   document.querySelectorAll('[data-i18n-placeholder]').forEach((el) => { el.placeholder = t(el.dataset.i18nPlaceholder); });
   document.querySelectorAll('[data-i18n-title]').forEach((el) => { el.title = t(el.dataset.i18nTitle); });
+}
+
+/**
+ * Applies `theme` to the document root (style.css keys its light palette off
+ * `:root[data-theme="light"]`, dark is the attribute-less default) and
+ * caches it in localStorage so a page reload's inline snippet in
+ * index.html's `<head>` can apply a saved light preference before first
+ * paint, instead of flashing dark (the default) until the async
+ * /api/settings fetch in init() resolves and corrects it.
+ * @param {string} theme - "dark" or "light"
+ * @returns {void}
+ */
+function applyTheme(theme) {
+  if (theme === 'light') document.documentElement.dataset.theme = 'light';
+  else delete document.documentElement.dataset.theme;
+  localStorage.setItem('theme', theme);
 }
 
 /** @type {Record<string, StreamingEntry>} keyed by streamId */
@@ -272,6 +289,7 @@ const settingsForm     = $('#settings-form');
 const settingsDisplayNameInput = $('#settings-display-name');
 const settingsColorGrid = $('#settings-color-grid');
 const settingsLanguageSelect = $('#settings-language');
+const settingsThemeSelect = $('#settings-theme');
 const settingsError    = $('#settings-error');
 const settingsSave     = $('#settings-save');
 
@@ -1854,10 +1872,12 @@ async function openSettingsModal() {
     settingsDisplayNameInput.value = settings.userDisplayName;
     selectedUserColor = settings.userColor;
     settingsLanguageSelect.value = settings.locale;
+    settingsThemeSelect.value = settings.theme;
   } catch {
     settingsDisplayNameInput.value = '';
     selectedUserColor = userSettings.userColor;
     settingsLanguageSelect.value = currentLocale;
+    settingsThemeSelect.value = userSettings.theme ?? 'dark';
   }
   renderColorGrid(settingsColorGrid, selectedUserColor, (c) => { selectedUserColor = c; });
   settingsDisplayNameInput.focus();
@@ -1877,6 +1897,7 @@ async function handleSettingsFormSubmit(e) {
   if (!userDisplayName) return;
   const userColor = selectedUserColor;
   const locale = settingsLanguageSelect.value;
+  const theme = settingsThemeSelect.value;
 
   settingsSave.disabled = true;
   settingsError.hidden = true;
@@ -1884,7 +1905,7 @@ async function handleSettingsFormSubmit(e) {
     const res = await fetch('/api/settings', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userDisplayName, userColor, locale }),
+      body: JSON.stringify({ userDisplayName, userColor, locale, theme }),
     });
     if (!res.ok) {
       const body = await res.json();
@@ -1892,8 +1913,9 @@ async function handleSettingsFormSubmit(e) {
       settingsError.hidden = false;
       return;
     }
-    userSettings = { userDisplayName, userColor, locale };
-    // All three fields apply to the user's whole history/whole UI, not just
+    userSettings = { userDisplayName, userColor, locale, theme };
+    applyTheme(theme);
+    // All four fields apply to the user's whole history/whole UI, not just
     // going forward (the server resolves authorName for user rows live, not
     // from a per-message snapshot; color was never stored per-message; and
     // locale purely controls how the CURRENTLY-RENDERING client displays
@@ -2537,6 +2559,7 @@ async function init() {
 
   currentLocale = userSettings.locale ?? DEFAULT_LOCALE;
   applyTranslations();
+  applyTheme(userSettings.theme ?? 'dark');
 
   renderChatList();
   renderAgentPanel();

@@ -66,6 +66,9 @@ export default {
   'settingsModal.displayNamePlaceholder': 'You',
   'settingsModal.colorLabel': 'Your message color',
   'settingsModal.languageLabel': 'Language',
+  'settingsModal.themeLabel': 'Theme',
+  'settingsModal.themeOptionDark': 'Dark',
+  'settingsModal.themeOptionLight': 'Light',
   'settingsModal.saveBtn': 'Save',
 
   'confirm.deleteChat': 'Delete chat "{name}"? This can\'t be undone.',
@@ -126,6 +129,7 @@ export default {
   'errors.displayNameRequired': 'userDisplayName is required',
   'errors.invalidColor': 'userColor must be a hex color like "#a6adc8"',
   'errors.invalidLocale': 'locale must be one of: {locales}',
+  'errors.invalidTheme': 'theme must be one of: {themes}',
   'errors.cantReadDirectory': "Can't read directory: {message}",
   'errors.claudeExitCode': 'Claude process exited with code {code}',
   'errors.claudeSpawnFailed': 'Failed to spawn Claude: {message}',
