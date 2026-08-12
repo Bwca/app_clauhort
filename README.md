@@ -22,7 +22,7 @@ A multi-agent Claude chat app. Each participant in a conversation is a Claude Co
 - Chats with new activity you haven't seen yet (an agent finished a task while you were elsewhere) show an unread dot in the sidebar
 - Hover a reply to copy it as text or as a PNG image
 - Deleting a chat or agent asks for confirmation first (irreversible)
-- Customize your own display name, message color, and UI language (English/French, Canada) from **Settings** (⚙ icon)
+- Customize your own display name, message color, UI language (English/French, Canada), and light/dark theme from **Settings** (⚙ icon)
 
 ## Stack
 
