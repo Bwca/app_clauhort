@@ -9,12 +9,13 @@ A multi-agent Claude chat app. Each participant in a conversation is a Claude Co
 - Send messages; agents respond in parallel with streaming output, showing a live status of what they're doing (reading a file, running a command, etc.) and how long they've been at it
 - Each tool call's real output (command results, diffs, MCP responses) is one click away — collapsed by default so it doesn't clutter the conversation; a reply with several tool calls nests them behind a single "N tool calls" toggle instead of stacking one row per call
 - If an agent starts something in the background (e.g. a long-running Bash command) and says it'll let you know once it's done, it actually does — the follow-up lands in the chat on its own when the task finishes, no need to prompt it again
-- Getting lost in a busy multi-agent chat? Click an agent's 🔎 in the panel to spotlight it — the message list then shows only your own messages plus that agent's; click again, or the filter bar's **Show all**, to go back to everyone. Resets automatically when you switch chats
+- Getting lost in a busy multi-agent chat? Click an agent's 🔎 in the panel to spotlight it — the message list then shows that agent's messages plus your own that are actually relevant to it (a broadcast, or one that `@mentions` it), not every message you've sent to everyone else too; click again, or the filter bar's **Show all**, to go back to everyone. Resets automatically when you switch chats
 - Use `@AgentName` to route a message to a specific agent; no mention = everyone responds — the mention autocomplete and every message header also show an agent's YOLO badge (if any) and working directory, so it's clear who (and where) you're talking to
 - Agents can delegate to teammates by writing `@Name` in their reply
 - Use `@AgentName /command` (or just `/command` in a chat with only one agent) to invoke one of that agent's real Claude Code skills — typing `/` shows an autocomplete of that agent's available commands, with descriptions
 - Interrupt an agent mid-response with the **Stop** button
 - Attach images or large pasted text blocks to a message
+- Schedule a message for later via the 🕐 button next to Send — pending ones show as a badge count you can open, review, and cancel before they fire
 - Agents keep one continuous native Claude session for as long as they're in a chat (auto-chained via `--resume` after their first reply) — copy the `claude --resume <id>` command from the agent panel to continue that session in a terminal
 - When an agent's tool call is denied — a path outside its working directory, a Bash command, etc. — a card appears with **Grant** and **Deny** buttons; either one lets the agent continue right away, no need to send a follow-up message
 - Enable **YOLO mode** per agent at creation time to skip all permission checks entirely, shown with a 🔥 badge — use with care
