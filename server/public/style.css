@@ -3,6 +3,7 @@
 [hidden] { display: none !important; }
 
 :root {
+  color-scheme: dark;
   --bg0: #1e1e2e;
   --bg1: #181825;
   --bg2: #2a2a3e;
@@ -13,9 +14,31 @@
   --dim: #6c7086;
   --faint: #45475a;
   --blue: #89b4fa;
+  --blue-hover: #b4d0ff;
   --green: #a6e3a1;
   --red: #f38ba8;
+  --red-hover: #f5a8bf;
   --peach: #fab387;
+}
+
+/* ── Light theme ───────────────────────────────────────────────────── */
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg0: #f7f8fa;
+  --bg1: #eceef2;
+  --bg2: #e2e5eb;
+  --bg3: #d3d7e0;
+  --border: #d8dbe3;
+  --text: #2e3138;
+  --muted: #5b5f6b;
+  --dim: #7a7f8c;
+  --faint: #c7cbd4;
+  --blue: #2563eb;
+  --blue-hover: #1d4fc4;
+  --green: #16803c;
+  --red: #dc2626;
+  --red-hover: #b91c1c;
+  --peach: #d97706;
 }
 
 html, body { height: 100%; background: var(--bg0); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 14px; }
@@ -226,7 +249,7 @@ html, body { height: 100%; background: var(--bg0); color: var(--text); font-fami
 
 #send-btn { background: var(--blue); border: none; border-radius: 8px; width: 40px; height: 40px; font-size: 17px; font-weight: 700; color: var(--bg0); cursor: pointer; flex-shrink: 0; transition: background .15s, opacity .15s; }
 #send-btn:disabled { opacity: .4; cursor: not-allowed; }
-#send-btn:not(:disabled):hover { background: #b4d0ff; }
+#send-btn:not(:disabled):hover { background: var(--blue-hover); }
 
 /* ── Agent Panel ───────────────────────────────────────────────────── */
 #agent-panel { width: 240px; min-width: 240px; background: var(--bg1); border-left: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden; }
@@ -302,7 +325,7 @@ html, body { height: 100%; background: var(--bg0); color: var(--text); font-fami
 #settings-cancel:hover { background: var(--bg2); }
 #settings-save { padding: 7px 18px; border-radius: 7px; border: none; background: var(--blue); color: var(--bg0); font-size: 14px; font-weight: 600; cursor: pointer; transition: background .15s, opacity .15s; }
 #settings-save:disabled { opacity: .5; cursor: not-allowed; }
-#settings-save:not(:disabled):hover { background: #b4d0ff; }
+#settings-save:not(:disabled):hover { background: var(--blue-hover); }
 #agent-name-generate:hover { background: var(--bg2); }
 
 #agent-dir-row { display: flex; gap: 6px; }
@@ -335,7 +358,7 @@ html, body { height: 100%; background: var(--bg0); color: var(--text); font-fami
 #browse-cancel { padding: 7px 14px; border-radius: 7px; border: 1px solid var(--faint); background: transparent; color: var(--muted); font-size: 14px; cursor: pointer; transition: background .15s; }
 #browse-cancel:hover { background: var(--bg2); }
 #browse-select { padding: 7px 18px; border-radius: 7px; border: none; background: var(--blue); color: var(--bg0); font-size: 14px; font-weight: 600; cursor: pointer; transition: background .15s; }
-#browse-select:hover { background: #b4d0ff; }
+#browse-select:hover { background: var(--blue-hover); }
 
 .color-grid { display: flex; gap: 7px; flex-wrap: wrap; margin-top: 4px; }
 .color-swatch { width: 26px; height: 26px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; transition: transform .15s, border-color .15s; }
@@ -360,7 +383,7 @@ html, body { height: 100%; background: var(--bg0); color: var(--text); font-fami
 #schedule-cancel:hover { background: var(--bg2); }
 #schedule-submit { padding: 7px 18px; border-radius: 7px; border: none; background: var(--blue); color: var(--bg0); font-size: 14px; font-weight: 600; cursor: pointer; transition: background .15s, opacity .15s; }
 #schedule-submit:disabled { opacity: .5; cursor: not-allowed; }
-#schedule-submit:not(:disabled):hover { background: #b4d0ff; }
+#schedule-submit:not(:disabled):hover { background: var(--blue-hover); }
 
 /* ── Confirmation dialog ───────────────────────────────────────────── */
 #confirm-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: flex; align-items: center; justify-content: center; z-index: 300; }
@@ -370,11 +393,11 @@ html, body { height: 100%; background: var(--bg0); color: var(--text); font-fami
 #confirm-cancel { padding: 7px 14px; border-radius: 7px; border: 1px solid var(--faint); background: transparent; color: var(--muted); font-size: 14px; cursor: pointer; transition: background .15s; }
 #confirm-cancel:hover { background: var(--bg2); }
 #confirm-ok { padding: 7px 18px; border-radius: 7px; border: none; background: var(--red); color: var(--bg0); font-size: 14px; font-weight: 600; cursor: pointer; transition: background .15s; }
-#confirm-ok:hover { background: #f5a8bf; }
+#confirm-ok:hover { background: var(--red-hover); }
 
 #modal-footer { display: flex; gap: 8px; justify-content: flex-end; }
 #modal-cancel { padding: 7px 14px; border-radius: 7px; border: 1px solid var(--faint); background: transparent; color: var(--muted); font-size: 14px; cursor: pointer; transition: background .15s; }
 #modal-cancel:hover { background: var(--bg2); }
 #modal-submit { padding: 7px 18px; border-radius: 7px; border: none; background: var(--blue); color: var(--bg0); font-size: 14px; font-weight: 600; cursor: pointer; transition: background .15s, opacity .15s; }
 #modal-submit:disabled { opacity: .5; cursor: not-allowed; }
-#modal-submit:not(:disabled):hover { background: #b4d0ff; }
+#modal-submit:not(:disabled):hover { background: var(--blue-hover); }
