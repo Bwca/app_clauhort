@@ -4,11 +4,12 @@
  */
 
 import { Router } from 'express';
-import { getUserDisplayName, setUserDisplayName, getUserColor, setUserColor, getUserLocale, setUserLocale } from '../store/db.js';
+import { getUserDisplayName, setUserDisplayName, getUserColor, setUserColor, getUserLocale, setUserLocale, getUserTheme, setUserTheme } from '../store/db.js';
 import { SUPPORTED_LOCALES } from '../public/i18n/index.js';
 import { t } from '../i18n/t.js';
 
 const HEX_COLOR_RE = /^#[0-9a-f]{6}$/i;
+const SUPPORTED_THEMES = ['dark', 'light'];
 
 const router = Router();
 
@@ -17,7 +18,7 @@ const router = Router();
  * Returns current settings.
  */
 router.get('/', (_req, res) => {
-  res.json({ userDisplayName: getUserDisplayName(), userColor: getUserColor(), locale: getUserLocale() });
+  res.json({ userDisplayName: getUserDisplayName(), userColor: getUserColor(), locale: getUserLocale(), theme: getUserTheme() });
 });
 
 /**
@@ -27,6 +28,7 @@ router.get('/', (_req, res) => {
  * @param {string} req.body.userDisplayName - New display name for the user
  * @param {string} req.body.userColor - New message color, hex e.g. "#a6adc8"
  * @param {string} req.body.locale - New UI language, e.g. "en-CA" or "fr-CA"
+ * @param {string} req.body.theme - New UI theme, "dark" or "light"
  */
 router.put('/', async (req, res) => {
   const userDisplayName = typeof req.body.userDisplayName === 'string' ? req.body.userDisplayName.trim() : '';
@@ -42,10 +44,16 @@ router.put('/', async (req, res) => {
     return res.status(400).json({ error: t('errors.invalidLocale', { locales: SUPPORTED_LOCALES.join(', ') }) });
   }
 
+  const theme = req.body.theme;
+  if (theme !== undefined && !SUPPORTED_THEMES.includes(theme)) {
+    return res.status(400).json({ error: t('errors.invalidTheme', { themes: SUPPORTED_THEMES.join(', ') }) });
+  }
+
   await setUserDisplayName(userDisplayName);
   if (userColor !== undefined) await setUserColor(userColor);
   if (locale !== undefined) await setUserLocale(locale);
-  res.json({ userDisplayName, userColor: getUserColor(), locale: getUserLocale() });
+  if (theme !== undefined) await setUserTheme(theme);
+  res.json({ userDisplayName, userColor: getUserColor(), locale: getUserLocale(), theme: getUserTheme() });
 });
 
 export default router;

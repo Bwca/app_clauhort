@@ -758,6 +758,7 @@ export async function addMessage(message) {
 const DEFAULT_USER_DISPLAY_NAME = 'You';
 const DEFAULT_USER_COLOR = '#a6adc8';
 const DEFAULT_USER_LOCALE = 'en-CA';
+const DEFAULT_USER_THEME = 'dark';
 
 /**
  * Returns a raw settings value, or defaultValue if the key isn't set.
@@ -834,6 +835,23 @@ export function getUserLocale() {
  */
 export async function setUserLocale(locale) {
   setSetting('locale', locale);
+}
+
+/**
+ * Returns the user's configured UI theme, defaulting to "dark".
+ * @returns {string}
+ */
+export function getUserTheme() {
+  return getSetting('theme', DEFAULT_USER_THEME);
+}
+
+/**
+ * Sets the user's UI theme.
+ * @param {string} theme - "dark" or "light"
+ * @returns {Promise<void>}
+ */
+export async function setUserTheme(theme) {
+  setSetting('theme', theme);
 }
 
 // ─── Scheduled Messages ─────────────────────────────────────────────────────
