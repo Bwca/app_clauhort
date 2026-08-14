@@ -32,6 +32,15 @@
  * [Current chat roster] note now goes out alongside it — cheap (just the
  * roster, not the whole @mention-routing essay) but enough to keep it
  * honest. Covered below too.
+ *
+ * Separately: catch-up content isn't the only signal a stale roster needs —
+ * membership changes (add/remove) don't create a chat message at all, so an
+ * agent whose last turn happened to be the most recent thing in the chat
+ * right before a teammate was removed gets zero catch-up and would
+ * otherwise carry the stale roster forward indefinitely, sometimes even
+ * @mentioning the departed teammate for a task no one will ever see.
+ * chat.rosterChangedAt (db.js) is compared against this agent's own last
+ * turn independently of catch-up content to cover that gap. Covered below.
  */
 
 import { test, describe } from 'node:test';
@@ -131,5 +140,33 @@ describe('buildPromptBlocks', () => {
     const blocks = buildPromptBlocks(agent, chat, multiMembers, newMessage, priorMessages);
     assert.equal(blocks.length, 1, `expected just the new message, no roster note, got: ${JSON.stringify(blocks)}`);
     assert.equal(blocks[0].text, 'hello there');
+  });
+
+  test('a roster note goes out even with zero catch-up content, when a member was removed after this agent\'s last turn', () => {
+    // The exact reported bug: Clarence gets removed from the chat with no
+    // other chat activity in between, so there's nothing in `messages` to
+    // reveal it (membership changes don't create a message). Without
+    // rosterChangedAt, Claudia's next turn would carry the stale roster
+    // forward and could still @mention Clarence, who is gone and will never
+    // see it.
+    const agent = { id: 'claudia', name: 'Claudia', workingDir: '/tmp/claudia', resumeId: 'sess-1' };
+    const staleChat = { ...chat, rosterChangedAt: '2026-08-13T12:00:00.000Z' };
+    const priorMessages = [
+      { id: 'm0', agentId: 'claudia', authorName: 'Claudia', content: 'earlier reply', attachments: [], createdAt: '2026-08-13T11:00:00.000Z' },
+    ];
+    const blocks = buildPromptBlocks(agent, staleChat, members, newMessage, priorMessages);
+    assert.equal(blocks.length, 2, `expected a roster-note block plus the new message block, got: ${JSON.stringify(blocks)}`);
+    assert.doesNotMatch(blocks[0].text, /\[System\]/, 'must not resend the full preamble — Claudia already spoke here once');
+    assert.match(blocks[0].text, /\[Current chat roster\]/);
+  });
+
+  test('no roster note when rosterChangedAt predates this agent\'s last turn — it already saw the current roster', () => {
+    const agent = { id: 'claudia', name: 'Claudia', workingDir: '/tmp/claudia', resumeId: 'sess-1' };
+    const freshChat = { ...chat, rosterChangedAt: '2026-08-13T10:00:00.000Z' };
+    const priorMessages = [
+      { id: 'm0', agentId: 'claudia', authorName: 'Claudia', content: 'earlier reply', attachments: [], createdAt: '2026-08-13T11:00:00.000Z' },
+    ];
+    const blocks = buildPromptBlocks(agent, freshChat, members, newMessage, priorMessages);
+    assert.equal(blocks.length, 1, `expected just the new message, no roster note, got: ${JSON.stringify(blocks)}`);
   });
 });
