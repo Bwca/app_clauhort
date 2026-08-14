@@ -123,6 +123,9 @@ function buildArgs(agent) {
   if (agent.resumeId) {
     args.push(`--resume=${agent.resumeId}`);
   }
+  if (agent.chromeAccess) {
+    args.push('--chrome');
+  }
   return args;
 }
 
