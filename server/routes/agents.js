@@ -7,7 +7,7 @@ import { Router } from 'express';
 import { spawn } from 'child_process';
 import { existsSync } from 'fs';
 import { v4 as uuidv4 } from 'uuid';
-import { getAgents, getAgent, createAgent, updateAgent, deleteAgent } from '../store/db.js';
+import { getAgents, getAgent, createAgent, updateAgent, deleteAgent, getChromeAccessAgent } from '../store/db.js';
 import { verifyClaudeBinAvailable } from '../services/agentRunner.js';
 import { killAgent } from '../services/agentProcessManager.js';
 import { listAgentCommands } from '../services/commands.js';
@@ -51,9 +51,12 @@ router.get('/:id', (req, res) => {
  * @param {string} [req.body.resumeId] - Optional claude --resume conversation ID
  * @param {boolean} [req.body.dangerouslySkipPermissions] - "YOLO mode", opt-in
  * @param {boolean} [req.body.isObserver] - Observer mode, opt-in (creation-time only in the UI)
+ * @param {boolean} [req.body.chromeAccess] - Browser access via the Claude in
+ *   Chrome extension, opt-in (creation-time only in the UI). At most one
+ *   agent app-wide may have this set — see getChromeAccessAgent's docs.
  */
 router.post('/', async (req, res) => {
-  const { name, color, workingDir, resumeId, dangerouslySkipPermissions, isObserver } = req.body;
+  const { name, color, workingDir, resumeId, dangerouslySkipPermissions, isObserver, chromeAccess } = req.body;
   if (!name || !color || !workingDir) {
     return res.status(400).json({ error: t('errors.agentFieldsRequired') });
   }
@@ -64,10 +67,15 @@ router.post('/', async (req, res) => {
   if (!verified.ok) {
     return res.status(400).json({ error: t('errors.agentVerifyFailed', { message: verified.error }) });
   }
+  if (chromeAccess) {
+    const holder = getChromeAccessAgent();
+    if (holder) return res.status(409).json({ error: t('errors.chromeAccessConflict', { name: holder.name }) });
+  }
   const data = { id: uuidv4(), name, color, workingDir };
   if (resumeId) data.resumeId = resumeId;
   if (dangerouslySkipPermissions) data.dangerouslySkipPermissions = true;
   if (isObserver) data.isObserver = true;
+  if (chromeAccess) data.chromeAccess = true;
   const agent = await createAgent(data);
   res.status(201).json(agent);
 });
@@ -86,9 +94,14 @@ router.post('/', async (req, res) => {
  *   unlike workingDir/dangerouslySkipPermissions/resumeId, it is NOT baked
  *   into the CLI's spawn args, so changing it does NOT evict the running
  *   process (see flagsChanged below, which deliberately omits it).
+ * @param {boolean} [req.body.chromeAccess] - Not exposed in the UI for
+ *   editing, but supported generically here. Baked into spawn args
+ *   (--chrome), so turning it on evicts the running process like
+ *   dangerouslySkipPermissions does. Subject to the same app-wide
+ *   single-holder constraint as the create route.
  */
 router.patch('/:id', async (req, res) => {
-  const { name, color, workingDir, resumeId, dangerouslySkipPermissions, isObserver } = req.body;
+  const { name, color, workingDir, resumeId, dangerouslySkipPermissions, isObserver, chromeAccess } = req.body;
   const existing = getAgent(req.params.id);
   if (!existing) return res.status(404).json({ error: t('errors.agentNotFound') });
 
@@ -104,17 +117,23 @@ router.patch('/:id', async (req, res) => {
       return res.status(400).json({ error: t('errors.agentVerifyFailed', { message: verified.error }) });
     }
   }
+  if (chromeAccess && chromeAccess !== existing.chromeAccess) {
+    const holder = getChromeAccessAgent(existing.id);
+    if (holder) return res.status(409).json({ error: t('errors.chromeAccessConflict', { name: holder.name }) });
+  }
 
-  const agent = await updateAgent(req.params.id, { name, color, workingDir, resumeId, dangerouslySkipPermissions, isObserver });
+  const agent = await updateAgent(req.params.id, { name, color, workingDir, resumeId, dangerouslySkipPermissions, isObserver, chromeAccess });
   if (!agent) return res.status(404).json({ error: t('errors.agentNotFound') });
-  // workingDir/dangerouslySkipPermissions/resumeId are all baked into the
-  // agent's persistent process at spawn time (--add-dir, --dangerously-
-  // skip-permissions, --resume) — a running process has no way to pick up
-  // a change to any of them, so evict it; the next turn respawns fresh.
-  // Not currently reachable from the UI, but this is live API surface.
+  // workingDir/dangerouslySkipPermissions/resumeId/chromeAccess are all
+  // baked into the agent's persistent process at spawn time (--add-dir,
+  // --dangerously-skip-permissions, --resume, --chrome) — a running process
+  // has no way to pick up a change to any of them, so evict it; the next
+  // turn respawns fresh. Not currently reachable from the UI, but this is
+  // live API surface.
   const flagsChanged = (workingDir !== undefined && workingDir !== existing.workingDir)
     || (dangerouslySkipPermissions !== undefined && dangerouslySkipPermissions !== existing.dangerouslySkipPermissions)
-    || (resumeId !== undefined && resumeId !== existing.resumeId);
+    || (resumeId !== undefined && resumeId !== existing.resumeId)
+    || (chromeAccess !== undefined && chromeAccess !== existing.chromeAccess);
   if (flagsChanged) await killAgent(req.params.id);
   res.json(agent);
 });
