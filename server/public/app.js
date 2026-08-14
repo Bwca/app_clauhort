@@ -177,6 +177,54 @@ function applyTheme(theme) {
   localStorage.setItem('theme', theme);
 }
 
+// ─── Responsive drawers (narrow viewports) ─────────────────────────────────
+// Below the breakpoints in style.css, #sidebar/#agent-panel come out of the
+// normal flex layout and become off-canvas panels — CSS handles the actual
+// slide animation via the .drawer-open class, this just owns which one (if
+// any) is currently open. Only one at a time: opening the other closes
+// whichever was open, so the shared backdrop's "click to close" has a single
+// unambiguous target instead of needing to track a set.
+
+/** @type {HTMLElement | null} #sidebar or #agent-panel, whichever is currently open as a drawer. */
+let openDrawerEl = null;
+
+/**
+ * Closes whichever drawer is open, if any. Safe to call unconditionally
+ * (e.g. on Escape, or a chat being selected) even when nothing is open.
+ * @returns {void}
+ */
+function closeDrawer() {
+  if (!openDrawerEl) return;
+  openDrawerEl.classList.remove('drawer-open');
+  openDrawerEl = null;
+  drawerBackdrop.hidden = true;
+}
+
+/**
+ * Opens `el` as a drawer, closing any other drawer first (see openDrawerEl's
+ * docs) — a no-op re-click on the SAME panel's toggle button closes it
+ * instead, handled by toggleDrawer below rather than here.
+ * @param {HTMLElement} el
+ * @returns {void}
+ */
+function openDrawer(el) {
+  if (openDrawerEl && openDrawerEl !== el) closeDrawer();
+  openDrawerEl = el;
+  el.classList.add('drawer-open');
+  drawerBackdrop.hidden = false;
+}
+
+/**
+ * Wired to both toggle buttons — clicking the button for the already-open
+ * drawer closes it, clicking the other one's switches directly.
+ * @param {HTMLElement} el
+ * @returns {void}
+ */
+function toggleDrawer(el) {
+  if (openDrawerEl === el) closeDrawer();
+  else openDrawer(el);
+}
+
 // ─── Contrast-safe agent/user colors ───────────────────────────────────────
 // PRESET_COLORS (below) is a fixed set of pastel hexes tuned to read well as
 // text/avatar-fill against the DARK theme's near-black --bg0. The light
@@ -385,6 +433,11 @@ const emptyState       = $('#empty-state');
 const chatView         = $('#chat-view');
 const chatTopbarName   = $('#chat-topbar-name');
 const reconnNotice     = $('#reconnecting-notice');
+const sidebarEl        = $('#sidebar');
+const sidebarToggleBtn = $('#sidebar-toggle-btn');
+const agentPanelEl     = $('#agent-panel');
+const agentPanelToggleBtn = $('#agent-panel-toggle-btn');
+const drawerBackdrop   = $('#drawer-backdrop');
 const messageFilterBar = $('#message-filter-bar');
 const messageList      = $('#message-list');
 const msgInput         = $('#msg-input');
@@ -1711,6 +1764,11 @@ async function selectChat(id) {
   renderMessageFilterBar();
   renderChatList();
   renderAgentPanel();
+  // On a narrow viewport the chat list a user just picked from is an
+  // off-canvas drawer (see the responsive drawers section) — closing it
+  // automatically here matches how any mobile chat app behaves, and is a
+  // harmless no-op on a wide viewport where it was never open.
+  closeDrawer();
 
   const chat = activeChat();
   chatTopbarName.textContent = t('chat.channelName', { name: chat?.name ?? '' });
@@ -2706,6 +2764,11 @@ settingsClose.addEventListener('click', closeSettingsModal);
 settingsCancel.addEventListener('click', closeSettingsModal);
 settingsOverlay.addEventListener('click', (e) => { if (e.target === settingsOverlay) closeSettingsModal(); });
 settingsForm.addEventListener('submit', handleSettingsFormSubmit);
+
+sidebarToggleBtn.addEventListener('click', () => toggleDrawer(sidebarEl));
+agentPanelToggleBtn.addEventListener('click', () => toggleDrawer(agentPanelEl));
+drawerBackdrop.addEventListener('click', closeDrawer);
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeDrawer(); });
 
 newAgentBtn.addEventListener('click', openModal);
 modalClose.addEventListener('click', closeModal);

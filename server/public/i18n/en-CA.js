@@ -6,6 +6,8 @@ export default {
   'common.cancel': 'Cancel',
   'common.settings': 'Settings',
   'common.help': 'Help',
+  'common.toggleChats': 'Toggle chats',
+  'common.toggleAgents': 'Toggle agents',
 
   'conn.connected': 'Connected',
   'conn.disconnected': 'Disconnected',

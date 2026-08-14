@@ -97,10 +97,18 @@ html, body { height: 100%; background: var(--bg0); color: var(--text); font-fami
 
 #chat-view { display: flex; flex-direction: column; height: 100%; }
 
-#chat-topbar { padding: 13px 18px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
-#chat-topbar-left { display: flex; align-items: center; gap: 10px; }
-#chat-topbar-name { font-weight: 600; font-size: 15px; }
+#chat-topbar { padding: 13px 18px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-shrink: 0; }
+#chat-topbar-left { display: flex; align-items: center; gap: 10px; min-width: 0; }
+#chat-topbar-name { font-weight: 600; font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#chat-topbar-right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
 #reconnecting-notice { font-size: 12px; color: var(--peach); font-style: italic; }
+
+/* Drawer toggles: only meaningful once #sidebar/#agent-panel become
+   off-canvas (see the responsive breakpoints below) — plain icon buttons
+   matching #settings-btn's styling, hidden on a wide-enough viewport where
+   both panels are always visible in the normal flex layout. */
+#sidebar-toggle-btn, #agent-panel-toggle-btn { display: none; background: none; border: none; color: var(--dim); font-size: 16px; cursor: pointer; line-height: 1; padding: 0; flex-shrink: 0; transition: color .15s; }
+#sidebar-toggle-btn:hover, #agent-panel-toggle-btn:hover { color: var(--text); }
 
 #scheduled-wrapper { position: relative; }
 #scheduled-btn { background: var(--bg2); border: 1px solid var(--faint); border-radius: 12px; padding: 2px 9px; color: var(--muted); font-size: 12px; cursor: pointer; transition: background .15s, color .15s; }
@@ -403,3 +411,41 @@ html, body { height: 100%; background: var(--bg0); color: var(--text); font-fami
 #modal-submit { padding: 7px 18px; border-radius: 7px; border: none; background: var(--blue); color: var(--bg0); font-size: 14px; font-weight: 600; cursor: pointer; transition: background .15s, opacity .15s; }
 #modal-submit:disabled { opacity: .5; cursor: not-allowed; }
 #modal-submit:not(:disabled):hover { background: var(--blue-hover); }
+
+/* ── Responsive layout ────────────────────────────────────────────────
+   #sidebar and #agent-panel are fixed-width flex siblings of #chat-area,
+   which is fine on a wide window but leaves almost nothing for the chat
+   itself once the two together (220px + 240px, before even counting their
+   min-width floors) eat most of a narrow viewport. Below each breakpoint,
+   the corresponding panel comes out of normal flow and becomes an
+   off-canvas drawer instead — #chat-area then gets the freed space back
+   automatically (still flex: 1), and the panel slides in over the content
+   on demand via #drawer-toggle-btn clicks, wired in app.js. */
+@media (max-width: 900px) {
+  #agent-panel-toggle-btn { display: inline-block; }
+
+  #agent-panel {
+    position: fixed; top: 0; right: 0; height: 100vh; z-index: 60;
+    transform: translateX(100%); transition: transform .2s ease;
+    box-shadow: -4px 0 20px rgba(0,0,0,.35);
+  }
+  #agent-panel.drawer-open { transform: translateX(0); }
+}
+
+@media (max-width: 640px) {
+  #sidebar-toggle-btn { display: inline-block; }
+
+  #sidebar {
+    position: fixed; top: 0; left: 0; height: 100vh; z-index: 60;
+    width: 260px; min-width: 260px;
+    transform: translateX(-100%); transition: transform .2s ease;
+    box-shadow: 4px 0 20px rgba(0,0,0,.35);
+  }
+  #sidebar.drawer-open { transform: translateX(0); }
+}
+
+/* Dims and covers the app while a drawer is open; click closes it (wired
+   in app.js). Sits below the open drawer (z-index 60) but above
+   everything else — shown/hidden via the [hidden] attribute, not display,
+   so it stacks with the same convention as every other panel in the app. */
+#drawer-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 55; }

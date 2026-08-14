@@ -16,11 +16,19 @@ let page = null;
 
 /**
  * Launches a headless Chromium instance.
+ *
+ * Pins a real-desktop-sized default viewport, rather than leaving it at
+ * Puppeteer's own default (800x600) — style.css's responsive breakpoints
+ * (see its "Responsive layout" section) turn the sidebar/agent panel into
+ * off-canvas drawers below 640/900px, so an unpinned 800x600 default would
+ * silently run every test's clicks against the narrow, drawer-collapsed
+ * layout instead of the normal desktop one most of this suite assumes.
  * @returns {Promise<void>}
  */
 export async function launchBrowser() {
   browser = await puppeteer.launch({
     headless: true,
+    defaultViewport: { width: 1280, height: 800 },
     args: ['--no-sandbox', '--disable-setuid-sandbox'],
   });
 }

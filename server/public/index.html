@@ -39,13 +39,17 @@
       <div id="chat-view" hidden>
         <div id="chat-topbar">
           <div id="chat-topbar-left">
+            <button id="sidebar-toggle-btn" data-testid="sidebar-toggle-btn" data-i18n-title="common.toggleChats" title="Toggle chats">☰</button>
             <span id="chat-topbar-name" data-testid="chat-topbar-name"></span>
             <div id="scheduled-wrapper">
               <button id="scheduled-btn" data-testid="scheduled-btn" hidden></button>
               <ul id="scheduled-panel" data-testid="scheduled-panel" hidden></ul>
             </div>
           </div>
-          <span id="reconnecting-notice" data-i18n="chat.reconnecting" hidden>Reconnecting…</span>
+          <div id="chat-topbar-right">
+            <span id="reconnecting-notice" data-i18n="chat.reconnecting" hidden>Reconnecting…</span>
+            <button id="agent-panel-toggle-btn" data-testid="agent-panel-toggle-btn" data-i18n-title="common.toggleAgents" title="Toggle agents">👥</button>
+          </div>
         </div>
         <div id="message-filter-bar" data-testid="message-filter-bar" hidden></div>
         <div id="message-list" data-testid="message-list"></div>
@@ -76,6 +80,12 @@
       </div>
     </aside>
   </div>
+
+  <!-- Below the responsive breakpoints (see style.css), #sidebar and
+       #agent-panel become off-canvas drawers toggled by the buttons in
+       #chat-topbar — this dims/covers the rest of the app while one is open
+       and closes it on click, same role as the modal overlays below. -->
+  <div id="drawer-backdrop" data-testid="drawer-backdrop" hidden></div>
 
   <!-- Create agent modal -->
   <div id="modal-overlay" data-testid="modal-overlay" hidden>
