@@ -396,5 +396,44 @@ describe('Messaging', () => {
     assert.ok(visibleTexts.includes('hello everyone'), `broadcast should stay visible under filter, got: ${JSON.stringify(visibleTexts)}`);
     assert.ok(visibleTexts.includes('@Claudia only for you'), `message mentioning the spotlighted agent should stay visible, got: ${JSON.stringify(visibleTexts)}`);
     assert.ok(!visibleTexts.includes('@Clauditor only for you'), `message addressed to a different agent should be hidden, got: ${JSON.stringify(visibleTexts)}`);
+
+    // Removing Clauditor from the chat, then reloading (forcing the message
+    // list to rebuild from persisted history rather than the live DOM),
+    // shouldn't turn their old "addressed to them" message into what looks
+    // like a broadcast — it should stay hidden under Claudia's spotlight,
+    // not resurface just because Clauditor is no longer a current member to
+    // resolve the @mention against.
+    await page.evaluate(() => {
+      const items = [...document.querySelectorAll('[data-testid="agent-item"]')];
+      const item = items.find((el) => el.querySelector('[data-testid="agent-name"]')?.textContent.trim() === 'Clauditor');
+      item.querySelector('.agent-remove-btn').click();
+    });
+    await page.waitForFunction(
+      () => ![...document.querySelectorAll('[data-testid="agent-name"]')].some((el) => el.textContent.trim() === 'Clauditor'),
+      { timeout: 5000 }
+    );
+
+    await page.reload();
+    await page.waitForFunction(
+      () => document.querySelectorAll('[data-testid="message"][data-role="user"]').length === 3,
+      { timeout: 5000 }
+    );
+
+    // Filter state doesn't survive a reload (selectChat clears it), so
+    // re-spotlight Claudia before re-checking visibility.
+    await page.evaluate(() => {
+      const items = [...document.querySelectorAll('[data-testid="agent-item"]')];
+      const item = items.find((el) => el.querySelector('[data-testid="agent-name"]')?.textContent.trim() === 'Claudia');
+      item.querySelector('.agent-filter-btn').click();
+    });
+
+    const visibleAfterReload = await page.$$eval(
+      '[data-testid="message"][data-role="user"]:not([hidden]) [data-testid="msg-content"]',
+      (els) => els.map((el) => el.textContent.trim())
+    );
+    assert.ok(
+      !visibleAfterReload.includes('@Clauditor only for you'),
+      `message addressed to a removed agent should stay hidden under a different agent's filter, got: ${JSON.stringify(visibleAfterReload)}`
+    );
   });
 });
