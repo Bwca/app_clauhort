@@ -132,6 +132,7 @@ html, body { height: 100%; background: var(--bg0); color: var(--text); font-fami
 .msg-meta { display: flex; align-items: baseline; gap: 7px; margin-bottom: 2px; }
 .msg-author { font-weight: 600; font-size: 14px; color: var(--author-color); }
 .msg-author-yolo-badge { font-size: 11px; cursor: help; flex-shrink: 0; }
+.msg-author-chrome-badge { font-size: 11px; cursor: help; flex-shrink: 0; }
 .msg-author-dir { font-size: 11px; color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .msg-time { font-size: 11px; color: var(--dim); flex-shrink: 0; }
 .msg-content { font-size: 14px; color: var(--text); word-break: break-word; line-height: 1.55; }
@@ -264,6 +265,7 @@ html, body { height: 100%; background: var(--bg0); color: var(--text); font-fami
 .agent-name { font-size: 13px; font-weight: 600; }
 .agent-yolo-badge { font-size: 11px; cursor: help; }
 .agent-observer-badge { font-size: 11px; cursor: help; }
+.agent-chrome-badge { font-size: 11px; cursor: help; }
 .agent-dir { font-size: 11px; color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .agent-session-btn { align-self: flex-start; background: none; border: none; padding: 0; margin-top: 1px; font-size: 10px; font-family: monospace; color: var(--dim); cursor: pointer; }
 .agent-session-btn:hover { color: var(--blue); }

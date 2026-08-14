@@ -424,6 +424,7 @@ const agentResumeInput = $('#agent-resume');
 const colorGrid        = $('#color-grid');
 const yoloModeCheck    = $('#yolo-mode-check');
 const observerModeCheck = $('#observer-mode-check');
+const chromeAccessCheck = $('#chrome-access-check');
 const addToChatLabel   = $('#add-to-chat-label');
 const addToChatCheck   = $('#add-to-chat-check');
 const agentError       = $('#agent-error');
@@ -1181,6 +1182,7 @@ function buildMessageEl(msg) {
       <div class="msg-meta">
         <span class="msg-author" data-testid="msg-author">${escHtml(msg.authorName)}</span>
         ${agent?.dangerouslySkipPermissions ? `<span class="msg-author-yolo-badge" data-testid="msg-author-yolo-badge" title="${t('agent.yoloBadgeTitle')}">🔥</span>` : ''}
+        ${agent?.chromeAccess ? `<span class="msg-author-chrome-badge" data-testid="msg-author-chrome-badge" title="${t('agent.chromeBadgeTitle')}">🌐</span>` : ''}
         ${agent ? `<span class="msg-author-dir" data-testid="msg-author-dir" title="${escHtml(agent.workingDir)}">${escHtml(shortDir(agent.workingDir))}</span>` : ''}
         <span class="msg-time" data-iso="${msg.createdAt}">${fmtTime(msg.createdAt)}</span>
         ${msg.role === 'agent' ? `
@@ -1544,6 +1546,7 @@ function createStreamingBubble(agentId, agentName, agentColor) {
       <div class="msg-meta">
         <span class="msg-author">${escHtml(agentName)}</span>
         ${agent?.dangerouslySkipPermissions ? `<span class="msg-author-yolo-badge" data-testid="msg-author-yolo-badge" title="${t('agent.yoloBadgeTitle')}">🔥</span>` : ''}
+        ${agent?.chromeAccess ? `<span class="msg-author-chrome-badge" data-testid="msg-author-chrome-badge" title="${t('agent.chromeBadgeTitle')}">🌐</span>` : ''}
         ${agent ? `<span class="msg-author-dir" data-testid="msg-author-dir" title="${escHtml(agent.workingDir)}">${escHtml(shortDir(agent.workingDir))}</span>` : ''}
         <span class="msg-typing" data-testid="msg-typing">
           <span class="msg-status-text" data-testid="msg-status-text">${t('chat.respondingLabel')}</span>
@@ -1623,7 +1626,7 @@ function renderAgentPanel() {
     li.innerHTML = `
       <div class="agent-avatar" style="background:${agentDisplayColor(agent.color)}">${agent.name[0].toUpperCase()}</div>
       <div class="agent-info">
-        <span class="agent-name" data-testid="agent-name">${escHtml(agent.name)}${agent.dangerouslySkipPermissions ? ` <span class="agent-yolo-badge" data-testid="agent-yolo-badge" title="${t('agent.yoloBadgeTitle')}">🔥</span>` : ''}${agent.isObserver ? ` <span class="agent-observer-badge" data-testid="agent-observer-badge" title="${t('agent.observerBadgeTitle')}">👁</span>` : ''}</span>
+        <span class="agent-name" data-testid="agent-name">${escHtml(agent.name)}${agent.dangerouslySkipPermissions ? ` <span class="agent-yolo-badge" data-testid="agent-yolo-badge" title="${t('agent.yoloBadgeTitle')}">🔥</span>` : ''}${agent.isObserver ? ` <span class="agent-observer-badge" data-testid="agent-observer-badge" title="${t('agent.observerBadgeTitle')}">👁</span>` : ''}${agent.chromeAccess ? ` <span class="agent-chrome-badge" data-testid="agent-chrome-badge" title="${t('agent.chromeBadgeTitle')}">🌐</span>` : ''}</span>
         <span class="agent-dir" title="${escHtml(agent.workingDir)}">${escHtml(shortDir(agent.workingDir))}</span>
         ${agent.resumeId ? `<button class="agent-session-btn" data-testid="agent-session-btn" title="${t('agent.copySessionTitle', { resumeId: escHtml(agent.resumeId) })}">⧉ ${agent.resumeId.slice(0, 8)}…</button>` : ''}
       </div>
@@ -1944,6 +1947,7 @@ function openModal() {
   agentResumeInput.value = '';
   yoloModeCheck.checked = false;
   observerModeCheck.checked = false;
+  chromeAccessCheck.checked = false;
   agentError.hidden = true;
   agentError.textContent = '';
   modalSubmit.disabled = false;
@@ -2239,6 +2243,7 @@ async function handleAgentFormSubmit(e) {
   const resumeId = agentResumeInput.value.trim() || undefined;
   const dangerouslySkipPermissions = yoloModeCheck.checked;
   const isObserver = observerModeCheck.checked;
+  const chromeAccess = chromeAccessCheck.checked;
   modalSubmit.disabled = true;
   modalSubmit.textContent = t('agentModal.verifyingBtn');
   agentError.hidden = true;
@@ -2247,7 +2252,7 @@ async function handleAgentFormSubmit(e) {
     const res = await fetch('/api/agents', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, color: selectedColor, workingDir, resumeId, dangerouslySkipPermissions, isObserver }),
+      body: JSON.stringify({ name, color: selectedColor, workingDir, resumeId, dangerouslySkipPermissions, isObserver, chromeAccess }),
     });
     if (!res.ok) {
       const body = await res.json();
