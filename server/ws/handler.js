@@ -381,9 +381,16 @@ function buildSystemPreamble(agent, chat, members) {
  * content. Gated on catch-up existing at all, not sent unconditionally on
  * every turn, for the same reason the full preamble isn't: if nothing
  * happened since this agent's last turn, the roster almost certainly
- * hasn't moved either.
+ * hasn't moved either — EXCEPT membership changes don't create a chat
+ * message, so "no catch-up" doesn't actually rule out a roster change.
+ * chat.rosterChangedAt (see db.js's addChatMember/removeChatMember) covers
+ * that gap: also reported live, an agent whose last turn happened to be the
+ * most recent thing in the chat at the time a teammate was removed carried
+ * that stale roster forward with nothing to correct it, and went on to
+ * @mention the departed teammate for a task no one would ever see — the
+ * roster note now also fires when rosterChangedAt is newer than this
+ * agent's own last turn, independent of catch-up content.
  *
-
  * @param {import('../store/db.js').Agent} agent - The agent being prompted
  * @param {import('../store/db.js').Chat} chat - The current chat
  * @param {import('../store/db.js').Agent[]} members - All agents in the chat
@@ -410,10 +417,24 @@ export function buildPromptBlocks(agent, chat, members, newMessage, priorMessage
   const contextSection = catchUp.length
     ? `[${sectionLabel}]\n${catchUp.map(renderHistoryLine).join('\n')}\n---`
     : '';
+  // Membership changes (add/remove) don't create a chat message, so
+  // catch-up content alone can't be trusted to reveal one — an agent whose
+  // last turn was immediately before a teammate got removed, with no other
+  // chat activity since, would otherwise carry that stale roster forward
+  // indefinitely (and, reported live, sometimes @mention the departed
+  // teammate asking them for something no one will ever see). rosterChangedAt
+  // (bumped in db.js's addChatMember/removeChatMember) catches that case:
+  // if it's newer than this agent's own last turn in the chat, the roster
+  // note goes out even with zero catch-up content.
+  const lastOwnMessage = [...priorMessages].reverse().find((m) => m.agentId === agent.id);
+  const rosterStaleSinceLastTurn = Boolean(
+    hasSpokenInChat && chat.rosterChangedAt && (!lastOwnMessage || chat.rosterChangedAt > lastOwnMessage.createdAt)
+  );
   // Only needed when the full [System] preamble (which already includes an
-  // up-to-date roster) wasn't sent, AND there's actually catch-up content to
-  // pair it with — see this function's docs for why.
-  const rosterNote = hasSpokenInChat && catchUp.length
+  // up-to-date roster) wasn't sent, AND (there's catch-up content to pair it
+  // with, OR the roster itself moved since this agent's last turn) — see
+  // this function's docs for why.
+  const rosterNote = hasSpokenInChat && (catchUp.length || rosterStaleSinceLastTurn)
     ? `[Current chat roster]\n${formatRoster(agent, members)}`
     : '';
 

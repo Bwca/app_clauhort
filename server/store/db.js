@@ -89,6 +89,11 @@ function transaction(fn) {
  * @property {string} id - UUID v4
  * @property {string} name - Chat room name
  * @property {string[]} memberAgentIds - Array of agent UUIDs in this chat
+ * @property {string | null} rosterChangedAt - ISO 8601 timestamp of the last
+ *   membership change (add or remove), or null if it's never changed since
+ *   creation. Used to decide whether an already-spoken agent needs a fresh
+ *   roster note even when nothing else happened since its last turn — see
+ *   buildPromptBlocks in ws/handler.js.
  * @property {string} createdAt - ISO 8601 timestamp
  */
 
@@ -138,6 +143,7 @@ CREATE TABLE IF NOT EXISTS agents (
 CREATE TABLE IF NOT EXISTS chats (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
+  roster_changed_at TEXT,
   created_at TEXT NOT NULL
 );
 
@@ -302,6 +308,18 @@ function migrateChatMembersUniqueAgent() {
 }
 
 /**
+ * Adds the `roster_changed_at` column to `chats` if it's missing, same
+ * reasoning as migrateAgentsAllowedToolPatterns above.
+ * @returns {void}
+ */
+function migrateChatsRosterChangedAt() {
+  const hasColumn = db.prepare("PRAGMA table_info(chats)").all()
+    .some((col) => col.name === 'roster_changed_at');
+  if (hasColumn) return;
+  db.exec('ALTER TABLE chats ADD COLUMN roster_changed_at TEXT');
+}
+
+/**
  * Maps a raw `agents` row to the public Agent shape.
  * @param {Record<string, unknown>} row
  * @returns {Agent}
@@ -334,7 +352,7 @@ function rowToChat(row) {
     .prepare('SELECT agent_id FROM chat_members WHERE chat_id = ? ORDER BY rowid')
     .all(row.id)
     .map((r) => r.agent_id);
-  return { id: row.id, name: row.name, memberAgentIds, createdAt: row.created_at };
+  return { id: row.id, name: row.name, memberAgentIds, rosterChangedAt: row.roster_changed_at ?? null, createdAt: row.created_at };
 }
 
 /**
@@ -449,6 +467,7 @@ export async function loadDb() {
   migrateAgentsDangerMode();
   migrateAgentsObserverMode();
   migrateChatMembersUniqueAgent();
+  migrateChatsRosterChangedAt();
 
   if (!isMemory && isNewDatabase && existsSync(JSON_DATA_FILE)) {
     importLegacyJson();
@@ -674,6 +693,19 @@ export async function deleteChat(id) {
 }
 
 /**
+ * Stamps a chat's rosterChangedAt to now — called whenever chat_members
+ * actually gains or loses a row, so an already-spoken agent whose live
+ * session missed the change (no accompanying chat message, e.g. a plain
+ * member removal) can still be caught up next turn. See buildPromptBlocks
+ * in ws/handler.js for the read side.
+ * @param {string} chatId
+ * @returns {void}
+ */
+function touchRosterChanged(chatId) {
+  db.prepare('UPDATE chats SET roster_changed_at = ? WHERE id = ?').run(new Date().toISOString(), chatId);
+}
+
+/**
  * Adds an agent to a chat's member list (idempotent). Callers are
  * responsible for rejecting an agent that's already a member of a
  * *different* chat before calling this (see getAgentChatId) — this
@@ -685,7 +717,11 @@ export async function deleteChat(id) {
  */
 export async function addChatMember(chatId, agentId) {
   if (!getChat(chatId)) return null;
-  db.prepare('INSERT OR IGNORE INTO chat_members (chat_id, agent_id) VALUES (?, ?)').run(chatId, agentId);
+  const txn = transaction(() => {
+    const result = db.prepare('INSERT OR IGNORE INTO chat_members (chat_id, agent_id) VALUES (?, ?)').run(chatId, agentId);
+    if (result.changes > 0) touchRosterChanged(chatId);
+  });
+  txn();
   return getChat(chatId);
 }
 
@@ -693,7 +729,8 @@ export async function addChatMember(chatId, agentId) {
  * Removes an agent from a chat's member list, and clears its resumeId —
  * see deleteChat's doc comment for why leaving a chat must reset memory.
  * Only clears if a row was actually removed, so a no-op double-remove
- * doesn't wipe an agent's session for no reason.
+ * doesn't wipe an agent's session for no reason. Same changes>0 guard for
+ * the rosterChangedAt stamp (see touchRosterChanged).
  * @param {string} chatId
  * @param {string} agentId
  * @returns {Promise<Chat | null>}
@@ -702,7 +739,10 @@ export async function removeChatMember(chatId, agentId) {
   if (!getChat(chatId)) return null;
   const txn = transaction(() => {
     const result = db.prepare('DELETE FROM chat_members WHERE chat_id = ? AND agent_id = ?').run(chatId, agentId);
-    if (result.changes > 0) clearAgentResumeId(agentId);
+    if (result.changes > 0) {
+      clearAgentResumeId(agentId);
+      touchRosterChanged(chatId);
+    }
   });
   txn();
   return getChat(chatId);
