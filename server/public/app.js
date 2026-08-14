@@ -177,6 +177,165 @@ function applyTheme(theme) {
   localStorage.setItem('theme', theme);
 }
 
+// ─── Contrast-safe agent/user colors ───────────────────────────────────────
+// PRESET_COLORS (below) is a fixed set of pastel hexes tuned to read well as
+// text/avatar-fill against the DARK theme's near-black --bg0. The light
+// theme's --bg0 is near-white, so those same pastels (and any custom hex
+// stored before this existed) can land well under WCAG contrast there — the
+// exact "agent color barely readable in light mode" bug this section fixes.
+// Rather than a second theme-specific palette (which wouldn't help colors
+// already saved on existing agents), every render site nudges the stored
+// color's LIGHTNESS toward black/white, preserving hue, until it contrasts
+// enough against the CURRENT theme's --bg0 — a color already safe (e.g. any
+// dark-theme pastel against dark --bg0) round-trips unchanged.
+
+/** Minimum WCAG contrast ratio targeted for agent/user color text and avatar fills. */
+const MIN_COLOR_CONTRAST = 4.5;
+
+/**
+ * @param {string} hex - "#rrggbb"
+ * @returns {{r: number, g: number, b: number}}
+ */
+function hexToRgb(hex) {
+  const n = parseInt(hex.slice(1), 16);
+  return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+}
+
+/** @param {{r: number, g: number, b: number}} rgb */
+function rgbToHex({ r, g, b }) {
+  const clamp = (v) => Math.max(0, Math.min(255, Math.round(v)));
+  return '#' + [r, g, b].map((v) => clamp(v).toString(16).padStart(2, '0')).join('');
+}
+
+/**
+ * WCAG relative luminance (0 = black, 1 = white).
+ * @param {{r: number, g: number, b: number}} rgb
+ * @returns {number}
+ */
+function relativeLuminance({ r, g, b }) {
+  const [R, G, B] = [r, g, b].map((c) => {
+    const s = c / 255;
+    return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * R + 0.7152 * G + 0.0722 * B;
+}
+
+/**
+ * WCAG contrast ratio between two hex colors, from 1 (identical) to 21
+ * (black vs white).
+ * @param {string} hexA
+ * @param {string} hexB
+ * @returns {number}
+ */
+function contrastRatio(hexA, hexB) {
+  const lA = relativeLuminance(hexToRgb(hexA));
+  const lB = relativeLuminance(hexToRgb(hexB));
+  const [lighter, darker] = lA >= lB ? [lA, lB] : [lB, lA];
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
+/**
+ * @param {{r: number, g: number, b: number}} rgb
+ * @returns {{h: number, s: number, l: number}} each in [0, 1]
+ */
+function rgbToHsl({ r, g, b }) {
+  r /= 255; g /= 255; b /= 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b);
+  const l = (max + min) / 2;
+  if (max === min) return { h: 0, s: 0, l };
+  const d = max - min;
+  const s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+  let h;
+  switch (max) {
+    case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+    case g: h = (b - r) / d + 2; break;
+    default: h = (r - g) / d + 4;
+  }
+  return { h: h / 6, s, l };
+}
+
+/** @param {{h: number, s: number, l: number}} hsl */
+function hslToRgb({ h, s, l }) {
+  if (s === 0) return { r: l * 255, g: l * 255, b: l * 255 };
+  const hue2rgb = (p, q, t) => {
+    if (t < 0) t += 1;
+    if (t > 1) t -= 1;
+    if (t < 1 / 6) return p + (q - p) * 6 * t;
+    if (t < 1 / 2) return q;
+    if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
+    return p;
+  };
+  const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+  const p = 2 * l - q;
+  return { r: hue2rgb(p, q, h + 1 / 3) * 255, g: hue2rgb(p, q, h) * 255, b: hue2rgb(p, q, h - 1 / 3) * 255 };
+}
+
+/**
+ * Returns `hex` unchanged if it already contrasts enough against `bgHex`,
+ * otherwise nudges its HSL lightness toward black (if `bgHex` is light) or
+ * white (if `bgHex` is dark) — hue and saturation untouched — by the least
+ * amount that clears `minRatio`. Binary search over lightness rather than a
+ * fixed step: the two theme backgrounds are extreme enough (near-black /
+ * near-white) that the darkest/lightest end of the search always clears
+ * ordinary text-contrast thresholds, so this always converges.
+ * @param {string} hex
+ * @param {string} bgHex
+ * @param {number} [minRatio]
+ * @returns {string}
+ */
+function ensureContrast(hex, bgHex, minRatio = MIN_COLOR_CONTRAST) {
+  if (contrastRatio(hex, bgHex) >= minRatio) return hex;
+
+  const hsl = rgbToHsl(hexToRgb(hex));
+  const bgIsLight = relativeLuminance(hexToRgb(bgHex)) > 0.5;
+  const passes = (l) => contrastRatio(rgbToHex(hslToRgb({ ...hsl, l })), bgHex) >= minRatio;
+
+  // Light bg: darken toward 0, contrast rises monotonically as l falls, so
+  // the passing region is [0, l*] — binary-search for that upper boundary,
+  // the least-dark passing lightness. Dark bg: mirror image, lighten toward
+  // 1, passing region is [l*, 1], search for its lower boundary.
+  let lo, hi;
+  if (bgIsLight) {
+    lo = 0; // passes (black vs light bg)
+    hi = hsl.l; // fails (already established above)
+  } else {
+    lo = hsl.l; // fails
+    hi = 1; // passes (white vs dark bg)
+  }
+  for (let i = 0; i < 20; i++) {
+    const mid = (lo + hi) / 2;
+    if (passes(mid) === bgIsLight) {
+      // bgIsLight: mid passes → it's a valid (and less-dark) new boundary.
+      // !bgIsLight: mid fails → still need to go lighter.
+      lo = mid;
+    } else {
+      hi = mid;
+    }
+  }
+  return rgbToHex(hslToRgb({ ...hsl, l: bgIsLight ? lo : hi }));
+}
+
+/**
+ * Resolves a stored agent/user hex color to what should actually be
+ * rendered right now — contrast-corrected (see ensureContrast) against the
+ * CURRENT theme's --bg0, which is also the literal background every avatar
+ * (.msg-avatar/.agent-avatar/.mention-avatar/.add-menu-avatar) sits on and
+ * fills with var(--bg0) text, and a close proxy for the message bubble's own
+ * background (--bg0 lightly tinted by the color itself). One reference
+ * background covers both roles since each just needs "this color" and
+ * "--bg0" to contrast, regardless of which one is foreground vs background.
+ * Passed through unchanged if it isn't a plain "#rrggbb" (e.g. the
+ * `var(--muted)` fallback for a since-deleted agent — already theme-safe by
+ * construction).
+ * @param {string} hex
+ * @returns {string}
+ */
+function agentDisplayColor(hex) {
+  if (!/^#[0-9a-f]{6}$/i.test(hex)) return hex;
+  const bg0 = getComputedStyle(document.documentElement).getPropertyValue('--bg0').trim();
+  return ensureContrast(hex, bg0);
+}
+
 /** @type {Record<string, StreamingEntry>} keyed by streamId */
 const streamingEntries = {};
 
@@ -915,6 +1074,27 @@ function applyMessageFilterToDom() {
 }
 
 /**
+ * Re-applies agentDisplayColor to every already-rendered message and
+ * streaming bubble's --author-color and avatar fill — same data-agent-id
+ * scan as applyMessageFilterToDom, for the same reason: buildMessageEl and
+ * createStreamingBubble only resolve the contrast-corrected color once, at
+ * creation time, so a later theme switch (which moves the contrast target —
+ * see agentDisplayColor) or a user color change needs this to bring
+ * already-rendered elements back in line without a full re-render.
+ * @returns {void}
+ */
+function refreshAgentDisplayColors() {
+  for (const el of messageList.querySelectorAll('[data-agent-id]')) {
+    const agentId = el.dataset.agentId || null;
+    const rawColor = agentId ? (agentById(agentId)?.color ?? 'var(--muted)') : userSettings.userColor;
+    const color = agentDisplayColor(rawColor);
+    el.style.setProperty('--author-color', color);
+    const avatar = el.querySelector('.msg-avatar');
+    if (avatar) avatar.style.background = color;
+  }
+}
+
+/**
  * Toggles whether `agentId` is spotlighted by the message filter — added if
  * it wasn't in the set, removed if it was. Multiple agents can be
  * spotlighted at once (union, not single-select), so filtering to "Claudio
@@ -971,7 +1151,7 @@ function renderMessageFilterBar() {
  */
 function buildMessageEl(msg) {
   const agent = msg.agentId ? agentById(msg.agentId) : null;
-  const color = msg.role === 'user' ? userSettings.userColor : (agent?.color ?? 'var(--muted)');
+  const color = agentDisplayColor(msg.role === 'user' ? userSettings.userColor : (agent?.color ?? 'var(--muted)'));
   const initial = msg.authorName[0].toUpperCase();
   // Only agent replies are real markdown worth rendering — a user typing
   // "*not markdown*" shouldn't have it silently reinterpreted.
@@ -1351,14 +1531,15 @@ function appendMessage(msg) {
  */
 function createStreamingBubble(agentId, agentName, agentColor) {
   const agent = agentById(agentId);
+  const color = agentDisplayColor(agentColor);
   const el = document.createElement('div');
   el.className = 'msg streaming';
   el.dataset.testid = 'streaming-bubble';
   el.dataset.agentId = agentId ?? '';
   el.hidden = !isVisibleUnderMessageFilter(agentId);
-  el.style.setProperty('--author-color', agentColor);
+  el.style.setProperty('--author-color', color);
   el.innerHTML = `
-    <div class="msg-avatar" style="background:${agentColor}">${agentName[0].toUpperCase()}</div>
+    <div class="msg-avatar" style="background:${color}">${agentName[0].toUpperCase()}</div>
     <div class="msg-body">
       <div class="msg-meta">
         <span class="msg-author">${escHtml(agentName)}</span>
@@ -1440,7 +1621,7 @@ function renderAgentPanel() {
     li.dataset.testid = 'agent-item';
     li.dataset.agentId = agent.id;
     li.innerHTML = `
-      <div class="agent-avatar" style="background:${agent.color}">${agent.name[0].toUpperCase()}</div>
+      <div class="agent-avatar" style="background:${agentDisplayColor(agent.color)}">${agent.name[0].toUpperCase()}</div>
       <div class="agent-info">
         <span class="agent-name" data-testid="agent-name">${escHtml(agent.name)}${agent.dangerouslySkipPermissions ? ` <span class="agent-yolo-badge" data-testid="agent-yolo-badge" title="${t('agent.yoloBadgeTitle')}">🔥</span>` : ''}${agent.isObserver ? ` <span class="agent-observer-badge" data-testid="agent-observer-badge" title="${t('agent.observerBadgeTitle')}">👁</span>` : ''}</span>
         <span class="agent-dir" title="${escHtml(agent.workingDir)}">${escHtml(shortDir(agent.workingDir))}</span>
@@ -1476,7 +1657,7 @@ function renderAgentPanel() {
     li.dataset.testid = 'add-menu-item';
     li.dataset.agentId = agent.id;
     li.innerHTML = `
-      <span class="add-menu-avatar" style="background:${agent.color}">${agent.name[0]}</span>
+      <span class="add-menu-avatar" style="background:${agentDisplayColor(agent.color)}">${agent.name[0]}</span>
       <span class="add-menu-name">${escHtml(agent.name)}</span>
       <button class="agent-del-btn" data-testid="agent-del-btn" title="${t('agent.deleteTitle')}">🗑</button>`;
     li.querySelector('.add-menu-name').addEventListener('click', () => addMember(agent.id));
@@ -1925,17 +2106,21 @@ async function handleSettingsFormSubmit(e) {
     // chat switch/reload to re-fetch/re-render.
     document.querySelectorAll('[data-testid="message"][data-role="user"]').forEach((el) => {
       el.querySelector('[data-testid="msg-author"]').textContent = userDisplayName;
-      el.style.setProperty('--author-color', userColor);
-      const avatar = el.querySelector('.msg-avatar');
-      if (avatar) avatar.style.background = userColor;
     });
+    // A theme switch moves what counts as "enough contrast" (see
+    // agentDisplayColor), so this has to re-color EVERY already-rendered
+    // message/streaming bubble, not just the user's own — an agent's avatar
+    // picked when dark theme was active would otherwise stay stuck showing
+    // its dark-theme-safe color even after switching to light, until the
+    // next reload rebuilds the message list from scratch.
+    refreshAgentDisplayColors();
     if (locale !== currentLocale) {
       currentLocale = locale;
       applyTranslations();
       renderChatList();
-      renderAgentPanel();
       document.querySelectorAll('.msg-time[data-iso]').forEach((el) => { el.textContent = fmtTime(el.dataset.iso); });
     }
+    renderAgentPanel();
     closeSettingsModal();
   } catch (err) {
     settingsError.textContent = err.message;
@@ -2214,7 +2399,7 @@ async function updateComposerDropdown() {
     const matches = getMentionMatches(mentionMatch[1]);
     renderComposerDropdown(matches.map((agent) => ({
       testId: 'mention-item',
-      html: `<span class="mention-avatar" style="background:${agent.color}">${agent.name[0]}</span>` +
+      html: `<span class="mention-avatar" style="background:${agentDisplayColor(agent.color)}">${agent.name[0]}</span>` +
         `<span class="mention-item-main">` +
         `<span class="mention-item-name">${escHtml(agent.name)}${agent.dangerouslySkipPermissions ? ` <span class="msg-author-yolo-badge" title="${t('agent.yoloBadgeTitle')}">🔥</span>` : ''}</span>` +
         `<span class="mention-item-desc">${escHtml(shortDir(agent.workingDir))}</span>` +
