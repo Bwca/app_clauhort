@@ -979,10 +979,12 @@ function buildMessageEl(msg) {
 
   // Only matters for a user message (agentId null) — see
   // isVisibleUnderMessageFilter's docs for why an agent's own messages
-  // don't need this at all.
-  const mentionedIds = msg.agentId
-    ? []
-    : extractMentionedAgentIds(msg.content, (activeChat()?.memberAgentIds ?? []).map(agentById).filter(Boolean));
+  // don't need this at all. Resolved against ALL known agents, not just
+  // current chat members: a message can @mention an agent who has since
+  // been removed from the chat, and that history shouldn't collapse into
+  // looking like a broadcast just because the mention no longer matches
+  // anyone currently present.
+  const mentionedIds = msg.agentId ? [] : extractMentionedAgentIds(msg.content, agents);
 
   const el = document.createElement('div');
   el.className = 'msg';
