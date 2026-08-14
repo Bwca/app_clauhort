@@ -262,9 +262,12 @@ describe('Scheduled messages', () => {
     // Canceling the LAST pending item while the panel is open re-renders it
     // in place to the empty state rather than closing it (see
     // renderScheduledPanel) — the one path where panelEmpty is reachable.
+    // cancelScheduled awaits a DELETE before re-rendering, so the panel's
+    // own `hidden` (already false from opening it above) isn't a real
+    // signal here — wait for the empty-state element to actually appear.
     await page.click(tid('scheduled-cancel-btn'));
     await page.waitForFunction(
-      () => !document.querySelector('[data-testid="scheduled-panel"]')?.hidden,
+      () => document.querySelector('.scheduled-item-empty') !== null,
       { timeout: 3000 }
     );
     const emptyText = await page.$eval('.scheduled-item-empty', (el) => el.textContent);
