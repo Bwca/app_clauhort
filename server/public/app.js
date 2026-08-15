@@ -20,6 +20,7 @@ import { APP_VERSION } from './appVersion.js';
  * @property {boolean} [dangerouslySkipPermissions] - "YOLO mode"
  * @property {boolean} [isObserver] - Never responds to broadcast messages,
  *   only @mentions — sees the full chat history instead of the recent window
+ * @property {string} [note] - Freeform reminder for the user, why this agent exists
  * @property {string} createdAt
  */
 
@@ -476,6 +477,7 @@ const agentDirBrowseBtn = $('#agent-dir-browse');
 const agentDirRecent   = $('#agent-dir-recent');
 const agentDirRecentWrap = $('#agent-dir-recent-wrap');
 const agentResumeInput = $('#agent-resume');
+const agentNoteInput   = $('#agent-note');
 const colorGrid        = $('#color-grid');
 const yoloModeCheck    = $('#yolo-mode-check');
 const observerModeCheck = $('#observer-mode-check');
@@ -1683,13 +1685,16 @@ function renderAgentPanel() {
       <div class="agent-info">
         <span class="agent-name" data-testid="agent-name">${escHtml(agent.name)}${agent.dangerouslySkipPermissions ? ` <span class="agent-yolo-badge" data-testid="agent-yolo-badge" title="${t('agent.yoloBadgeTitle')}">🔥</span>` : ''}${agent.isObserver ? ` <span class="agent-observer-badge" data-testid="agent-observer-badge" title="${t('agent.observerBadgeTitle')}">👁</span>` : ''}${agent.chromeAccess ? ` <span class="agent-chrome-badge" data-testid="agent-chrome-badge" title="${t('agent.chromeBadgeTitle')}">🌐</span>` : ''}</span>
         <span class="agent-dir" title="${escHtml(agent.workingDir)}">${escHtml(shortDir(agent.workingDir))}</span>
+        ${agent.note ? `<span class="agent-note" data-testid="agent-note" title="${escHtml(agent.note)}">📝 ${escHtml(agent.note)}</span>` : ''}
         ${agent.resumeId ? `<button class="agent-session-btn" data-testid="agent-session-btn" title="${t('agent.copySessionTitle', { resumeId: escHtml(agent.resumeId) })}">⧉ ${agent.resumeId.slice(0, 8)}…</button>` : ''}
       </div>
       <button class="agent-filter-btn${messageFilterAgentIds.has(agent.id) ? ' active' : ''}" data-testid="agent-filter-btn" title="${messageFilterAgentIds.has(agent.id) ? t('agent.filterOffTitle', { name: agent.name }) : t('agent.filterOnTitle', { name: agent.name })}">🔎</button>
+      <button class="agent-note-btn" data-testid="agent-note-btn" title="${agent.note ? t('agent.editNoteTitle') : t('agent.addNoteTitle')}">🗒</button>
       <button class="agent-open-folder-btn" data-testid="agent-open-folder-btn" title="${t('agent.openFolderTitle')}">📂</button>
       <button class="agent-remove-btn" data-testid="agent-remove-btn" title="${t('agent.removeFromChatTitle')}">×</button>
       <button class="agent-del-btn" data-testid="agent-del-btn" title="${t('agent.deleteTitle')}">🗑</button>`;
     li.querySelector('.agent-filter-btn').addEventListener('click', () => toggleMessageFilter(agent.id));
+    li.querySelector('.agent-note-btn').addEventListener('click', () => startEditAgentNote(li, agent));
     li.querySelector('.agent-open-folder-btn').addEventListener('click', () => openAgentFolder(agent));
     li.querySelector('.agent-remove-btn').addEventListener('click', () => removeMember(agent.id));
     li.querySelector('.agent-del-btn').addEventListener('click', async () => {
@@ -1728,6 +1733,64 @@ function renderAgentPanel() {
     });
     addAgentMenu.appendChild(li);
   }
+}
+
+/**
+ * Swaps an agent panel item's note area for an editable textarea. Purely a
+ * user-facing reminder (never sent to the CLI), and unlike workingDir/YOLO/
+ * Observer/chromeAccess it's editable any time — see the note field's docs
+ * in server/store/db.js for why that's safe (no spawn-arg implications).
+ * @param {HTMLLIElement} li
+ * @param {Agent} agent
+ * @returns {void}
+ */
+function startEditAgentNote(li, agent) {
+  const info = li.querySelector('.agent-info');
+  const wrap = document.createElement('div');
+  wrap.className = 'agent-note-edit';
+  wrap.dataset.testid = 'agent-note-edit';
+  wrap.innerHTML = `
+    <textarea data-testid="agent-note-edit-input" placeholder="${t('agent.notePlaceholder')}" rows="2">${escHtml(agent.note ?? '')}</textarea>
+    <div class="agent-note-edit-actions">
+      <button type="button" class="agent-note-save-btn" data-testid="agent-note-save-btn">${t('agent.noteSaveBtn')}</button>
+      <button type="button" class="agent-note-cancel-btn" data-testid="agent-note-cancel-btn">${t('agent.noteCancelBtn')}</button>
+    </div>`;
+  info.appendChild(wrap);
+
+  const textarea = /** @type {HTMLTextAreaElement} */ (wrap.querySelector('textarea'));
+  textarea.focus();
+  textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+
+  wrap.querySelector('.agent-note-cancel-btn').addEventListener('click', () => renderAgentPanel());
+  wrap.querySelector('.agent-note-save-btn').addEventListener('click', () => saveAgentNote(agent.id, textarea.value.trim()));
+  textarea.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') { renderAgentPanel(); return; }
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      saveAgentNote(agent.id, textarea.value.trim());
+    }
+  });
+}
+
+/**
+ * Persists an agent's note via PATCH (never evicts the running process —
+ * see the PATCH route's docs), updates local state, and re-renders.
+ * @param {string} agentId
+ * @param {string} note
+ * @returns {Promise<void>}
+ */
+async function saveAgentNote(agentId, note) {
+  const res = await fetch(`/api/agents/${agentId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ note }),
+  });
+  if (res.ok) {
+    const updated = /** @type {Agent} */ (await res.json());
+    const idx = agents.findIndex((a) => a.id === agentId);
+    if (idx !== -1) agents[idx] = updated;
+  }
+  renderAgentPanel();
 }
 
 // ─── Chat actions ────────────────────────────────────────────────────────────
@@ -2005,6 +2068,7 @@ function openModal() {
   agentNameInput.value = '';
   agentDirInput.value = '';
   agentResumeInput.value = '';
+  agentNoteInput.value = '';
   yoloModeCheck.checked = false;
   observerModeCheck.checked = false;
   chromeAccessCheck.checked = false;
@@ -2301,6 +2365,7 @@ async function handleAgentFormSubmit(e) {
   if (!name || !workingDir) return;
 
   const resumeId = agentResumeInput.value.trim() || undefined;
+  const note = agentNoteInput.value.trim() || undefined;
   const dangerouslySkipPermissions = yoloModeCheck.checked;
   const isObserver = observerModeCheck.checked;
   const chromeAccess = chromeAccessCheck.checked;
@@ -2312,7 +2377,7 @@ async function handleAgentFormSubmit(e) {
     const res = await fetch('/api/agents', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, color: selectedColor, workingDir, resumeId, dangerouslySkipPermissions, isObserver, chromeAccess }),
+      body: JSON.stringify({ name, color: selectedColor, workingDir, resumeId, dangerouslySkipPermissions, isObserver, chromeAccess, note }),
     });
     if (!res.ok) {
       const body = await res.json();
