@@ -110,6 +110,50 @@ describe('Agent management', () => {
     assert.ok(names.includes('Claudia'), `agent names in panel: ${names}`);
   });
 
+  test('creates an agent with a note, shown in the panel', async () => {
+    await createAgent(page, {
+      name: 'Claudia',
+      workingDir: agentDir('claudia'),
+      addToChat: true,
+      note: 'Refactoring the payments module',
+    });
+
+    await page.waitForFunction(
+      () => document.querySelector('[data-testid="agent-note"]') !== null,
+      { timeout: 3000 }
+    );
+    const note = await page.$eval(tid('agent-note'), (el) => el.title);
+    assert.equal(note, 'Refactoring the payments module');
+  });
+
+  test('editing an agent\'s note via the note button persists it', async () => {
+    await createAgent(page, {
+      name: 'Claudia',
+      workingDir: agentDir('claudia'),
+      addToChat: true,
+    });
+
+    await page.waitForFunction(
+      () => document.querySelector('[data-testid="agent-item"]') !== null,
+      { timeout: 3000 }
+    );
+    assert.equal(await page.$(tid('agent-note')), null, 'no note yet');
+
+    // Hover agent item to reveal the note button
+    const agentItem = await page.$(tid('agent-item'));
+    await agentItem.hover();
+    await page.click(tid('agent-note-btn'));
+
+    await page.waitForSelector(tid('agent-note-edit-input'), { timeout: 3000 });
+    await page.type(tid('agent-note-edit-input'), 'Debugging the webhook retries');
+    await page.click(tid('agent-note-save-btn'));
+
+    await page.waitForFunction(
+      () => document.querySelector('[data-testid="agent-note"]')?.title === 'Debugging the webhook retries',
+      { timeout: 3000 }
+    );
+  });
+
   test('removes an agent from the chat', async () => {
     await createAgent(page, {
       name: 'Claudia',

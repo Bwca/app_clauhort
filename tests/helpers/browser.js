@@ -123,10 +123,10 @@ export async function createChat(p, name) {
 /**
  * Opens the "New Agent" modal and fills in the form.
  * @param {import('puppeteer').Page} p
- * @param {{ name: string, workingDir: string, addToChat?: boolean, yoloMode?: boolean, observerMode?: boolean }} opts
+ * @param {{ name: string, workingDir: string, addToChat?: boolean, yoloMode?: boolean, observerMode?: boolean, note?: string }} opts
  * @returns {Promise<void>}
  */
-export async function createAgent(p, { name, workingDir, addToChat = true, yoloMode = false, observerMode = false }) {
+export async function createAgent(p, { name, workingDir, addToChat = true, yoloMode = false, observerMode = false, note }) {
   await p.click(tid('new-agent-btn'));
   // Wait for modal to appear (hidden attr removed)
   await p.waitForFunction(
@@ -135,6 +135,7 @@ export async function createAgent(p, { name, workingDir, addToChat = true, yoloM
   );
   await p.type(tid('agent-name-input'), name);
   await p.type(tid('agent-dir-input'), workingDir);
+  if (note) await p.type(tid('agent-note-input'), note);
 
   // Toggle "Add to current chat" checkbox if needed
   const checked = await p.$eval(tid('add-to-chat-check'), (el) => el.checked);
