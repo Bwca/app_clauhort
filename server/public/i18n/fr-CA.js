@@ -6,6 +6,7 @@ export default {
   'common.cancel': 'Annuler',
   'common.settings': 'Paramètres',
   'common.help': 'Aide',
+  'common.changelog': 'Journal des modifications',
   'common.toggleChats': 'Afficher/masquer les discussions',
   'common.toggleAgents': 'Afficher/masquer les agents',
 

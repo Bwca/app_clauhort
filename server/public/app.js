@@ -6,6 +6,7 @@
 import { DICTS, DEFAULT_LOCALE, translate } from './i18n/index.js';
 import { renderMarkdown } from './markdown.js';
 import { APP_NAME } from './appName.js';
+import { APP_VERSION } from './appVersion.js';
 
 // ─── Types (JSDoc only) ─────────────────────────────────────────────────────
 
@@ -424,6 +425,7 @@ const CLA_NAMES = [
 const $ = /** @param {string} sel */ (sel) => document.querySelector(sel);
 
 const appTitleEl       = $('#app-title');
+const appVersionEl     = $('#app-version');
 const connDot          = $('#conn-dot');
 const chatList         = $('#chat-list');
 const newChatBtn       = $('#new-chat-btn');
@@ -2800,6 +2802,7 @@ browseSelect.addEventListener('click', () => {
 async function init() {
   document.title = APP_NAME;
   appTitleEl.textContent = APP_NAME;
+  appVersionEl.textContent = `v${APP_VERSION}`;
 
   renderColorGrid(colorGrid, selectedColor, (c) => { selectedColor = c; });
 
