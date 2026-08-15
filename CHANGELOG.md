@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-08-15
+
+### Changed
+- Editing an agent's note now opens a proper modal instead of an inline textarea cramped into the 240px-wide agent panel.
+
+### Fixed
+- The create-agent modal no longer overflows the viewport on smaller screens — its field list now scrolls internally while the header and Cancel/Create buttons stay pinned in view.
+
 ## [1.1.0] - 2026-08-15
 
 ### Added
@@ -42,7 +50,8 @@ Initial release.
 - Structured logging (pino) with daily file rotation, and an opt-in full transcript log for debugging.
 - SQLite persistence with a one-time import from a legacy `data.json`, if present.
 
-[Unreleased]: https://github.com/Bwca/app_clauhort/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/Bwca/app_clauhort/compare/v1.1.1...HEAD
+[1.1.1]: https://github.com/Bwca/app_clauhort/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/Bwca/app_clauhort/compare/v1.0.2...v1.1.0
 [1.0.2]: https://github.com/Bwca/app_clauhort/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/Bwca/app_clauhort/compare/v1.0.0...v1.0.1
