@@ -17,8 +17,8 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { catchUpMessagesFor } from '../../server/ws/handler.js';
 
-function msg(id, agentId, content) {
-  return { id, chatId: 'chat1', role: agentId ? 'agent' : 'user', agentId, authorName: agentId ?? 'User', content, attachments: [], createdAt: new Date().toISOString() };
+function msg(id, agentId, content, extra = {}) {
+  return { id, chatId: 'chat1', role: agentId ? 'agent' : 'user', agentId, authorName: agentId ?? 'User', content, attachments: [], createdAt: new Date().toISOString(), ...extra };
 }
 
 describe('catchUpMessagesFor', () => {
@@ -68,5 +68,22 @@ describe('catchUpMessagesFor', () => {
     const agent = { id: 'claudia', name: 'Claudia', resumeId: 'sess-1' };
     const messages = [msg('1', 'clarence', 'a'), msg('2', null, 'b'), msg('3', 'clarence', 'c')];
     assert.deepEqual(catchUpMessagesFor(agent, messages).map((m) => m.id), ['1', '2', '3']);
+  });
+
+  test('a local-command-only reply is skipped as the "last own turn" boundary — nothing sent alongside it actually reached the model', () => {
+    // Even though the agent's session DID capture a resumeId from this turn
+    // (it's the same live process, session genuinely exists), the CLI's own
+    // local-command dispatcher intercepted the turn before the model saw
+    // anything — including whatever catch-up context would have gone out
+    // alongside it. Treating it as a real "last turn" boundary would wrongly
+    // assume the model already knows everything before it.
+    const agent = { id: 'claudia', name: 'Claudia', resumeId: 'sess-1' };
+    const messages = [
+      msg('1', 'clarence', 'clarence says hi'),
+      msg('2', 'claudia', "/chrome isn't available in this environment.", { isLocalCommandOnly: true }),
+      msg('3', null, 'ok thanks'),
+    ];
+    const result = catchUpMessagesFor(agent, messages);
+    assert.deepEqual(result.map((m) => m.id), ['1', '3'], 'must catch up on everything except its own messages, not just what follows the local-command reply');
   });
 });

@@ -109,6 +109,27 @@ describe('buildPromptBlocks', () => {
     assert.equal(blocks[0].text, 'hello there');
   });
 
+  test('an agent whose only prior message is a CLI local-command interception still gets the [System] preamble', () => {
+    // The reported bug: the agent's first-ever message in this chat happened
+    // to be "@Name /chrome" — parseSkillInvocation used to strip that down
+    // to a bare "/chrome" sent straight to the CLI, which recognized it as
+    // one of ITS OWN built-in local commands (not this project's skills) and
+    // answered locally, entirely client-side, before the model ever saw the
+    // turn (or the [System] preamble sent alongside it). That reply still
+    // got persisted as a normal agent message, so hasSpokenInChat looked
+    // true from then on — permanently skipping the agent's real
+    // introduction. isLocalCommandOnly marks exactly this case so it
+    // doesn't count as the agent having genuinely spoken.
+    const agent = { id: 'claudia', name: 'Claudia', workingDir: '/tmp/claudia', resumeId: 'sess-1' };
+    const priorMessages = [
+      { id: 'm0', agentId: 'claudia', authorName: 'Claudia', content: "/chrome isn't available in this environment.", attachments: [], isLocalCommandOnly: true },
+    ];
+    const blocks = buildPromptBlocks(agent, chat, members, newMessage, priorMessages);
+    const firstBlockText = blocks[0].text;
+    assert.match(firstBlockText, /\[System\]/, 'a local-command-only reply must not count as the agent having already spoken');
+    assert.match(firstBlockText, /under the name "Claudia"/);
+  });
+
   test('a long-dormant agent with new catch-up content gets a fresh roster note naming a teammate it was never introduced to', () => {
     // The exact reported scenario: Claudette spoke once (long ago, alone in
     // the chat), then Claire and Clark were added and had their own
