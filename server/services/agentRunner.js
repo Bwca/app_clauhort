@@ -135,6 +135,11 @@ export function dedupePermissionDenials(denials) {
  *   tool call made during this turn, paired with its own result — lets the
  *   UI show what a tool actually returned (a diff, command output, an MCP
  *   response), collapsed by default, without cluttering the main reply.
+ * @property {boolean} wasLocalCommand - True if the `claude` CLI's own
+ *   local-command dispatcher (not this project's skill mechanism)
+ *   intercepted this turn before the model saw it — see
+ *   agentProcessManager.js's createTurnAccumulator and
+ *   db.js's Message.isLocalCommandOnly for why callers need this.
  */
 
 /**

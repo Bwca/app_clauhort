@@ -260,6 +260,9 @@ function describeToolUse({ name, input }) {
  * @property {import('./agentRunner.js').PermissionDenial[]} permissionDenials
  * @property {Map<string, ToolCall>} toolCalls
  * @property {boolean} done - Set once a `result` event has been fed in.
+ * @property {boolean} wasLocalCommand - True if this turn's `assistant`
+ *   event was the CLI's synthetic local-command reply, not a real model
+ *   turn — see handleEvent's docs.
  * @property {(event: object) => void} handleEvent
  */
 
@@ -282,8 +285,28 @@ function createTurnAccumulator({ onChunk, onStatus } = {}) {
     permissionDenials: [],
     toolCalls: new Map(),
     done: false,
+    wasLocalCommand: false,
     handleEvent(event) {
       if (typeof event.session_id === 'string') turn.sessionId = event.session_id;
+
+      // The `claude` CLI's OWN local-command dispatcher (its built-in
+      // commands like "/chrome", "/help" — a different, larger set than
+      // this project's .claude/commands/*.md skills) intercepts a bare
+      // "/word" turn and answers it locally, entirely client-side, BEFORE
+      // any of the turn's actual content (including a first-ever-turn
+      // [System] preamble sent alongside it — see buildPromptBlocks in
+      // ws/handler.js) ever reaches the model. Confirmed two different ways
+      // this actually surfaces: the on-disk session transcript records a
+      // {"type":"system","subtype":"local_command"} pair, but the LIVE
+      // --output-format=stream-json wire protocol this function actually
+      // parses is a DIFFERENT shape — a synthetic `assistant` event with
+      // message.model === "<synthetic>" (and the paired `result` event has
+      // num_turns: 0, total_cost_usd: 0 — zero real API usage). Checked
+      // directly against a raw `claude --print --output-format=stream-json`
+      // run, not assumed. Flagged here so the caller can avoid treating
+      // this turn as the agent having genuinely "spoken" — see
+      // Message.isLocalCommandOnly.
+      if (event.type === 'assistant' && event.message?.model === '<synthetic>') turn.wasLocalCommand = true;
 
       if (event.type === 'assistant' && Array.isArray(event.message?.content)) {
         for (const block of event.message.content) {
@@ -489,7 +512,7 @@ export function spawnForAgent(agent) {
  * @param {import('../store/db.js').Agent} agent
  * @param {import('./agentRunner.js').ContentBlock[]} content
  * @param {{ onChunk: (text: string) => void, onStatus?: (status: string) => void, signal?: AbortSignal }} options
- * @returns {Promise<{ text: string, permissionDenials: import('./agentRunner.js').PermissionDenial[], sessionId: string | null, stopped: boolean, toolCalls: ToolCall[] }>}
+ * @returns {Promise<{ text: string, permissionDenials: import('./agentRunner.js').PermissionDenial[], sessionId: string | null, stopped: boolean, toolCalls: ToolCall[], wasLocalCommand: boolean }>}
  */
 export function runTurn(agent, content, { onChunk, onStatus, signal }) {
   if (!existsSync(agent.workingDir)) {
@@ -512,7 +535,7 @@ export function runTurn(agent, content, { onChunk, onStatus, signal }) {
  * @param {ManagedProcess} proc
  * @param {import('./agentRunner.js').ContentBlock[]} content
  * @param {{ onChunk: (text: string) => void, onStatus?: (status: string) => void, signal?: AbortSignal }} options
- * @returns {Promise<{ text: string, permissionDenials: import('./agentRunner.js').PermissionDenial[], sessionId: string | null, stopped: boolean, toolCalls: ToolCall[] }>}
+ * @returns {Promise<{ text: string, permissionDenials: import('./agentRunner.js').PermissionDenial[], sessionId: string | null, stopped: boolean, toolCalls: ToolCall[], wasLocalCommand: boolean }>}
  */
 function runOneTurn(proc, content, { onChunk, onStatus, signal }) {
   return new Promise((resolve, reject) => {
@@ -540,6 +563,7 @@ function runOneTurn(proc, content, { onChunk, onStatus, signal }) {
         sessionId: turn.sessionId,
         stopped,
         toolCalls: [...turn.toolCalls.values()],
+        wasLocalCommand: turn.wasLocalCommand,
       });
     };
 
