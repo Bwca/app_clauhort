@@ -278,7 +278,12 @@ export function catchUpMessagesFor(agent, messages) {
 
   let lastOwnIdx = -1;
   for (let i = messages.length - 1; i >= 0; i--) {
-    if (messages[i].agentId === agent.id) { lastOwnIdx = i; break; }
+    // isLocalCommandOnly messages are skipped as a "last own turn" boundary
+    // for the same reason buildPromptBlocks' hasSpokenInChat skips them —
+    // nothing sent alongside that turn (this catch-up window included)
+    // actually reached the model, so it can't be trusted as a point the
+    // session's memory picks up from.
+    if (messages[i].agentId === agent.id && !messages[i].isLocalCommandOnly) { lastOwnIdx = i; break; }
   }
   return messages.slice(lastOwnIdx + 1).filter((m) => m.agentId !== agent.id);
 }
@@ -406,7 +411,10 @@ function buildSystemPreamble(agent, chat, members) {
  * @returns {import('../services/agentRunner.js').ContentBlock[]}
  */
 export function buildPromptBlocks(agent, chat, members, newMessage, priorMessages, excludeMessageId) {
-  const hasSpokenInChat = priorMessages.some((m) => m.agentId === agent.id);
+  // isLocalCommandOnly messages don't count — see catchUpMessagesFor's docs
+  // on why they can't be trusted as evidence the model ever saw anything
+  // sent alongside them, preamble included.
+  const hasSpokenInChat = priorMessages.some((m) => m.agentId === agent.id && !m.isLocalCommandOnly);
   const systemPreamble = hasSpokenInChat ? '' : buildSystemPreamble(agent, chat, members);
 
   const filteredPriorMessages = excludeMessageId
@@ -426,7 +434,7 @@ export function buildPromptBlocks(agent, chat, members, newMessage, priorMessage
   // (bumped in db.js's addChatMember/removeChatMember) catches that case:
   // if it's newer than this agent's own last turn in the chat, the roster
   // note goes out even with zero catch-up content.
-  const lastOwnMessage = [...priorMessages].reverse().find((m) => m.agentId === agent.id);
+  const lastOwnMessage = [...priorMessages].reverse().find((m) => m.agentId === agent.id && !m.isLocalCommandOnly);
   const rosterStaleSinceLastTurn = Boolean(
     hasSpokenInChat && chat.rosterChangedAt && (!lastOwnMessage || chat.rosterChangedAt > lastOwnMessage.createdAt)
   );
@@ -650,7 +658,7 @@ async function runAgentsParallel(agents, allMembers, chat, userMessage, wss, pri
     log.info({ agentId: agent.id, chatId: chat.id, streamId }, 'turn started');
 
     try {
-      const { text: fullText, permissionDenials, sessionId, stopped, toolCalls } = await runAgentStream({
+      const { text: fullText, permissionDenials, sessionId, stopped, toolCalls, wasLocalCommand } = await runAgentStream({
         agent,
         chatId: chat.id,
         content,
@@ -699,6 +707,7 @@ async function runAgentsParallel(agents, allMembers, chat, userMessage, wss, pri
         toolCalls,
         createdAt: new Date().toISOString(),
       };
+      if (wasLocalCommand) agentMessage.isLocalCommandOnly = true;
       await addMessage(agentMessage);
       responded.set(agent.id, agentMessage);
 
