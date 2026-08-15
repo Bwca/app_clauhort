@@ -54,9 +54,11 @@ router.get('/:id', (req, res) => {
  * @param {boolean} [req.body.chromeAccess] - Browser access via the Claude in
  *   Chrome extension, opt-in (creation-time only in the UI). At most one
  *   agent app-wide may have this set — see getChromeAccessAgent's docs.
+ * @param {string} [req.body.note] - Freeform note for the user's own
+ *   reference (why this agent exists) — never sent to the CLI.
  */
 router.post('/', async (req, res) => {
-  const { name, color, workingDir, resumeId, dangerouslySkipPermissions, isObserver, chromeAccess } = req.body;
+  const { name, color, workingDir, resumeId, dangerouslySkipPermissions, isObserver, chromeAccess, note } = req.body;
   if (!name || !color || !workingDir) {
     return res.status(400).json({ error: t('errors.agentFieldsRequired') });
   }
@@ -76,6 +78,7 @@ router.post('/', async (req, res) => {
   if (dangerouslySkipPermissions) data.dangerouslySkipPermissions = true;
   if (isObserver) data.isObserver = true;
   if (chromeAccess) data.chromeAccess = true;
+  if (note) data.note = note.trim();
   const agent = await createAgent(data);
   res.status(201).json(agent);
 });
@@ -99,9 +102,12 @@ router.post('/', async (req, res) => {
  *   (--chrome), so turning it on evicts the running process like
  *   dangerouslySkipPermissions does. Subject to the same app-wide
  *   single-holder constraint as the create route.
+ * @param {string} [req.body.note] - Freeform note for the user's own
+ *   reference. IS exposed in the UI for editing — purely metadata, never
+ *   baked into spawn args, so changing it never evicts the running process.
  */
 router.patch('/:id', async (req, res) => {
-  const { name, color, workingDir, resumeId, dangerouslySkipPermissions, isObserver, chromeAccess } = req.body;
+  const { name, color, workingDir, resumeId, dangerouslySkipPermissions, isObserver, chromeAccess, note } = req.body;
   const existing = getAgent(req.params.id);
   if (!existing) return res.status(404).json({ error: t('errors.agentNotFound') });
 
@@ -122,7 +128,7 @@ router.patch('/:id', async (req, res) => {
     if (holder) return res.status(409).json({ error: t('errors.chromeAccessConflict', { name: holder.name }) });
   }
 
-  const agent = await updateAgent(req.params.id, { name, color, workingDir, resumeId, dangerouslySkipPermissions, isObserver, chromeAccess });
+  const agent = await updateAgent(req.params.id, { name, color, workingDir, resumeId, dangerouslySkipPermissions, isObserver, chromeAccess, note: note !== undefined ? note.trim() : undefined });
   if (!agent) return res.status(404).json({ error: t('errors.agentNotFound') });
   // workingDir/dangerouslySkipPermissions/resumeId/chromeAccess are all
   // baked into the agent's persistent process at spawn time (--add-dir,
