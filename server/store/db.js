@@ -118,6 +118,16 @@ function transaction(fn) {
  * @property {import('../services/agentProcessManager.js').ToolCall[]} toolCalls - Tool
  *   calls made while producing this message (agent messages only — always
  *   `[]` for user messages), each paired with its own result.
+ * @property {boolean} [isLocalCommandOnly] - True when this agent reply came
+ *   entirely from the `claude` CLI's OWN local-command dispatcher (e.g. a
+ *   bare "/chrome", "/help" — its built-in commands, not this project's
+ *   `.claude/commands/*.md` skills) intercepting the turn before the model
+ *   ever saw it — see agentProcessManager.js's local_command handling.
+ *   Still shown in the chat like any other reply, but excluded from
+ *   hasSpokenInChat/catch-up reasoning in ws/handler.js: nothing sent
+ *   alongside it (the [System] preamble, any catch-up context) actually
+ *   reached the model, so treating it as a real turn would permanently
+ *   skip the agent's one-time introduction.
  * @property {string} createdAt - ISO 8601 timestamp
  */
 
@@ -173,6 +183,7 @@ CREATE TABLE IF NOT EXISTS messages (
   content TEXT NOT NULL,
   attachments TEXT NOT NULL DEFAULT '[]',
   tool_calls TEXT NOT NULL DEFAULT '[]',
+  is_local_command_only INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_messages_chat_created ON messages(chat_id, created_at);
@@ -291,6 +302,18 @@ function migrateMessagesToolCalls() {
 }
 
 /**
+ * Adds the `is_local_command_only` column to `messages` if it's missing,
+ * same reasoning as migrateMessagesToolCalls above.
+ * @returns {void}
+ */
+function migrateMessagesLocalCommandOnly() {
+  const hasColumn = db.prepare("PRAGMA table_info(messages)").all()
+    .some((col) => col.name === 'is_local_command_only');
+  if (hasColumn) return;
+  db.exec('ALTER TABLE messages ADD COLUMN is_local_command_only INTEGER NOT NULL DEFAULT 0');
+}
+
+/**
  * Enforces "each agent belongs to at most one chat at a time" via a UNIQUE
  * index on chat_members.agent_id — an agent's resumeId is a single global
  * Claude session, so being in 2+ chats simultaneously would bleed one
@@ -386,7 +409,7 @@ function rowToChat(row) {
  * @returns {Message}
  */
 function rowToMessage(row) {
-  return {
+  const message = {
     id: row.id,
     chatId: row.chat_id,
     role: row.role,
@@ -397,6 +420,8 @@ function rowToMessage(row) {
     toolCalls: JSON.parse(row.tool_calls ?? '[]'),
     createdAt: row.created_at,
   };
+  if (row.is_local_command_only) message.isLocalCommandOnly = true;
+  return message;
 }
 
 /**
@@ -483,6 +508,7 @@ export async function loadDb() {
   db.exec(SCHEMA);
   migrateMessagesAgentFk();
   migrateMessagesToolCalls();
+  migrateMessagesLocalCommandOnly();
   migrateAgentsAllowedToolPatterns();
   migrateAgentsDangerMode();
   migrateAgentsObserverMode();
@@ -821,11 +847,12 @@ export function getMessages(chatId, limit = 50, beforeId) {
  */
 export async function addMessage(message) {
   db.prepare(`
-    INSERT INTO messages (id, chat_id, role, agent_id, author_name, content, attachments, tool_calls, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO messages (id, chat_id, role, agent_id, author_name, content, attachments, tool_calls, is_local_command_only, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     message.id, message.chatId, message.role, message.agentId, message.authorName,
-    message.content, JSON.stringify(message.attachments ?? []), JSON.stringify(message.toolCalls ?? []), message.createdAt
+    message.content, JSON.stringify(message.attachments ?? []), JSON.stringify(message.toolCalls ?? []),
+    message.isLocalCommandOnly ? 1 : 0, message.createdAt
   );
   return message;
 }
