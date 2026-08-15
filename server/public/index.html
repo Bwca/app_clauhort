@@ -103,6 +103,7 @@
         <button id="modal-close" data-testid="modal-close">×</button>
       </div>
       <form id="agent-form">
+        <div id="agent-form-fields">
         <label class="field-label"><span data-i18n="agentModal.nameLabel">Name</span>
           <div id="agent-name-row">
             <input id="agent-name" data-testid="agent-name-input" data-i18n-placeholder="agentModal.namePlaceholder" placeholder="e.g. Claudia" autocomplete="off" required />
@@ -153,6 +154,7 @@
           <input id="add-to-chat-check" data-testid="add-to-chat-check" type="checkbox" checked />
           <span data-i18n="agentModal.addToChatLabel">Add to current chat</span>
         </label>
+        </div>
         <p id="agent-error" data-testid="agent-error" class="error-text" hidden></p>
         <div id="modal-footer">
           <button type="button" id="modal-cancel" data-testid="modal-cancel" data-i18n="common.cancel">Cancel</button>
