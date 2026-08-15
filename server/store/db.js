@@ -86,6 +86,11 @@ function transaction(fn) {
  *   one paired connection at a time, so at most one agent app-wide may have this
  *   set — enforced at creation/update via getChromeAccessAgent. Opt-in at creation
  *   only (no UI edit later, though PATCH supports it generically).
+ * @property {string} [note] - Freeform text set by the user, purely a reminder of
+ *   why this agent was created / what it's for — never sent to the CLI or the
+ *   agent itself. Editable any time (unlike isObserver/chromeAccess) since it
+ *   carries no spawn-arg implications, so changing it never evicts the running
+ *   process.
  * @property {string} createdAt - ISO 8601 timestamp
  */
 
@@ -153,6 +158,7 @@ CREATE TABLE IF NOT EXISTS agents (
   dangerously_skip_permissions INTEGER NOT NULL DEFAULT 0,
   is_observer INTEGER NOT NULL DEFAULT 0,
   chrome_access INTEGER NOT NULL DEFAULT 0,
+  note TEXT,
   created_at TEXT NOT NULL
 );
 
@@ -288,6 +294,18 @@ function migrateAgentsChromeAccess() {
 }
 
 /**
+ * Adds the `note` column to `agents` if it's missing, same reasoning as
+ * migrateAgentsAllowedToolPatterns above.
+ * @returns {void}
+ */
+function migrateAgentsNote() {
+  const hasColumn = db.prepare("PRAGMA table_info(agents)").all()
+    .some((col) => col.name === 'note');
+  if (hasColumn) return;
+  db.exec('ALTER TABLE agents ADD COLUMN note TEXT');
+}
+
+/**
  * Adds the `tool_calls` column to `messages` if it's missing — needed for
  * any database created before this column existed, since `CREATE TABLE IF
  * NOT EXISTS` in SCHEMA only applies to brand-new databases. A no-op (one
@@ -381,6 +399,7 @@ function rowToAgent(row) {
   if (row.dangerously_skip_permissions) agent.dangerouslySkipPermissions = true;
   if (row.is_observer) agent.isObserver = true;
   if (row.chrome_access) agent.chromeAccess = true;
+  if (row.note) agent.note = row.note;
   return agent;
 }
 
@@ -447,8 +466,8 @@ function rowToScheduledMessage(row) {
 function importLegacyJson() {
   const raw = JSON.parse(readFileSync(JSON_DATA_FILE, 'utf-8'));
   const insertAgent = db.prepare(`
-    INSERT INTO agents (id, name, color, working_dir, resume_id, extra_allowed_paths, allowed_tool_patterns, dangerously_skip_permissions, is_observer, chrome_access, created_at)
-    VALUES (@id, @name, @color, @workingDir, @resumeId, @extraAllowedPaths, @allowedToolPatterns, @dangerouslySkipPermissions, @isObserver, @chromeAccess, @createdAt)
+    INSERT INTO agents (id, name, color, working_dir, resume_id, extra_allowed_paths, allowed_tool_patterns, dangerously_skip_permissions, is_observer, chrome_access, note, created_at)
+    VALUES (@id, @name, @color, @workingDir, @resumeId, @extraAllowedPaths, @allowedToolPatterns, @dangerouslySkipPermissions, @isObserver, @chromeAccess, @note, @createdAt)
   `);
   const insertChat = db.prepare('INSERT INTO chats (id, name, created_at) VALUES (?, ?, ?)');
   const insertMember = db.prepare('INSERT OR IGNORE INTO chat_members (chat_id, agent_id) VALUES (?, ?)');
@@ -470,6 +489,7 @@ function importLegacyJson() {
         dangerouslySkipPermissions: a.dangerouslySkipPermissions ? 1 : 0,
         isObserver: a.isObserver ? 1 : 0,
         chromeAccess: a.chromeAccess ? 1 : 0,
+        note: a.note ?? null,
         createdAt: a.createdAt,
       });
     }
@@ -513,6 +533,7 @@ export async function loadDb() {
   migrateAgentsDangerMode();
   migrateAgentsObserverMode();
   migrateAgentsChromeAccess();
+  migrateAgentsNote();
   migrateChatMembersUniqueAgent();
   migrateChatsRosterChangedAt();
 
@@ -563,13 +584,13 @@ export function getChromeAccessAgent(excludeId) {
 export async function createAgent(data) {
   const createdAt = new Date().toISOString();
   db.prepare(`
-    INSERT INTO agents (id, name, color, working_dir, resume_id, extra_allowed_paths, allowed_tool_patterns, dangerously_skip_permissions, is_observer, chrome_access, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO agents (id, name, color, working_dir, resume_id, extra_allowed_paths, allowed_tool_patterns, dangerously_skip_permissions, is_observer, chrome_access, note, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     data.id, data.name, data.color, data.workingDir,
     data.resumeId ?? null, JSON.stringify(data.extraAllowedPaths ?? []),
     JSON.stringify(data.allowedToolPatterns ?? []), data.dangerouslySkipPermissions ? 1 : 0,
-    data.isObserver ? 1 : 0, data.chromeAccess ? 1 : 0, createdAt
+    data.isObserver ? 1 : 0, data.chromeAccess ? 1 : 0, data.note ?? null, createdAt
   );
   return getAgent(data.id);
 }
@@ -579,7 +600,7 @@ export async function createAgent(data) {
  * Only the fields present (and not undefined) in `updates` are written —
  * a partial PATCH never clobbers untouched columns.
  * @param {string} id
- * @param {Partial<Pick<Agent, 'name' | 'color' | 'workingDir' | 'resumeId' | 'extraAllowedPaths' | 'allowedToolPatterns' | 'dangerouslySkipPermissions' | 'isObserver' | 'chromeAccess'>>} updates
+ * @param {Partial<Pick<Agent, 'name' | 'color' | 'workingDir' | 'resumeId' | 'extraAllowedPaths' | 'allowedToolPatterns' | 'dangerouslySkipPermissions' | 'isObserver' | 'chromeAccess' | 'note'>>} updates
  * @returns {Promise<Agent | null>}
  */
 export async function updateAgent(id, updates) {
@@ -602,6 +623,7 @@ export async function updateAgent(id, updates) {
     is_observer: updates.isObserver !== undefined ? (updates.isObserver ? 1 : 0) : undefined,
     // Same explicit-undefined-check reasoning as dangerously_skip_permissions above.
     chrome_access: updates.chromeAccess !== undefined ? (updates.chromeAccess ? 1 : 0) : undefined,
+    note: updates.note,
   };
   const entries = Object.entries(columns).filter(([, v]) => v !== undefined);
   if (entries.length === 0) return getAgent(id);
