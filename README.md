@@ -19,6 +19,7 @@ A multi-agent Claude chat app. Each participant in a conversation is a Claude Co
 - Agents keep one continuous native Claude session for as long as they're in a chat (auto-chained via `--resume` after their first reply) — copy the `claude --resume <id>` command from the agent panel to continue that session in a terminal
 - When an agent's tool call is denied — a path outside its working directory, a Bash command, etc. — a card appears with **Grant** and **Deny** buttons; either one lets the agent continue right away, no need to send a follow-up message
 - Enable **YOLO mode** per agent at creation time to skip all permission checks entirely, shown with a 🔥 badge — use with care
+- Grant an agent **Browser access** at creation time to give it real control of your Chrome browser via the Claude in Chrome extension, shown with a 🌐 badge — only one agent app-wide can hold it at a time
 - Chats with new activity you haven't seen yet (an agent finished a task while you were elsewhere) show an unread dot in the sidebar
 - Hover a reply to copy it as text or as a PNG image
 - Deleting a chat or agent asks for confirmation first (irreversible)
@@ -34,7 +35,7 @@ A multi-agent Claude chat app. Each participant in a conversation is a Claude Co
 
 ## Requirements
 
-- Node.js 22.13+ (needed for `node:sqlite` without a flag; project uses v24 via nvm — see `.nvmrc`)
+- Node.js 22.13+ (needed for `node:sqlite` without a flag; project pins v22.13.0 via nvm — see `.nvmrc`)
 - [Claude Code CLI](https://claude.ai/code) installed and authenticated, available on `PATH` as `claude`
 - Linux, macOS, or Windows — developed and tested on Linux; Windows-specific path/spawn handling has been audited but not run on an actual Windows machine, so treat it as "should work," not battle-tested
 
@@ -84,6 +85,7 @@ Other environment variables:
 | Color | yes | Avatar color |
 | YOLO mode | no | Skip all permission checks for this agent (`--dangerously-skip-permissions`) — off by default; can't be changed later, only at creation |
 | Observer | no | Never responds to a broadcast message (no `@mention`) — only to an explicit `@mention` — and when it does respond, sees the full chat history instead of the usual recent-message window. For an agent whose job is to quietly watch a busy chat and summarize it later. Off by default; can't be changed later, only at creation |
+| Browser access | no | Spawns the agent with real control of your Chrome browser via the Claude in Chrome extension (`--chrome`). Only one agent app-wide can hold this at a time — creating or editing a second one to request it fails until the first gives it up. Off by default; can't be changed later, only at creation |
 | Add to current chat | no | Joins the agent to the chat you created it from — an agent belongs to at most one chat at a time |
 
 ## E2E tests
@@ -97,6 +99,10 @@ npm test
 ```
 
 Run a single suite directly with `node --test e2e/<file>.test.js` — each file starts/stops its own server, so passing multiple files to `node --test` at once causes them to run concurrently and collide on the shared test port.
+
+## Changelog
+
+The running version is shown in the sidebar header, next to the app name; click it to see [CHANGELOG.md](./CHANGELOG.md) for release history.
 
 ## License
 
