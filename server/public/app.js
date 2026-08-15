@@ -2466,7 +2466,7 @@ async function updateComposerDropdown() {
       testId: 'mention-item',
       html: `<span class="mention-avatar" style="background:${agentDisplayColor(agent.color)}">${agent.name[0]}</span>` +
         `<span class="mention-item-main">` +
-        `<span class="mention-item-name">${escHtml(agent.name)}${agent.dangerouslySkipPermissions ? ` <span class="msg-author-yolo-badge" title="${t('agent.yoloBadgeTitle')}">🔥</span>` : ''}</span>` +
+        `<span class="mention-item-name">${escHtml(agent.name)}${agent.dangerouslySkipPermissions ? ` <span class="msg-author-yolo-badge" title="${t('agent.yoloBadgeTitle')}">🔥</span>` : ''}${agent.chromeAccess ? ` <span class="msg-author-chrome-badge" title="${t('agent.chromeBadgeTitle')}">🌐</span>` : ''}</span>` +
         `<span class="mention-item-desc">${escHtml(shortDir(agent.workingDir))}</span>` +
         `</span>`,
       onSelect: () => insertMention(agent.name),
