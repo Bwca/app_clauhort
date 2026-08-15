@@ -5,6 +5,7 @@ A multi-agent Claude chat app. Each participant in a conversation is a Claude Co
 ## How it works
 
 - Create named agents, each with its own working directory and color
+- Give an agent a note (optional, at creation or any time after via 🗒 in the panel) — a purely personal reminder of why it exists, so a long-running or multi-day chat doesn't leave you wondering what a given agent was for
 - Group multiple agents into a chat — but each agent belongs to only one chat at a time; remove it from a chat to free it up for another (this also resets its Claude session, so it starts fresh with no memory of the old chat)
 - Send messages; agents respond in parallel with streaming output, showing a live status of what they're doing (reading a file, running a command, etc.) and how long they've been at it
 - Each tool call's real output (command results, diffs, MCP responses) is one click away — collapsed by default so it doesn't clutter the conversation; a reply with several tool calls nests them behind a single "N tool calls" toggle instead of stacking one row per call
@@ -82,6 +83,7 @@ Other environment variables:
 | Name | yes | Display name used for `@mentions` |
 | Working Directory | yes | Absolute path — the agent's cwd and default tool-access scope. Directories already used by other agents show up as one-click chips, so adding a second agent to the same project doesn't mean re-browsing to it |
 | Resume ID | no | Pass a `--resume` conversation ID to pick up a named Claude session |
+| Note | no | Freeform reminder of why you created this agent — purely for you, never sent to the CLI. Unlike the fields below, it can be added or edited any time from the agent panel (🗒), not just at creation |
 | Color | yes | Avatar color |
 | YOLO mode | no | Skip all permission checks for this agent (`--dangerously-skip-permissions`) — off by default; can't be changed later, only at creation |
 | Observer | no | Never responds to a broadcast message (no `@mention`) — only to an explicit `@mention` — and when it does respond, sees the full chat history instead of the usual recent-message window. For an agent whose job is to quietly watch a busy chat and summarize it later. Off by default; can't be changed later, only at creation |
