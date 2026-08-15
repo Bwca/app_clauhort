@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-08-15
+
+### Added
+- Per-agent note: an optional, freeform reminder of why an agent was created / what it's for, set at creation or added/edited any time from the agent panel (🗒). Purely for the user's own reference — never sent to the CLI or the agent.
+
 ## [1.0.2] - 2026-08-15
 
 ### Added
@@ -37,7 +42,8 @@ Initial release.
 - Structured logging (pino) with daily file rotation, and an opt-in full transcript log for debugging.
 - SQLite persistence with a one-time import from a legacy `data.json`, if present.
 
-[Unreleased]: https://github.com/Bwca/app_clauhort/compare/v1.0.2...HEAD
+[Unreleased]: https://github.com/Bwca/app_clauhort/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/Bwca/app_clauhort/compare/v1.0.2...v1.1.0
 [1.0.2]: https://github.com/Bwca/app_clauhort/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/Bwca/app_clauhort/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/Bwca/app_clauhort/releases/tag/v1.0.0
