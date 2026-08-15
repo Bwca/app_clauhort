@@ -144,9 +144,12 @@ describe('Agent management', () => {
     await agentItem.hover();
     await page.click(tid('agent-note-btn'));
 
-    await page.waitForSelector(tid('agent-note-edit-input'), { timeout: 3000 });
-    await page.type(tid('agent-note-edit-input'), 'Debugging the webhook retries');
-    await page.click(tid('agent-note-save-btn'));
+    await page.waitForFunction(
+      () => !document.querySelector('[data-testid="note-overlay"]')?.hidden,
+      { timeout: 3000 }
+    );
+    await page.type(tid('note-textarea-input'), 'Debugging the webhook retries');
+    await page.click(tid('note-save'));
 
     await page.waitForFunction(
       () => document.querySelector('[data-testid="agent-note"]')?.title === 'Debugging the webhook retries',

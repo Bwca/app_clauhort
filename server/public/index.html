@@ -239,6 +239,23 @@
     </div>
   </div>
 
+  <!-- Edit agent note modal, opened from the 🗒 button in the agent panel -->
+  <div id="note-overlay" data-testid="note-overlay" hidden>
+    <div id="note-modal">
+      <div id="note-header">
+        <span id="note-header-title" data-testid="note-header-title" data-i18n="agent.addNoteTitle">Add a note</span>
+        <button type="button" id="note-close" data-testid="note-close">×</button>
+      </div>
+      <form id="note-form">
+        <textarea id="note-textarea" data-testid="note-textarea-input" data-i18n-placeholder="agent.notePlaceholder" placeholder="e.g. Refactoring the payments module" rows="5"></textarea>
+        <div id="note-footer">
+          <button type="button" id="note-cancel" data-testid="note-cancel" data-i18n="common.cancel">Cancel</button>
+          <button type="submit" id="note-save" data-testid="note-save" data-i18n="agent.noteSaveBtn">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <!-- Generic confirmation dialog, used for irreversible actions (delete chat/agent) -->
   <div id="confirm-overlay" data-testid="confirm-overlay" hidden>
     <div id="confirm-modal">

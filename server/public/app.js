@@ -123,6 +123,9 @@ let selectedColor = '#89b4fa';
 /** @type {string} currently selected color in the settings modal's message-color picker */
 let selectedUserColor = '#a6adc8';
 
+/** @type {string | null} id of the agent whose note the note modal is currently editing */
+let noteEditAgentId = null;
+
 /**
  * @typedef {Object} Settings
  * @property {string} userDisplayName
@@ -494,6 +497,12 @@ const browseError      = $('#browse-error');
 const browseList       = $('#browse-list');
 const browseCancel     = $('#browse-cancel');
 const browseSelect     = $('#browse-select');
+const noteOverlay      = $('#note-overlay');
+const noteHeaderTitle  = $('#note-header-title');
+const noteClose        = $('#note-close');
+const noteForm         = $('#note-form');
+const noteTextarea     = $('#note-textarea');
+const noteCancel       = $('#note-cancel');
 const confirmOverlay   = $('#confirm-overlay');
 const confirmMessage   = $('#confirm-message');
 const confirmCancel    = $('#confirm-cancel');
@@ -1694,7 +1703,7 @@ function renderAgentPanel() {
       <button class="agent-remove-btn" data-testid="agent-remove-btn" title="${t('agent.removeFromChatTitle')}">×</button>
       <button class="agent-del-btn" data-testid="agent-del-btn" title="${t('agent.deleteTitle')}">🗑</button>`;
     li.querySelector('.agent-filter-btn').addEventListener('click', () => toggleMessageFilter(agent.id));
-    li.querySelector('.agent-note-btn').addEventListener('click', () => startEditAgentNote(li, agent));
+    li.querySelector('.agent-note-btn').addEventListener('click', () => openNoteModal(agent));
     li.querySelector('.agent-open-folder-btn').addEventListener('click', () => openAgentFolder(agent));
     li.querySelector('.agent-remove-btn').addEventListener('click', () => removeMember(agent.id));
     li.querySelector('.agent-del-btn').addEventListener('click', async () => {
@@ -1736,50 +1745,39 @@ function renderAgentPanel() {
 }
 
 /**
- * Swaps an agent panel item's note area for an editable textarea. Purely a
- * user-facing reminder (never sent to the CLI), and unlike workingDir/YOLO/
- * Observer/chromeAccess it's editable any time — see the note field's docs
- * in server/store/db.js for why that's safe (no spawn-arg implications).
- * @param {HTMLLIElement} li
+ * Opens the note modal for a given agent, pre-filled with its current note
+ * (if any). Purely a user-facing reminder (never sent to the CLI), and
+ * unlike workingDir/YOLO/Observer/chromeAccess it's editable any time — see
+ * the note field's docs in server/store/db.js for why that's safe (no
+ * spawn-arg implications).
  * @param {Agent} agent
  * @returns {void}
  */
-function startEditAgentNote(li, agent) {
-  const info = li.querySelector('.agent-info');
-  const wrap = document.createElement('div');
-  wrap.className = 'agent-note-edit';
-  wrap.dataset.testid = 'agent-note-edit';
-  wrap.innerHTML = `
-    <textarea data-testid="agent-note-edit-input" placeholder="${t('agent.notePlaceholder')}" rows="2">${escHtml(agent.note ?? '')}</textarea>
-    <div class="agent-note-edit-actions">
-      <button type="button" class="agent-note-save-btn" data-testid="agent-note-save-btn">${t('agent.noteSaveBtn')}</button>
-      <button type="button" class="agent-note-cancel-btn" data-testid="agent-note-cancel-btn">${t('agent.noteCancelBtn')}</button>
-    </div>`;
-  info.appendChild(wrap);
+function openNoteModal(agent) {
+  noteEditAgentId = agent.id;
+  noteHeaderTitle.textContent = agent.note ? t('agent.editNoteTitle') : t('agent.addNoteTitle');
+  noteTextarea.value = agent.note ?? '';
+  noteOverlay.hidden = false;
+  noteTextarea.focus();
+}
 
-  const textarea = /** @type {HTMLTextAreaElement} */ (wrap.querySelector('textarea'));
-  textarea.focus();
-  textarea.setSelectionRange(textarea.value.length, textarea.value.length);
-
-  wrap.querySelector('.agent-note-cancel-btn').addEventListener('click', () => renderAgentPanel());
-  wrap.querySelector('.agent-note-save-btn').addEventListener('click', () => saveAgentNote(agent.id, textarea.value.trim()));
-  textarea.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') { renderAgentPanel(); return; }
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      saveAgentNote(agent.id, textarea.value.trim());
-    }
-  });
+function closeNoteModal() {
+  noteOverlay.hidden = true;
+  noteEditAgentId = null;
 }
 
 /**
- * Persists an agent's note via PATCH (never evicts the running process —
- * see the PATCH route's docs), updates local state, and re-renders.
- * @param {string} agentId
- * @param {string} note
+ * Persists the note modal's textarea via PATCH (never evicts the running
+ * process — see the PATCH route's docs), updates local state, and re-renders.
+ * @param {SubmitEvent} e
  * @returns {Promise<void>}
  */
-async function saveAgentNote(agentId, note) {
+async function handleNoteFormSubmit(e) {
+  e.preventDefault();
+  const agentId = noteEditAgentId;
+  const note = noteTextarea.value.trim();
+  closeNoteModal();
+
   const res = await fetch(`/api/agents/${agentId}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
@@ -2861,6 +2859,11 @@ browseSelect.addEventListener('click', () => {
   if (browseCurrentPath) agentDirInput.value = browseCurrentPath;
   closeFolderBrowser();
 });
+
+noteClose.addEventListener('click', closeNoteModal);
+noteCancel.addEventListener('click', closeNoteModal);
+noteOverlay.addEventListener('click', (e) => { if (e.target === noteOverlay) closeNoteModal(); });
+noteForm.addEventListener('submit', handleNoteFormSubmit);
 
 // ─── Bootstrap ────────────────────────────────────────────────────────────────
 

@@ -97,7 +97,6 @@ export default {
   'agent.editNoteTitle': 'Modifier la note',
   'agent.notePlaceholder': 'p. ex. Refonte du module de paiement',
   'agent.noteSaveBtn': 'Enregistrer',
-  'agent.noteCancelBtn': 'Annuler',
 
   'perm.requiredLabel': 'Permission requise :',
   'perm.grantBtn': 'Accorder',
