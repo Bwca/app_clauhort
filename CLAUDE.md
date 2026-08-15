@@ -99,6 +99,13 @@ Single `app.js` (~2500 lines, no bundler) drives the whole UI via plain DOM APIs
 
 User-visible settings (display name, color, locale, theme) persist server-side through `server/store/db.js`'s generic settings key-value table (`getSetting`/`setSetting`) — a new one follows the existing `getUserX`/`setUserX` pair pattern, no migration needed. Theme specifically also caches to `localStorage` and is applied before first paint: a small inline script in `index.html`'s `<head>`, ahead of `style.css` and any app.js execution, reads `localStorage.getItem('theme')` and sets `data-theme` on `<html>` synchronously, so a saved light preference doesn't flash dark while the async `/api/settings` fetch in `init()` is still in flight. Any future visual (non-locale) setting that needs to avoid a flash-of-wrong-state on load should follow the same pre-paint-inline-script approach rather than waiting on `init()`.
 
+### Versioning
+
+`server/public/appVersion.js` (`APP_VERSION`) is the single source of truth for the app version shown in the UI (sidebar header badge, next to the app title) — same imported-unmodified-by-both-browser-and-server pattern as `appName.js`. Any change that's worth a changelog entry (new feature, notable fix, breaking change — not a drive-by refactor or test-only change) must, in the same piece of work:
+- Bump `APP_VERSION` in `appVersion.js`.
+- Bump `"version"` in `server/package.json` to match.
+- Add an entry under `[Unreleased]` in `CHANGELOG.md` (or cut a new dated version section if the user says to release), following Keep a Changelog format.
+
 ### Logging
 
 `server/logger.js` (pino) — every module gets its own `logger.child({ component: '<name>' })` rather than repeating fields by hand. File logging is structured JSON with daily rotation; console output stays at `info`+ regardless of `APP_LOG_LEVEL`. `server/transcriptLog.js` is separate and off by default (`APP_TRANSCRIPT_LOG`) — the only place full prompt/response content is ever written to disk, since it's a debugging-only, opt-in log distinct from the always-on structured log.
