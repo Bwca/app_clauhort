@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.1.2] - 2026-08-16
+
+### Changed
+- Per-agent panel actions (note, open folder, remove, delete) now live behind a single `⋮` overflow menu instead of five always-reserved icon slots crammed next to the agent's name/directory/note. The filter button stays inline as the one frequently-used action.
+
 ## [1.1.1] - 2026-08-15
 
 ### Changed
