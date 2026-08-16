@@ -14,7 +14,11 @@ import { join } from 'path';
  * @property {string} name - The command's invocable name, e.g. "echo-test"
  *   for `.claude/commands/echo-test.md` (invoked as "/echo-test").
  * @property {string | null} description - Parsed from the file's YAML
- *   frontmatter `description:` field, if present.
+ *   frontmatter `description:` field, if present. Always null for a
+ *   `builtin` entry — the CLI's own init event reports names only.
+ * @property {boolean} builtin - True for a CLI skill (built-in, or from an
+ *   installed marketplace/plugin) reported by the agent's own live process,
+ *   as opposed to a project-level `.claude/commands/*.md` file.
  */
 
 /**
@@ -60,7 +64,25 @@ export function listAgentCommands(workingDir) {
         // Unreadable file (permissions, race with a concurrent delete, etc.)
         // — still list the command by name, just without a description.
       }
-      return { name, description };
+      return { name, description, builtin: false };
     })
     .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/**
+ * Merges an agent's project-level commands with its live process's
+ * reported CLI skill names into one alphabetical list for the composer's
+ * "/" autocomplete — project commands win on a name collision (they carry
+ * a description; a same-named builtin entry would be redundant).
+ * @param {SlashCommand[]} projectCommands - From listAgentCommands.
+ * @param {string[]} builtinSkillNames - From agentProcessManager's
+ *   getAgentSkills.
+ * @returns {SlashCommand[]} Sorted alphabetically by name.
+ */
+export function mergeSkills(projectCommands, builtinSkillNames) {
+  const projectNames = new Set(projectCommands.map((c) => c.name));
+  const builtins = builtinSkillNames
+    .filter((name) => !projectNames.has(name))
+    .map((name) => ({ name, description: null, builtin: true }));
+  return [...projectCommands, ...builtins].sort((a, b) => a.name.localeCompare(b.name));
 }

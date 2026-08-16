@@ -98,6 +98,7 @@ export default {
   'agent.editNoteTitle': 'Edit note',
   'agent.notePlaceholder': 'e.g. Refactoring the payments module',
   'agent.noteSaveBtn': 'Save',
+  'agent.builtinSkillDesc': 'Claude Code skill',
 
   'perm.requiredLabel': 'Permission required:',
   'perm.grantBtn': 'Grant',

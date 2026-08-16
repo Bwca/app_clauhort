@@ -75,6 +75,12 @@ function killTree(child, signal, agentId) {
  *   arrive while `currentTurn` is null — see handleUnsolicitedEvent.
  * @property {Promise<void>} queue - Chain of pending/running turns, so two
  *   turns never write to this process's stdin concurrently.
+ * @property {string[]} skills - The CLI's own `skills` list from its most
+ *   recent `system/init` event — the built-in/marketplace/plugin skills
+ *   this specific process can actually invoke via "/name" (a superset of
+ *   `slash_commands` narrowed to just the invokable ones; excludes
+ *   interactive-only built-ins like /clear or /model). Empty until the
+ *   process has actually spawned and reported in.
  */
 
 /** @type {Map<string, ManagedProcess>} */
@@ -381,6 +387,17 @@ export function onBackgroundTurn(agentId, handler) {
 }
 
 /**
+ * The built-in/marketplace/plugin skill names an agent's live process last
+ * reported (see the `skills` capture in spawnProcess's init-event handler).
+ * Empty if the process has never spawned yet, or hasn't reported in.
+ * @param {string} agentId
+ * @returns {string[]}
+ */
+export function getAgentSkills(agentId) {
+  return processes.get(agentId)?.skills ?? [];
+}
+
+/**
  * Feeds an event that arrived while no explicit turn was in flight
  * (`proc.currentTurn` is null) into a lazily-created accumulator scoped to
  * this unsolicited stretch of output, and — once its `result` lands —
@@ -438,7 +455,7 @@ function spawnProcess(agent) {
   });
 
   /** @type {ManagedProcess} */
-  const proc = { child, agentId: agent.id, buffer: '', currentTurn: null, background: null, queue: Promise.resolve() };
+  const proc = { child, agentId: agent.id, buffer: '', currentTurn: null, background: null, queue: Promise.resolve(), skills: [] };
 
   child.stdout.setEncoding('utf-8');
   child.stdout.on('data', (chunk) => {
@@ -454,6 +471,13 @@ function spawnProcess(agent) {
       // they connected — now on the record for every single spawn.
       if (event.type === 'system' && event.subtype === 'init' && Array.isArray(event.mcp_servers) && event.mcp_servers.length) {
         log.info({ agentId: agent.id, agentName: agent.name, pid: child.pid, mcpServers: event.mcp_servers }, 'mcp server status at turn start');
+      }
+      // The CLI reports its own invokable skill names on every init — free
+      // (no probe turn, no API cost), and always current for whatever this
+      // specific process actually has available (built-in + marketplace/
+      // plugin + project-local), unlike statically guessing from disk.
+      if (event.type === 'system' && event.subtype === 'init' && Array.isArray(event.skills)) {
+        proc.skills = event.skills;
       }
       if (proc.currentTurn) {
         proc.currentTurn.handleEvent(event);

@@ -2536,7 +2536,8 @@ async function updateComposerDropdown() {
       testId: 'slash-command-item',
       html: `<span class="mention-avatar slash-icon">/</span>` +
         `<span class="mention-item-main"><span class="mention-item-name">/${escHtml(c.name)}</span>` +
-        (c.description ? `<span class="mention-item-desc">${escHtml(c.description)}</span>` : '') +
+        (c.description ? `<span class="mention-item-desc">${escHtml(c.description)}</span>`
+          : c.builtin ? `<span class="mention-item-desc">${t('agent.builtinSkillDesc')}</span>` : '') +
         `</span>`,
       onSelect: () => insertSlashCommand(addressedName ? agent.name : null, c.name),
     })));

@@ -9,8 +9,8 @@ import { existsSync } from 'fs';
 import { v4 as uuidv4 } from 'uuid';
 import { getAgents, getAgent, createAgent, updateAgent, deleteAgent, getChromeAccessAgent } from '../store/db.js';
 import { verifyClaudeBinAvailable } from '../services/agentRunner.js';
-import { killAgent } from '../services/agentProcessManager.js';
-import { listAgentCommands } from '../services/commands.js';
+import { killAgent, getAgentSkills } from '../services/agentProcessManager.js';
+import { listAgentCommands, mergeSkills } from '../services/commands.js';
 import { t } from '../i18n/t.js';
 import { logger } from '../logger.js';
 
@@ -161,13 +161,16 @@ router.post('/:id/open-folder', (req, res) => {
 
 /**
  * GET /api/agents/:id/commands
- * Lists the agent's custom slash commands (from .claude/commands/*.md in
- * its workingDir), for the composer's "/" autocomplete.
+ * Lists the agent's slash commands for the composer's "/" autocomplete:
+ * its project-level custom commands (.claude/commands/*.md in its
+ * workingDir) merged with the built-in/marketplace/plugin skills its own
+ * live process actually reported having (empty until that process has
+ * spawned at least once — see getAgentSkills).
  */
 router.get('/:id/commands', (req, res) => {
   const agent = getAgent(req.params.id);
   if (!agent) return res.status(404).json({ error: t('errors.agentNotFound') });
-  res.json(listAgentCommands(agent.workingDir));
+  res.json(mergeSkills(listAgentCommands(agent.workingDir), getAgentSkills(agent.id)));
 });
 
 /**
