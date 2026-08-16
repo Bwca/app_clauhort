@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.1.5] - 2026-08-16
+
+### Fixed
+- A built-in Claude Code skill (e.g. `/code-review`) sent right after an agent's process respawned (server restart, or any permission grant/workingDir/YOLO/resumeId change) was no longer recognized as a real skill invocation and silently fell back to plain-chat routing. Found during manual QA of the 1.1.4 feature.
+
 ## [1.1.4] - 2026-08-16
 
 ### Added
