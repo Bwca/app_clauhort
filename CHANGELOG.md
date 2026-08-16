@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.1.4] - 2026-08-16
+
+### Added
+- The composer's `/` autocomplete now also offers an agent's built-in Claude Code skills (e.g. `/code-review`), not just its project-level `.claude/commands/*.md` files — read straight from the agent's own live process, which reports its actual invokable skill set on spawn.
+
 ## [1.1.3] - 2026-08-16
 
 ### Changed
