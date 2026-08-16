@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.1.3] - 2026-08-16
+
+### Changed
+- The `@mention` autocomplete dropdown now shows an agent's note (if it has one) below its working directory, making it easier to pick the right agent by what it's currently doing.
+
 ## [1.1.2] - 2026-08-16
 
 ### Changed
