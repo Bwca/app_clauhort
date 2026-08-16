@@ -79,12 +79,34 @@ function killTree(child, signal, agentId) {
  *   recent `system/init` event — the built-in/marketplace/plugin skills
  *   this specific process can actually invoke via "/name" (a superset of
  *   `slash_commands` narrowed to just the invokable ones; excludes
- *   interactive-only built-ins like /clear or /model). Empty until the
- *   process has actually spawned and reported in.
+ *   interactive-only built-ins like /clear or /model). Seeded from
+ *   `lastKnownSkills` at spawn time (see its docs), not always empty even
+ *   for a brand-new process instance — only genuinely empty for an agent
+ *   whose process has never once reported in.
  */
 
 /** @type {Map<string, ManagedProcess>} */
 const processes = new Map();
+
+/**
+ * An agent's most recently reported skill list, kept even after its process
+ * exits — reported live: a fresh respawn (server restart aside, this is the
+ * common case: any permission grant or workingDir/YOLO/resumeId change kills
+ * and respawns the process) starts with an empty `skills` array until that
+ * NEW process's own `system/init` event arrives, but parseSkillInvocation's
+ * validity check runs synchronously the moment a message comes in — for a
+ * message sent immediately after a respawn (very plausible right after a
+ * grant unblocks a queued follow-up), that race means a genuine builtin
+ * skill invocation incorrectly falls through to plain-chat routing instead
+ * of the intended bare-command CLI dispatch. Skills are a property of the
+ * CLI installation/config, not of any one process instance, so seeding a
+ * fresh process's `skills` from here (rather than starting empty) is safe:
+ * still corrected by that process's own init event moments later if the
+ * config genuinely changed underneath it (a plugin installed/removed
+ * between respawns, say).
+ * @type {Map<string, string[]>}
+ */
+const lastKnownSkills = new Map();
 
 /**
  * Handlers registered via onBackgroundTurn, one per agent. See that
@@ -387,14 +409,20 @@ export function onBackgroundTurn(agentId, handler) {
 }
 
 /**
- * The built-in/marketplace/plugin skill names an agent's live process last
- * reported (see the `skills` capture in spawnProcess's init-event handler).
- * Empty if the process has never spawned yet, or hasn't reported in.
+ * The built-in/marketplace/plugin skill names an agent can invoke: its live
+ * process's own most recent report if one is currently running, falling
+ * back to `lastKnownSkills` (see its docs) when there's no live process at
+ * all right now — e.g. the old one just died and the next turn hasn't
+ * spawned its replacement yet, which happens synchronously BEFORE this is
+ * even called (parseSkillInvocation's check runs ahead of runTurn/
+ * spawnProcess), so there'd otherwise be no ManagedProcess to read from yet
+ * regardless of what spawnProcess seeds a brand-new one with. Genuinely
+ * empty only for an agent whose process has never once reported in.
  * @param {string} agentId
  * @returns {string[]}
  */
 export function getAgentSkills(agentId) {
-  return processes.get(agentId)?.skills ?? [];
+  return processes.get(agentId)?.skills ?? lastKnownSkills.get(agentId) ?? [];
 }
 
 /**
@@ -455,7 +483,7 @@ function spawnProcess(agent) {
   });
 
   /** @type {ManagedProcess} */
-  const proc = { child, agentId: agent.id, buffer: '', currentTurn: null, background: null, queue: Promise.resolve(), skills: [] };
+  const proc = { child, agentId: agent.id, buffer: '', currentTurn: null, background: null, queue: Promise.resolve(), skills: lastKnownSkills.get(agent.id) ?? [] };
 
   child.stdout.setEncoding('utf-8');
   child.stdout.on('data', (chunk) => {
@@ -478,6 +506,7 @@ function spawnProcess(agent) {
       // plugin + project-local), unlike statically guessing from disk.
       if (event.type === 'system' && event.subtype === 'init' && Array.isArray(event.skills)) {
         proc.skills = event.skills;
+        lastKnownSkills.set(agent.id, event.skills);
       }
       if (proc.currentTurn) {
         proc.currentTurn.handleEvent(event);
