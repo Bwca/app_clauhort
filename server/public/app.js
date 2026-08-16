@@ -1668,6 +1668,13 @@ function renderChatList() {
 
 // ─── Agent panel rendering ───────────────────────────────────────────────────
 
+/** Hides every open per-agent overflow menu (at most one is open at a time). */
+function closeAllAgentMenus() {
+  for (const menu of agentList.querySelectorAll('.agent-menu:not([hidden])')) {
+    menu.hidden = true;
+  }
+}
+
 function renderAgentPanel() {
   const chat = activeChat();
   if (!chat) {
@@ -1698,15 +1705,29 @@ function renderAgentPanel() {
         ${agent.resumeId ? `<button class="agent-session-btn" data-testid="agent-session-btn" title="${t('agent.copySessionTitle', { resumeId: escHtml(agent.resumeId) })}">⧉ ${agent.resumeId.slice(0, 8)}…</button>` : ''}
       </div>
       <button class="agent-filter-btn${messageFilterAgentIds.has(agent.id) ? ' active' : ''}" data-testid="agent-filter-btn" title="${messageFilterAgentIds.has(agent.id) ? t('agent.filterOffTitle', { name: agent.name }) : t('agent.filterOnTitle', { name: agent.name })}">🔎</button>
-      <button class="agent-note-btn" data-testid="agent-note-btn" title="${agent.note ? t('agent.editNoteTitle') : t('agent.addNoteTitle')}">🗒</button>
-      <button class="agent-open-folder-btn" data-testid="agent-open-folder-btn" title="${t('agent.openFolderTitle')}">📂</button>
-      <button class="agent-remove-btn" data-testid="agent-remove-btn" title="${t('agent.removeFromChatTitle')}">×</button>
-      <button class="agent-del-btn" data-testid="agent-del-btn" title="${t('agent.deleteTitle')}">🗑</button>`;
+      <div class="agent-menu-wrap">
+        <button class="agent-menu-btn" data-testid="agent-menu-btn" title="${t('agent.moreActionsTitle')}">⋮</button>
+        <ul class="agent-menu" data-testid="agent-menu" hidden>
+          <li><button class="agent-note-btn" data-testid="agent-note-btn">🗒 ${agent.note ? t('agent.editNoteTitle') : t('agent.addNoteTitle')}</button></li>
+          <li><button class="agent-open-folder-btn" data-testid="agent-open-folder-btn">📂 ${t('agent.openFolderTitle')}</button></li>
+          <li><button class="agent-remove-btn" data-testid="agent-remove-btn">× ${t('agent.removeFromChatTitle')}</button></li>
+          <li><button class="agent-del-btn" data-testid="agent-del-btn">🗑 ${t('agent.deleteTitle')}</button></li>
+        </ul>
+      </div>`;
+    const agentMenu = li.querySelector('.agent-menu');
+    const closeAgentMenu = () => { agentMenu.hidden = true; };
     li.querySelector('.agent-filter-btn').addEventListener('click', () => toggleMessageFilter(agent.id));
-    li.querySelector('.agent-note-btn').addEventListener('click', () => openNoteModal(agent));
-    li.querySelector('.agent-open-folder-btn').addEventListener('click', () => openAgentFolder(agent));
-    li.querySelector('.agent-remove-btn').addEventListener('click', () => removeMember(agent.id));
+    li.querySelector('.agent-menu-btn').addEventListener('click', (e) => {
+      e.stopPropagation();
+      const wasHidden = agentMenu.hidden;
+      closeAllAgentMenus();
+      agentMenu.hidden = !wasHidden;
+    });
+    li.querySelector('.agent-note-btn').addEventListener('click', () => { closeAgentMenu(); openNoteModal(agent); });
+    li.querySelector('.agent-open-folder-btn').addEventListener('click', () => { closeAgentMenu(); openAgentFolder(agent); });
+    li.querySelector('.agent-remove-btn').addEventListener('click', () => { closeAgentMenu(); removeMember(agent.id); });
     li.querySelector('.agent-del-btn').addEventListener('click', async () => {
+      closeAgentMenu();
       if (await confirmDialog(t('confirm.deleteAgent', { name: agent.name }))) {
         deleteGlobalAgent(agent.id);
       }
@@ -2810,6 +2831,9 @@ document.addEventListener('click', (e) => {
   }
   if (!scheduledPanel.contains(e.target) && e.target !== scheduledBtn) {
     scheduledPanel.hidden = true;
+  }
+  if (!e.target.closest('.agent-menu-wrap')) {
+    closeAllAgentMenus();
   }
 });
 

@@ -155,6 +155,7 @@ describe('Persistent agent processes', () => {
 
     const agentItem = await page.$(tid('agent-item'));
     await agentItem.hover();
+    await page.click(tid('agent-menu-btn'));
     await page.click(tid('agent-remove-btn'));
     await waitForProcessCount(dirA, 0);
 

@@ -285,18 +285,18 @@ html, body { height: 100%; background: var(--bg0); color: var(--text); font-fami
 .agent-note { font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .agent-session-btn { align-self: flex-start; background: none; border: none; padding: 0; margin-top: 1px; font-size: 10px; font-family: monospace; color: var(--dim); cursor: pointer; }
 .agent-session-btn:hover { color: var(--blue); }
-.agent-filter-btn, .agent-note-btn, .agent-open-folder-btn, .agent-remove-btn, .agent-del-btn { background: none; border: none; color: transparent; font-size: 15px; cursor: pointer; flex-shrink: 0; line-height: 1; transition: color .15s, opacity .15s; opacity: 0; }
-.agent-item:hover .agent-filter-btn, .agent-item:hover .agent-note-btn, .agent-item:hover .agent-open-folder-btn, .agent-item:hover .agent-remove-btn, .agent-item:hover .agent-del-btn { color: var(--dim); opacity: 1; }
-.add-menu-item:hover .agent-del-btn { color: var(--dim); }
+.agent-filter-btn, .agent-menu-btn { background: none; border: none; color: transparent; font-size: 15px; cursor: pointer; flex-shrink: 0; line-height: 1; transition: color .15s, opacity .15s; opacity: 0; }
+.agent-item:hover .agent-filter-btn, .agent-item:hover .agent-menu-btn { color: var(--dim); opacity: 1; }
 .agent-filter-btn:hover { opacity: .7; }
 .agent-filter-btn.active { color: var(--blue); opacity: 1; }
 .agent-filter-btn.active:hover { opacity: .8; }
-.agent-note-btn { font-size: 13px; }
-.agent-note-btn:hover { opacity: .7; }
-.agent-open-folder-btn:hover { opacity: .7; }
-.agent-remove-btn:hover { color: var(--red) !important; }
-.agent-del-btn { font-size: 13px; }
-.agent-del-btn:hover { color: var(--red) !important; }
+.agent-menu-btn:hover { opacity: .7; }
+
+.agent-menu-wrap { position: relative; flex-shrink: 0; }
+.agent-menu { position: absolute; top: calc(100% + 4px); right: 0; z-index: 10; list-style: none; margin: 0; padding: 4px; min-width: 170px; background: var(--bg1); border: 1px solid var(--bg3); border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,.4); }
+.agent-menu button { display: flex; align-items: center; gap: 8px; width: 100%; padding: 7px 9px; background: none; border: none; border-radius: 6px; color: var(--text); font-size: 13px; text-align: left; cursor: pointer; transition: background .1s; }
+.agent-menu button:hover { background: var(--bg3); }
+.agent-menu .agent-remove-btn:hover, .agent-menu .agent-del-btn:hover { color: var(--red); }
 
 #message-filter-bar { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 18px; font-size: 12px; color: var(--muted); background: color-mix(in srgb, var(--blue) 10%, var(--bg0)); border-bottom: 1px solid var(--border); }
 #message-filter-clear-btn { flex-shrink: 0; background: none; border: 1px solid var(--faint); border-radius: 6px; padding: 3px 10px; color: var(--muted); font-size: 11px; cursor: pointer; transition: background .15s, color .15s; }
@@ -312,6 +312,9 @@ html, body { height: 100%; background: var(--bg0); color: var(--text); font-fami
 .add-menu-item:hover { background: var(--bg3); }
 .add-menu-avatar { width: 20px; height: 20px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; color: var(--bg0); flex-shrink: 0; cursor: pointer; }
 .add-menu-name { flex: 1; cursor: pointer; }
+.add-menu-item .agent-del-btn { background: none; border: none; color: transparent; font-size: 13px; cursor: pointer; flex-shrink: 0; line-height: 1; transition: color .15s, opacity .15s; opacity: 0; }
+.add-menu-item:hover .agent-del-btn { color: var(--dim); opacity: 1; }
+.add-menu-item .agent-del-btn:hover { color: var(--red) !important; }
 
 /* ── Modal ─────────────────────────────────────────────────────────── */
 #modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: flex; align-items: center; justify-content: center; z-index: 100; }

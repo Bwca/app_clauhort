@@ -83,6 +83,7 @@ export default {
   'confirm.deleteAgent': 'Delete agent "{name}"? This can\'t be undone.',
   'confirm.deleteBtn': 'Delete',
 
+  'agent.moreActionsTitle': 'More actions',
   'agent.openFolderTitle': 'Open folder',
   'agent.filterOnTitle': "Show only {name}'s messages",
   'agent.filterOffTitle': "Remove {name} from the message filter",

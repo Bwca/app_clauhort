@@ -139,9 +139,10 @@ describe('Agent management', () => {
     );
     assert.equal(await page.$(tid('agent-note')), null, 'no note yet');
 
-    // Hover agent item to reveal the note button
+    // Hover agent item to reveal the overflow menu button, open it, then click Edit note
     const agentItem = await page.$(tid('agent-item'));
     await agentItem.hover();
+    await page.click(tid('agent-menu-btn'));
     await page.click(tid('agent-note-btn'));
 
     await page.waitForFunction(
@@ -169,9 +170,10 @@ describe('Agent management', () => {
       { timeout: 3000 }
     );
 
-    // Hover agent item to reveal remove button
+    // Hover agent item to reveal the overflow menu button, open it, then click Remove
     const agentItem = await page.$(tid('agent-item'));
     await agentItem.hover();
+    await page.click(tid('agent-menu-btn'));
     await page.click(tid('agent-remove-btn'));
 
     await page.waitForFunction(
@@ -188,6 +190,7 @@ describe('Agent management', () => {
 
     const agentItem = await page.$(tid('agent-item'));
     await agentItem.hover();
+    await page.click(tid('agent-menu-btn'));
     await page.click(tid('agent-del-btn'));
     await page.waitForFunction(
       () => !document.querySelector('[data-testid="confirm-overlay"]')?.hidden,
@@ -212,6 +215,7 @@ describe('Agent management', () => {
     const agentId = await agentItem.evaluate((el) => el.dataset.agentId);
     await agentItem.hover();
 
+    await page.click(tid('agent-menu-btn'));
     await page.click(tid('agent-del-btn'));
     await page.waitForFunction(
       () => !document.querySelector('[data-testid="confirm-overlay"]')?.hidden,
@@ -246,6 +250,7 @@ describe('Agent management', () => {
     const agentItem = await page.$(tid('agent-item'));
     const agentId = await agentItem.evaluate((el) => el.dataset.agentId);
     await agentItem.hover();
+    await page.click(tid('agent-menu-btn'));
 
     const [response] = await Promise.all([
       page.waitForResponse((res) => res.url().includes('/open-folder') && res.request().method() === 'POST'),

@@ -18,14 +18,15 @@ import { agentDir, cleanupAgentDirs } from '../helpers/fixtures.js';
 
 /**
  * Removes the sole agent currently shown in the panel from the active chat
- * via the UI (hover to reveal the remove button, click it, wait for the
- * panel to empty out).
+ * via the UI (hover to reveal the overflow menu, open it, click Remove,
+ * wait for the panel to empty out).
  * @param {import('puppeteer').Page} page
  * @returns {Promise<void>}
  */
 async function removeSoleAgentFromChat(page) {
   const agentItem = await page.$(tid('agent-item'));
   await agentItem.hover();
+  await page.click(tid('agent-menu-btn'));
   await page.click(tid('agent-remove-btn'));
   await page.waitForFunction(
     () => document.querySelectorAll('[data-testid="agent-item"]').length === 0,

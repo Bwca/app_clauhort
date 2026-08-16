@@ -83,6 +83,7 @@ export default {
   'confirm.deleteAgent': "Supprimer l'agent « {name} »? Cette action est irréversible.",
   'confirm.deleteBtn': 'Supprimer',
 
+  'agent.moreActionsTitle': "Plus d'actions",
   'agent.openFolderTitle': 'Ouvrir le dossier',
   'agent.filterOnTitle': "Afficher seulement les messages de {name}",
   'agent.filterOffTitle': "Retirer {name} du filtre de messages",
