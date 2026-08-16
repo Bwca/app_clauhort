@@ -6,9 +6,7 @@
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
-    "dev": "node --watch index.js",
-    "debug": "cross-env APP_TRANSCRIPT_LOG=1 APP_LOG_LEVEL=debug node index.js",
-    "dev:debug": "cross-env APP_TRANSCRIPT_LOG=1 APP_LOG_LEVEL=debug node --watch index.js"
+    "debug": "cross-env APP_TRANSCRIPT_LOG=1 APP_LOG_LEVEL=debug node index.js"
   },
   "engines": {
     "node": ">=22.13.0"

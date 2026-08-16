@@ -31,11 +31,11 @@ Commit early and often — don't let work pile up into one large, hard-to-review
 
 ```bash
 cd server && npm install && node index.js   # run the app — http://localhost:3001
-npm run dev                                  # node --watch, auto-restart
 npm run debug                                # + APP_TRANSCRIPT_LOG and APP_LOG_LEVEL=debug
-npm run dev:debug                            # both together
 PORT=4000 node index.js                      # different port
 ```
+
+No `--watch`/auto-restart script — reported live: `node --watch` missed reloading some edited files during a manual test session (one backend file's change sat stale for several requests while others in the same edit batch picked up fine), which silently produced misleading test results. After any backend change, kill and restart the server (`pkill -f "node index.js"`, then rerun) rather than trusting a running `--watch` process picked it up.
 
 Unit tests (plain `node:test`, pure functions, no server/CLI needed):
 ```bash

@@ -60,10 +60,10 @@ A few convenience scripts wrap the common combinations:
 
 ```bash
 npm start        # node index.js
-npm run dev      # node --watch index.js — auto-restarts on file changes
 npm run debug    # node index.js, with APP_TRANSCRIPT_LOG and APP_LOG_LEVEL=debug both on
-npm run dev:debug # both of the above together
 ```
+
+There's no auto-restart-on-change script — `node --watch` was dropped after it was seen missing some file edits during a debugging session (one changed backend file kept running its old code for a while, even as other edits in the same batch reloaded fine), which produced misleading results. Restart the server manually after backend changes.
 
 Other environment variables:
 

@@ -4,7 +4,7 @@
  * want available after the fact, e.g. while diagnosing a platform-specific
  * issue nobody was watching the terminal for) and, filtered to a coarser
  * level, as pretty/colorized output to the console (keeps the normal
- * `node index.js`/`npm run dev` experience unchanged).
+ * `node index.js` experience unchanged).
  *
  * Other modules should call `logger.child({ component: '<name>' })` once
  * at their own top level and use that child logger for every call site,
