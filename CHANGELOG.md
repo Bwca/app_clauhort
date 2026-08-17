@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.1.6] - 2026-08-17
+
+### Added
+- A "Restart agent" action in each agent's `⋮` menu, plus its backing `POST /api/agents/:id/restart` route — kills and respawns the agent's persistent CLI process (no chat history lost) so it can pick up state that's only ever read once at spawn time and never refreshed, like a newly-authorized MCP connector, without restarting the whole server.
+
 ## [1.1.5] - 2026-08-16
 
 ### Fixed
