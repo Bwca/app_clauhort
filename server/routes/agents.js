@@ -9,7 +9,7 @@ import { existsSync } from 'fs';
 import { v4 as uuidv4 } from 'uuid';
 import { getAgents, getAgent, createAgent, updateAgent, deleteAgent, getChromeAccessAgent } from '../store/db.js';
 import { verifyClaudeBinAvailable } from '../services/agentRunner.js';
-import { killAgent, getAgentSkills } from '../services/agentProcessManager.js';
+import { killAgent, getAgentSkills, spawnForAgent } from '../services/agentProcessManager.js';
 import { listAgentCommands, mergeSkills } from '../services/commands.js';
 import { t } from '../i18n/t.js';
 import { logger } from '../logger.js';
@@ -156,6 +156,24 @@ router.post('/:id/open-folder', (req, res) => {
   child.on('error', (err) => log.error({ agentId: agent.id, err }, 'failed to open folder'));
   child.unref();
 
+  res.json({ ok: true });
+});
+
+/**
+ * POST /api/agents/:id/restart
+ * Kills the agent's live process, if any — the next turn spawns a fresh one
+ * and `--resume`s, so no chat history is lost. Some process state (notably
+ * which MCP connectors/servers are authorized) is read fresh only once, at
+ * spawn time, and never re-read for that process's lifetime — see
+ * agentProcessManager.js's looksLikeMcpAuthFailure docs. This gives a way to
+ * pick up such changes (e.g. a connector authorized mid-session) for one
+ * agent without restarting the whole server.
+ */
+router.post('/:id/restart', async (req, res) => {
+  const agent = getAgent(req.params.id);
+  if (!agent) return res.status(404).json({ error: t('errors.agentNotFound') });
+  await killAgent(agent.id);
+  spawnForAgent(agent);
   res.json({ ok: true });
 });
 
