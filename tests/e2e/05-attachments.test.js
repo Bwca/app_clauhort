@@ -93,6 +93,41 @@ describe('Attachments', () => {
     assert.ok(chipsHidden, 'attachment chips row should be cleared after sending');
   });
 
+  test('clicking a sent image attachment opens it full-size in the in-page lightbox, not a blank new tab', async () => {
+    // Regression test: this used to be window.open(img.src, '_blank') —
+    // img.src is a data: URI, and Chrome silently refuses to navigate a
+    // newly opened tab's top-level frame straight to a data: URL, so the
+    // tab opened but stayed blank forever with no visible error. Rendering
+    // it in-page sidesteps that browser restriction entirely.
+    await pasteImage(page, TINY_PNG_B64);
+    await page.waitForSelector(tid('attachment-chip'), { visible: true });
+    await page.click(tid('msg-input'));
+    await page.type(tid('msg-input'), 'check this out');
+    await page.keyboard.press('Enter');
+    await page.waitForFunction(
+      () => document.querySelector('[data-testid="msg-attachment-image"]') !== null,
+      { timeout: 5000 }
+    );
+
+    const pagesBefore = (await page.browser().pages()).length;
+    await page.click(tid('msg-attachment-image'));
+    await page.waitForFunction(
+      () => !document.querySelector('[data-testid="image-lightbox-overlay"]')?.hidden,
+      { timeout: 3000 }
+    );
+    const lightboxSrc = await page.$eval(tid('image-lightbox-img'), (el) => el.getAttribute('src'));
+    const attachmentSrc = await page.$eval(tid('msg-attachment-image'), (el) => el.getAttribute('src'));
+    assert.equal(lightboxSrc, attachmentSrc, 'lightbox should show the exact same image data');
+    assert.equal((await page.browser().pages()).length, pagesBefore, 'no new tab/window should have opened');
+
+    // Clicking the dark backdrop (not the image itself) closes it.
+    await page.mouse.click(5, 5);
+    await page.waitForFunction(
+      () => document.querySelector('[data-testid="image-lightbox-overlay"]')?.hidden,
+      { timeout: 3000 }
+    );
+  });
+
   test('sending a message with a text-paste attachment renders a collapsible block', async () => {
     const bigText = Array.from({ length: 25 }, (_, i) => `log line ${i}`).join('\n');
     await pasteText(page, bigText);
