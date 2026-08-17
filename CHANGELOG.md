@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.1.7] - 2026-08-17
+
+### Fixed
+- Clicking a sent image attachment opened a new browser tab that stayed permanently blank — Chrome silently blocks top-level navigation of a new tab straight to the `data:` URI attachment images are stored as. Now opens in an in-page lightbox instead.
+
 ## [1.1.6] - 2026-08-17
 
 ### Added
