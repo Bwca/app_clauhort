@@ -85,6 +85,8 @@ export default {
 
   'agent.moreActionsTitle': 'More actions',
   'agent.openFolderTitle': 'Open folder',
+  'agent.restartTitle': 'Restart agent',
+  'agent.restartHint': 'Kill and respawn this agent’s process — no history lost — to pick up changes a running process can’t (e.g. a newly authorized MCP connector)',
   'agent.filterOnTitle': "Show only {name}'s messages",
   'agent.filterOffTitle': "Remove {name} from the message filter",
   'agent.removeFromChatTitle': 'Remove from chat',

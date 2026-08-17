@@ -907,6 +907,18 @@ async function openAgentFolder(agent) {
 }
 
 /**
+ * Kills and respawns an agent's persistent CLI process (no data lost — the
+ * next turn `--resume`s). Useful for picking up state a running process
+ * only ever reads once at spawn time and never refreshes on its own, like a
+ * newly-authorized MCP connector.
+ * @param {Agent} agent
+ * @returns {Promise<void>}
+ */
+async function restartAgent(agent) {
+  await fetch(`/api/agents/${agent.id}/restart`, { method: 'POST' });
+}
+
+/**
  * Copies a ready-to-paste `claude --resume <id>` command to the clipboard so
  * the user can continue an agent's native Claude session in their terminal.
  * @param {Agent} agent
@@ -1710,6 +1722,7 @@ function renderAgentPanel() {
         <ul class="agent-menu" data-testid="agent-menu" hidden>
           <li><button class="agent-note-btn" data-testid="agent-note-btn">🗒 ${agent.note ? t('agent.editNoteTitle') : t('agent.addNoteTitle')}</button></li>
           <li><button class="agent-open-folder-btn" data-testid="agent-open-folder-btn">📂 ${t('agent.openFolderTitle')}</button></li>
+          <li><button class="agent-restart-btn" data-testid="agent-restart-btn" title="${t('agent.restartHint')}">🔄 ${t('agent.restartTitle')}</button></li>
           <li><button class="agent-remove-btn" data-testid="agent-remove-btn">× ${t('agent.removeFromChatTitle')}</button></li>
           <li><button class="agent-del-btn" data-testid="agent-del-btn">🗑 ${t('agent.deleteTitle')}</button></li>
         </ul>
@@ -1725,6 +1738,7 @@ function renderAgentPanel() {
     });
     li.querySelector('.agent-note-btn').addEventListener('click', () => { closeAgentMenu(); openNoteModal(agent); });
     li.querySelector('.agent-open-folder-btn').addEventListener('click', () => { closeAgentMenu(); openAgentFolder(agent); });
+    li.querySelector('.agent-restart-btn').addEventListener('click', () => { closeAgentMenu(); restartAgent(agent); });
     li.querySelector('.agent-remove-btn').addEventListener('click', () => { closeAgentMenu(); removeMember(agent.id); });
     li.querySelector('.agent-del-btn').addEventListener('click', async () => {
       closeAgentMenu();

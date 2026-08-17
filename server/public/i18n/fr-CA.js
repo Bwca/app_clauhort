@@ -85,6 +85,8 @@ export default {
 
   'agent.moreActionsTitle': "Plus d'actions",
   'agent.openFolderTitle': 'Ouvrir le dossier',
+  'agent.restartTitle': "Redémarrer l'agent",
+  'agent.restartHint': "Arrêter et relancer le processus de cet agent — sans perte d'historique — pour appliquer des changements qu'un processus déjà en cours ne peut pas voir (p. ex. un connecteur MCP nouvellement autorisé)",
   'agent.filterOnTitle': "Afficher seulement les messages de {name}",
   'agent.filterOffTitle': "Retirer {name} du filtre de messages",
   'agent.removeFromChatTitle': 'Retirer de la discussion',
