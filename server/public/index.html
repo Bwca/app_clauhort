@@ -267,6 +267,14 @@
     </div>
   </div>
 
+  <!-- Full-size preview for a clicked attachment image. A new tab pointed
+       straight at the data: URI (the previous approach) silently stays
+       blank — Chrome blocks top-level navigation of a new tab to a data:
+       URL. Rendering it in-page sidesteps that entirely. -->
+  <div id="image-lightbox-overlay" data-testid="image-lightbox-overlay" hidden>
+    <img id="image-lightbox-img" data-testid="image-lightbox-img" alt="" />
+  </div>
+
   <script src="app.js" type="module"></script>
 </body>
 </html>

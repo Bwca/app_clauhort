@@ -507,6 +507,8 @@ const confirmOverlay   = $('#confirm-overlay');
 const confirmMessage   = $('#confirm-message');
 const confirmCancel    = $('#confirm-cancel');
 const confirmOk        = $('#confirm-ok');
+const imageLightboxOverlay = $('#image-lightbox-overlay');
+const imageLightboxImg = $('#image-lightbox-img');
 const settingsBtn      = $('#settings-btn');
 const settingsOverlay  = $('#settings-overlay');
 const settingsClose    = $('#settings-close');
@@ -1504,6 +1506,30 @@ async function copyMessageAsImage(btn, msgEl) {
 }
 
 /**
+ * Shows `src` full-size in the lightbox overlay.
+ *
+ * Not `window.open(src, '_blank')`: `src` here is a `data:` URI (attachment
+ * images are embedded inline, never uploaded to a URL of their own), and
+ * Chrome blocks top-level navigation of a newly opened tab straight to a
+ * `data:` URL — the tab opens but silently stays blank, no error surfaced.
+ * Rendering it in an in-page overlay sidesteps that restriction entirely.
+ * @param {string} src
+ * @param {string} alt
+ * @returns {void}
+ */
+function openImageLightbox(src, alt) {
+  imageLightboxImg.src = src;
+  imageLightboxImg.alt = alt;
+  imageLightboxOverlay.hidden = false;
+}
+
+/** @returns {void} */
+function closeImageLightbox() {
+  imageLightboxOverlay.hidden = true;
+  imageLightboxImg.src = '';
+}
+
+/**
  * Builds the attachments block appended below a message's text content.
  * @param {Attachment[]} attachments
  * @returns {HTMLElement}
@@ -1519,7 +1545,7 @@ function buildAttachmentsEl(attachments) {
       img.dataset.testid = 'msg-attachment-image';
       img.src = `data:${att.mediaType};base64,${att.data}`;
       img.alt = att.name ?? t('attachments.pastedImageAlt');
-      img.addEventListener('click', () => window.open(img.src, '_blank'));
+      img.addEventListener('click', () => openImageLightbox(img.src, img.alt));
       wrap.appendChild(img);
     } else {
       const details = document.createElement('details');
@@ -2873,7 +2899,13 @@ settingsForm.addEventListener('submit', handleSettingsFormSubmit);
 sidebarToggleBtn.addEventListener('click', () => toggleDrawer(sidebarEl));
 agentPanelToggleBtn.addEventListener('click', () => toggleDrawer(agentPanelEl));
 drawerBackdrop.addEventListener('click', closeDrawer);
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeDrawer(); });
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  closeDrawer();
+  closeImageLightbox();
+});
+
+imageLightboxOverlay.addEventListener('click', (e) => { if (e.target === imageLightboxOverlay) closeImageLightbox(); });
 
 newAgentBtn.addEventListener('click', openModal);
 modalClose.addEventListener('click', closeModal);
