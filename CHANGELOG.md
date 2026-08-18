@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-08-18
+
+### Added
+- Message search within a chat: a 🔍 button in the chat topbar opens a search bar that queries the chat's full message history (not just the recently loaded window), showing highlighted-match results you can click to jump straight to that message — loading the surrounding context and scrolling/flashing it into view if it isn't already loaded, with a "Back to latest" banner to return to the normal view.
+
 ## [1.1.7] - 2026-08-17
 
 ### Fixed
