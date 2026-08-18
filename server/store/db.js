@@ -863,6 +863,65 @@ export function getMessages(chatId, limit = 50, beforeId) {
 }
 
 /**
+ * Escapes SQL LIKE wildcards (`%`, `_`) in user-supplied search text so
+ * they're matched literally rather than as LIKE patterns — otherwise typing
+ * e.g. "50%" or "foo_bar" into the search box would silently behave as a
+ * wildcard search instead of a literal substring match.
+ * @param {string} text
+ * @returns {string}
+ */
+function escapeLikeWildcards(text) {
+  return text.replace(/[\\%_]/g, '\\$&');
+}
+
+/**
+ * Substring search over a chat's message history (case-insensitive, per
+ * SQLite's default ASCII LIKE behavior), newest first — backs the
+ * message-search UI so a long chat can be searched without first pulling
+ * its entire history into the client.
+ * @param {string} chatId
+ * @param {string} query
+ * @param {number} [limit=30]
+ * @returns {Message[]}
+ */
+export function searchMessages(chatId, query, limit = 30) {
+  const pattern = `%${escapeLikeWildcards(query)}%`;
+  const rows = db.prepare(`
+    SELECT * FROM messages WHERE chat_id = ? AND content LIKE ? ESCAPE '\\'
+    ORDER BY created_at DESC, rowid DESC LIMIT ?
+  `).all(chatId, pattern, limit);
+  return rows.map(rowToMessage);
+}
+
+/**
+ * Returns up to `before` messages immediately preceding `messageId`, the
+ * message itself, and up to `after` messages immediately following it, in
+ * chronological order — used to jump straight to a search result that lives
+ * outside the recently-loaded window (getMessages only ever returns the
+ * tail, or a page walking backward from it).
+ * @param {string} chatId
+ * @param {string} messageId
+ * @param {number} [before=25]
+ * @param {number} [after=25]
+ * @returns {Message[]}
+ */
+export function getMessagesAround(chatId, messageId, before = 25, after = 25) {
+  const pivot = db.prepare('SELECT *, rowid FROM messages WHERE id = ? AND chat_id = ?').get(messageId, chatId);
+  if (!pivot) return [];
+  const beforeRows = db.prepare(`
+    SELECT * FROM messages WHERE chat_id = ?
+      AND (created_at < ? OR (created_at = ? AND rowid < ?))
+    ORDER BY created_at DESC, rowid DESC LIMIT ?
+  `).all(chatId, pivot.created_at, pivot.created_at, pivot.rowid, before);
+  const afterRows = db.prepare(`
+    SELECT * FROM messages WHERE chat_id = ?
+      AND (created_at > ? OR (created_at = ? AND rowid > ?))
+    ORDER BY created_at ASC, rowid ASC LIMIT ?
+  `).all(chatId, pivot.created_at, pivot.created_at, pivot.rowid, after);
+  return [...beforeRows.reverse(), pivot, ...afterRows].map(rowToMessage);
+}
+
+/**
  * Appends a new message and persists.
  * @param {Message} message
  * @returns {Promise<Message>}
