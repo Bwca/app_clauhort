@@ -34,6 +34,15 @@ export default {
   'chat.filterBarLabel': 'Affichage limité à : vous + {names}',
   'chat.filterBarClearBtn': 'Tout afficher',
 
+  'search.btnTitle': 'Rechercher dans les messages',
+  'search.placeholder': 'Rechercher dans cette discussion…',
+  'search.closeTitle': 'Fermer la recherche',
+  'search.noResults': 'Aucun message trouvé',
+  'search.resultCount_one': '{count} résultat',
+  'search.resultCount_other': '{count} résultats',
+  'search.jumpedBannerLabel': 'Vous consultez une partie antérieure de cette discussion',
+  'search.backToLatestBtn': 'Retour aux plus récents ↓',
+
   'agentPanel.header': 'Agents',
   'agentPanel.noChatSelected': 'Aucune discussion sélectionnée',
   'agentPanel.addAgent': '+ Ajouter un agent',

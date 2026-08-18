@@ -34,6 +34,15 @@ export default {
   'chat.filterBarLabel': 'Showing only: you + {names}',
   'chat.filterBarClearBtn': 'Show all',
 
+  'search.btnTitle': 'Search messages',
+  'search.placeholder': 'Search this chat…',
+  'search.closeTitle': 'Close search',
+  'search.noResults': 'No messages found',
+  'search.resultCount_one': '{count} result',
+  'search.resultCount_other': '{count} results',
+  'search.jumpedBannerLabel': "You're viewing an earlier part of this chat",
+  'search.backToLatestBtn': 'Back to latest ↓',
+
   'agentPanel.header': 'Agents',
   'agentPanel.noChatSelected': 'No chat selected',
   'agentPanel.addAgent': '+ Add agent',

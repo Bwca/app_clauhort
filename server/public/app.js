@@ -117,6 +117,20 @@ const unreadChatIds = new Set();
  */
 const messageFilterAgentIds = new Set();
 
+/** @type {number} bumped on every search-input keystroke; guards against an
+ * older in-flight search response overwriting a newer one, same pattern as
+ * browseRequestId. */
+let searchRequestId = 0;
+
+/** @type {ReturnType<typeof setTimeout> | null} debounce handle for search input */
+let searchDebounceTimer = null;
+
+/** Whether the message list currently shows a jumped-to context window
+ * (from a search result) rather than the normal tail-of-chat view loaded by
+ * selectChat — drives the "back to latest" banner.
+ * @type {boolean} */
+let isViewingSearchContext = false;
+
 /** @type {string} currently selected color in the create-agent modal */
 let selectedColor = '#89b4fa';
 
@@ -445,6 +459,13 @@ const agentPanelEl     = $('#agent-panel');
 const agentPanelToggleBtn = $('#agent-panel-toggle-btn');
 const drawerBackdrop   = $('#drawer-backdrop');
 const messageFilterBar = $('#message-filter-bar');
+const searchBtn        = $('#search-btn');
+const searchBar        = $('#search-bar');
+const searchInput      = $('#search-input');
+const searchClose      = $('#search-close');
+const searchResultsEl  = $('#search-results');
+const jumpedBanner     = $('#jumped-banner');
+const jumpedBannerBackBtn = $('#jumped-banner-back-btn');
 const messageList      = $('#message-list');
 const msgInput         = $('#msg-input');
 const scheduleBtn      = $('#schedule-btn');
@@ -1225,6 +1246,169 @@ function renderMessageFilterBar() {
   messageFilterBar.querySelector('#message-filter-clear-btn').addEventListener('click', clearMessageFilter);
 }
 
+// ─── Message search ─────────────────────────────────────────────────────────
+
+/**
+ * Shows the search bar and focuses its input. A no-op affordance when
+ * there's no active chat — searching only ever makes sense scoped to one.
+ * @returns {void}
+ */
+function openSearchBar() {
+  if (!activeChatId) return;
+  searchBtn.classList.add('active');
+  searchBar.hidden = false;
+  searchInput.focus();
+}
+
+/**
+ * Hides the search bar and clears any in-progress query/results, without
+ * touching whatever message list state (normal or jumped-to-context) is
+ * currently showing.
+ * @returns {void}
+ */
+function closeSearchBar() {
+  searchBtn.classList.remove('active');
+  searchBar.hidden = true;
+  searchResultsEl.hidden = true;
+  searchResultsEl.innerHTML = '';
+  searchInput.value = '';
+}
+
+/**
+ * Debounced handler for the search input — waits for a short pause in
+ * typing before hitting the server, so fast typing doesn't fire a request
+ * per keystroke.
+ * @returns {void}
+ */
+function handleSearchInput() {
+  clearTimeout(searchDebounceTimer);
+  searchDebounceTimer = setTimeout(() => runSearch(searchInput.value.trim()), 250);
+}
+
+/**
+ * Searches the active chat's full message history (server-side — not just
+ * whatever's currently rendered, since only a recent window is normally
+ * loaded) and renders the results dropdown.
+ * @param {string} query
+ * @returns {Promise<void>}
+ */
+async function runSearch(query) {
+  const requestId = ++searchRequestId;
+  if (!query) {
+    searchResultsEl.hidden = true;
+    searchResultsEl.innerHTML = '';
+    return;
+  }
+  const res = await fetch(`/api/chats/${activeChatId}/messages/search?q=${encodeURIComponent(query)}`);
+  const results = /** @type {Message[]} */ (await res.json());
+  if (requestId !== searchRequestId) return; // superseded by a newer keystroke
+
+  renderSearchResults(results, query);
+}
+
+/**
+ * Builds a plain-text snippet centred on the first match of `query` inside
+ * `content`, with the match wrapped in <mark>. Every piece of real message
+ * text is escaped individually before the <mark> tags are spliced in, so a
+ * message containing HTML-looking text can't inject markup here.
+ * @param {string} content
+ * @param {string} query
+ * @returns {string}
+ */
+function highlightSnippet(content, query) {
+  const RADIUS = 60;
+  const flat = content.replace(/\s+/g, ' ').trim();
+  const idx = flat.toLowerCase().indexOf(query.toLowerCase());
+  if (idx === -1) return escHtml(flat.slice(0, RADIUS * 2));
+
+  const start = Math.max(0, idx - RADIUS);
+  const end = Math.min(flat.length, idx + query.length + RADIUS);
+  const prefix = start > 0 ? '…' : '';
+  const suffix = end < flat.length ? '…' : '';
+  const before = escHtml(flat.slice(start, idx));
+  const match = escHtml(flat.slice(idx, idx + query.length));
+  const after = escHtml(flat.slice(idx + query.length, end));
+  return `${prefix}${before}<mark>${match}</mark>${after}${suffix}`;
+}
+
+/**
+ * Renders the search results dropdown, or a "no results" placeholder.
+ * @param {Message[]} results
+ * @param {string} query
+ * @returns {void}
+ */
+function renderSearchResults(results, query) {
+  if (results.length === 0) {
+    searchResultsEl.innerHTML = `<li class="search-result-empty" data-testid="search-result-empty">${escHtml(t('search.noResults'))}</li>`;
+    searchResultsEl.hidden = false;
+    return;
+  }
+  searchResultsEl.innerHTML = '';
+  for (const msg of results) {
+    const agent = msg.agentId ? agentById(msg.agentId) : null;
+    const color = agentDisplayColor(msg.role === 'user' ? userSettings.userColor : (agent?.color ?? 'var(--muted)'));
+    const li = document.createElement('li');
+    li.className = 'search-result-item';
+    li.dataset.testid = 'search-result-item';
+    li.style.setProperty('--author-color', color);
+    li.innerHTML = `
+      <div class="search-result-meta">
+        <span class="search-result-author">${escHtml(msg.authorName)}</span>
+        <span class="search-result-time">${fmtTime(msg.createdAt)}</span>
+      </div>
+      <div class="search-result-snippet">${highlightSnippet(msg.content, query)}</div>`;
+    li.addEventListener('click', () => jumpToMessage(msg));
+    searchResultsEl.appendChild(li);
+  }
+  searchResultsEl.hidden = false;
+}
+
+/**
+ * Jumps the message list to a specific message, either found in the chat's
+ * recently loaded window in place, or replacing the whole list with the
+ * server-fetched window around it. Either way the target message is
+ * scrolled into view and briefly flashed so it's easy to spot.
+ * @param {Message} msg
+ * @returns {Promise<void>}
+ */
+async function jumpToMessage(msg) {
+  closeSearchBar();
+
+  let el = messageList.querySelector(`[data-msg-id="${msg.id}"]`);
+  if (!el) {
+    const res = await fetch(`/api/chats/${activeChatId}/messages/context/${msg.id}`);
+    if (!res.ok) return;
+    const contextMsgs = /** @type {Message[]} */ (await res.json());
+    messageList.innerHTML = '';
+    for (const m of contextMsgs) messageList.appendChild(buildMessageEl(m));
+    isViewingSearchContext = true;
+    jumpedBanner.hidden = false;
+    el = messageList.querySelector(`[data-msg-id="${msg.id}"]`);
+  }
+  if (!el) return;
+
+  el.scrollIntoView({ block: 'center' });
+  el.classList.remove('highlight-flash');
+  // Force a reflow so re-adding the class restarts the animation even if
+  // the same message was just jumped to a second time.
+  void el.offsetWidth;
+  el.classList.add('highlight-flash');
+}
+
+/**
+ * Returns the message list to the normal tail-of-chat view after a search
+ * jump, by simply re-running the same load selectChat does on open.
+ * @returns {Promise<void>}
+ */
+async function backToLatestMessages() {
+  isViewingSearchContext = false;
+  jumpedBanner.hidden = true;
+  messageList.innerHTML = '';
+  const res = await fetch(`/api/chats/${activeChatId}/messages`);
+  const msgs = /** @type {Message[]} */ (await res.json());
+  for (const msg of msgs) appendMessage(msg);
+}
+
 /**
  * Creates and returns a DOM element for a completed message.
  * @param {Message} msg
@@ -1886,6 +2070,9 @@ async function selectChat(id) {
   unreadChatIds.delete(id);
   messageFilterAgentIds.clear();
   renderMessageFilterBar();
+  closeSearchBar();
+  isViewingSearchContext = false;
+  jumpedBanner.hidden = true;
   renderChatList();
   renderAgentPanel();
   // On a narrow viewport the chat list a user just picked from is an
@@ -2874,6 +3061,9 @@ document.addEventListener('click', (e) => {
   if (!scheduledPanel.contains(e.target) && e.target !== scheduledBtn) {
     scheduledPanel.hidden = true;
   }
+  if (!searchBar.contains(e.target) && e.target !== searchBtn) {
+    searchResultsEl.hidden = true;
+  }
   if (!e.target.closest('.agent-menu-wrap')) {
     closeAllAgentMenus();
   }
@@ -2883,6 +3073,18 @@ scheduledBtn.addEventListener('click', (e) => {
   e.stopPropagation();
   scheduledPanel.hidden = !scheduledPanel.hidden;
 });
+
+searchBtn.addEventListener('click', (e) => {
+  e.stopPropagation();
+  if (searchBar.hidden) openSearchBar();
+  else closeSearchBar();
+});
+searchClose.addEventListener('click', closeSearchBar);
+searchInput.addEventListener('input', handleSearchInput);
+searchInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closeSearchBar();
+});
+jumpedBannerBackBtn.addEventListener('click', backToLatestMessages);
 
 scheduleBtn.addEventListener('click', openScheduleModal);
 scheduleClose.addEventListener('click', closeScheduleModal);

@@ -56,10 +56,22 @@
           </div>
           <div id="chat-topbar-right">
             <span id="reconnecting-notice" data-i18n="chat.reconnecting" hidden>Reconnecting…</span>
+            <button id="search-btn" data-testid="search-btn" data-i18n-title="search.btnTitle" title="Search messages">🔍</button>
             <button id="agent-panel-toggle-btn" data-testid="agent-panel-toggle-btn" data-i18n-title="common.toggleAgents" title="Toggle agents">👥</button>
           </div>
         </div>
+        <div id="search-bar" data-testid="search-bar" hidden>
+          <div id="search-input-row">
+            <input id="search-input" data-testid="search-input" data-i18n-placeholder="search.placeholder" placeholder="Search this chat…" autocomplete="off" />
+            <button id="search-close" data-testid="search-close" data-i18n-title="search.closeTitle" title="Close search">×</button>
+          </div>
+          <ul id="search-results" data-testid="search-results" hidden></ul>
+        </div>
         <div id="message-filter-bar" data-testid="message-filter-bar" hidden></div>
+        <div id="jumped-banner" data-testid="jumped-banner" hidden>
+          <span data-i18n="search.jumpedBannerLabel">You're viewing an earlier part of this chat</span>
+          <button id="jumped-banner-back-btn" data-testid="jumped-banner-back-btn" data-i18n="search.backToLatestBtn">Back to latest ↓</button>
+        </div>
         <div id="message-list" data-testid="message-list"></div>
         <div id="input-area">
           <div id="mention-dropdown" data-testid="mention-dropdown" hidden></div>
