@@ -132,6 +132,7 @@ export default {
   'attachments.pastedImageAlt': 'image collée',
 
   'errors.chatNotFound': 'Discussion introuvable',
+  'errors.messageNotFound': 'Message introuvable',
   'errors.chatNameRequired': 'le nom est requis',
   'errors.agentIdRequired': "l'identifiant de l'agent est requis",
   'errors.agentNotFound': 'Agent introuvable',

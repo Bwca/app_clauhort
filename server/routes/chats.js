@@ -15,6 +15,8 @@ import {
   addChatMember,
   removeChatMember,
   getMessages,
+  searchMessages,
+  getMessagesAround,
   getAgent,
   getAgentChatId,
   getScheduledMessages,
@@ -162,6 +164,36 @@ export default function createChatsRouter(wss) {
     const limit = parseInt(req.query.limit, 10) || 50;
     const before = req.query.before;
     const messages = getMessages(req.params.id, limit, before);
+    res.json(messages);
+  });
+
+  /**
+   * GET /api/chats/:id/messages/search
+   * Substring-searches a chat's full message history (not just the recently
+   * loaded window), newest match first.
+   * @param {string} req.query.q - Search text; empty/missing yields []
+   * @param {string} [req.query.limit] - Max results (default 30)
+   */
+  router.get('/:id/messages/search', (req, res) => {
+    const chat = getChat(req.params.id);
+    if (!chat) return res.status(404).json({ error: t('errors.chatNotFound') });
+    const q = (req.query.q ?? '').trim();
+    if (!q) return res.json([]);
+    const limit = parseInt(req.query.limit, 10) || 30;
+    res.json(searchMessages(req.params.id, q, limit));
+  });
+
+  /**
+   * GET /api/chats/:id/messages/context/:messageId
+   * Returns the messages immediately surrounding one message (itself
+   * included), so a search result outside the currently-loaded window can
+   * be jumped to directly.
+   */
+  router.get('/:id/messages/context/:messageId', (req, res) => {
+    const chat = getChat(req.params.id);
+    if (!chat) return res.status(404).json({ error: t('errors.chatNotFound') });
+    const messages = getMessagesAround(req.params.id, req.params.messageId);
+    if (messages.length === 0) return res.status(404).json({ error: t('errors.messageNotFound') });
     res.json(messages);
   });
 

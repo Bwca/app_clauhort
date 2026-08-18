@@ -132,6 +132,7 @@ export default {
   'attachments.pastedImageAlt': 'pasted image',
 
   'errors.chatNotFound': 'Chat not found',
+  'errors.messageNotFound': 'Message not found',
   'errors.chatNameRequired': 'name is required',
   'errors.agentIdRequired': 'agentId is required',
   'errors.agentNotFound': 'Agent not found',
