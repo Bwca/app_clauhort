@@ -1120,17 +1120,31 @@ function scrollToBottom() {
 
 /**
  * Client-side mirror of server/services/messageRouter.js's
- * extractMentionedAgents — same unanchored `@(\w+)` scan, so a mention
+ * extractMentionedAgents — matches against the actual roster's names
+ * (longest first) rather than a fixed `\w+` character class, so a mention
  * counts wherever it sits in the text, matching how the server actually
  * routes it. Kept as a separate small copy rather than sharing a module: the
  * server's version returns Agent objects from its own DB-backed lookup,
  * this one just needs the subset of matching ids for filter comparisons.
+ *
+ * Regression note: this used to be a plain `/@(\w+)/g` scan, same as the
+ * server had — which silently failed on any hyphenated agent name (`\w`
+ * doesn't include `-`), so "@TP-Alice do X" resolved to zero mentioned ids
+ * here and was then treated as a broadcast (isVisibleUnderMessageFilter's
+ * "empty = broadcast" rule) — visible under EVERY spotlight filter,
+ * including one spotlighting a completely different, unmentioned agent.
  * @param {string} content
  * @param {Agent[]} members
  * @returns {string[]}
  */
 function extractMentionedAgentIds(content, members) {
-  const mentionRegex = /@(\w+)/g;
+  const names = members
+    .map((a) => a.name)
+    .filter(Boolean)
+    .sort((a, b) => b.length - a.length)
+    .map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  if (names.length === 0) return [];
+  const mentionRegex = new RegExp(`@(${names.join('|')})(?![\\w-])`, 'gi');
   const mentioned = new Set([...content.matchAll(mentionRegex)].map((m) => m[1].toLowerCase()));
   return members.filter((a) => mentioned.has(a.name.toLowerCase())).map((a) => a.id);
 }
@@ -2749,7 +2763,13 @@ async function updateComposerDropdown() {
   const cursor = msgInput.selectionStart ?? msgInput.value.length;
   const before = msgInput.value.slice(0, cursor);
 
-  const slashMatch = before.match(/^(?:@(\w+)\s+)?\/(\w*)$/);
+  // [^\s@]+ rather than \w+ — an addressed agent's name, or a command
+  // name, can contain a hyphen (or any other non-whitespace character; the
+  // agent-creation form has no charset restriction), and \w doesn't
+  // include one. With \w+, typing past a hyphen (e.g. "@TP-Observer /")
+  // broke the match entirely and silently hid the dropdown for the rest
+  // of the name — same root cause as the server-side mention-routing bug.
+  const slashMatch = before.match(/^(?:@([^\s@]+)\s+)?\/([^\s@]*)$/);
   if (slashMatch) {
     const [, addressedName, query] = slashMatch;
     const agent = resolveSlashCommandAgent(addressedName);
@@ -2771,7 +2791,10 @@ async function updateComposerDropdown() {
     return;
   }
 
-  const mentionMatch = before.match(/@(\w*)$/);
+  // Same [^\s@]* reasoning as slashMatch above — a hyphenated in-progress
+  // name (e.g. typing "@TP-O...") must keep matching past the hyphen for
+  // the dropdown to stay open and keep narrowing as the user types.
+  const mentionMatch = before.match(/@([^\s@]*)$/);
   if (mentionMatch) {
     const matches = getMentionMatches(mentionMatch[1]);
     renderComposerDropdown(matches.map((agent) => ({
