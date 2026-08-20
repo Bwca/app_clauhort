@@ -6,6 +6,29 @@ import { listAgentCommands } from './commands.js';
 import { getAgentSkills } from './agentProcessManager.js';
 
 /**
+ * Builds a regex alternation matching any of the given agents' names,
+ * longest name first so a shorter name that happens to be a prefix of a
+ * longer one (e.g. "TP" vs "TP-Observer") never shadows it. Agent names are
+ * arbitrary user input with no character restriction (the creation form
+ * doesn't validate against a charset) — matching against the actual roster
+ * here, rather than a fixed `\w+` character class, is what makes a name
+ * containing a hyphen (or any other non-word character) mentionable at all.
+ * `\w+` previously stopped at the first hyphen, so "@TP-Observer" only ever
+ * captured "TP", matched no agent, and silently fell back to a broadcast —
+ * see extractMentionedAgents/parseSkillInvocation.
+ * @param {import('../store/db.js').Agent[]} chatMembers
+ * @returns {string | null} A regex alternation source, or null if there are no members to match
+ */
+function nameAlternation(chatMembers) {
+  const names = chatMembers
+    .map((a) => a.name)
+    .filter(Boolean)
+    .sort((a, b) => b.length - a.length)
+    .map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  return names.length > 0 ? names.join('|') : null;
+}
+
+/**
  * Extracts the chat members explicitly @mentioned in a message. Unlike
  * parseResponders, this never falls back to "everyone" when there are no
  * mentions — it's used to detect actual delegation (e.g. in an agent's
@@ -16,7 +39,12 @@ import { getAgentSkills } from './agentProcessManager.js';
  * @returns {import('../store/db.js').Agent[]} Agents explicitly @mentioned, possibly empty
  */
 export function extractMentionedAgents(content, chatMembers) {
-  const mentionRegex = /@(\w+)/g;
+  const alternation = nameAlternation(chatMembers);
+  if (!alternation) return [];
+  // (?![\w-]) keeps a shorter matched name from being treated as mentioned
+  // when it's actually just a prefix of a longer, unlisted word right after
+  // the @ (e.g. an agent named "Bob" shouldn't match inside "@Bobby").
+  const mentionRegex = new RegExp(`@(${alternation})(?![\\w-])`, 'gi');
   const mentions = [...content.matchAll(mentionRegex)].map((m) =>
     m[1].toLowerCase()
   );
@@ -80,7 +108,13 @@ export function parseResponders(content, chatMembers) {
  * @returns {{ agent: import('../store/db.js').Agent, command: string } | null}
  */
 export function parseSkillInvocation(content, chatMembers) {
-  const match = content.trim().match(/^@(\w+)\s+(\/\S.*)$/s);
+  const alternation = nameAlternation(chatMembers);
+  if (!alternation) return null;
+  // Same nameAlternation-based matching as extractMentionedAgents, for the
+  // same reason: a fixed \w+ class silently misparses a hyphenated (or
+  // otherwise non-word-character) agent name and this whole message would
+  // then wrongly fail to match as a skill invocation.
+  const match = content.trim().match(new RegExp(`^@(${alternation})(?![\\w-])\\s+(/\\S.*)$`, 'is'));
   if (!match) return null;
   const agent = chatMembers.find((a) => a.name.toLowerCase() === match[1].toLowerCase());
   if (!agent) return null;

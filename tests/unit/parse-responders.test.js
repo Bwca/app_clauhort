@@ -10,9 +10,12 @@
  * a scheduled message, all of which resolve through these same functions).
  */
 
-import { test, describe } from 'node:test';
+import { test, describe, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseResponders, extractMentionedAgents } from '../../server/services/messageRouter.js';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { parseResponders, extractMentionedAgents, parseSkillInvocation } from '../../server/services/messageRouter.js';
 
 function agent(id, name, isObserver = false) {
   return isObserver ? { id, name, isObserver: true } : { id, name };
@@ -65,5 +68,56 @@ describe('extractMentionedAgents', () => {
   test('returns empty (not "everyone") when nothing is mentioned — never falls back to broadcast', () => {
     const observer = agent('c', 'Overseer', true);
     assert.deepEqual(extractMentionedAgents('no mentions here', [observer]), []);
+  });
+
+  test('matches a hyphenated agent name in full, not just up to the hyphen', () => {
+    // Regression: a fixed \w+ character class doesn't include "-", so
+    // "@TP-Observer" used to capture only "TP", match no agent, and
+    // silently fall through parseResponders to a broadcast instead of
+    // routing to the intended agent.
+    const observer = agent('c', 'TP-Observer', true);
+    assert.deepEqual(extractMentionedAgents('@TP-Observer reply please', [observer]), [observer]);
+  });
+
+  test('a longer hyphenated name is not shadowed by a shorter agent name that is its prefix', () => {
+    const short = agent('a', 'TP');
+    const long = agent('b', 'TP-Observer');
+    assert.deepEqual(extractMentionedAgents('@TP-Observer only', [short, long]), [long]);
+  });
+
+  test('a short name is not falsely matched inside a longer unrelated word', () => {
+    const bob = agent('a', 'Bob');
+    assert.deepEqual(extractMentionedAgents('@Bobby, not you', [bob]), []);
+  });
+});
+
+describe('parseResponders — hyphenated names', () => {
+  test('an @mention of a hyphenated-name agent routes to it alone, not a broadcast fallback', () => {
+    const alice = agent('a', 'TP-Alice');
+    const bob = agent('b', 'TP-Bob');
+    assert.deepEqual(parseResponders('@TP-Alice only you should reply', [alice, bob]), [alice]);
+  });
+});
+
+describe('parseSkillInvocation — hyphenated names', () => {
+  // parseSkillInvocation checks a real registered command via a filesystem
+  // read (listAgentCommands), so these need an actual .claude/commands/*.md
+  // fixture rather than a fully mocked agent.
+  const workDir = mkdtempSync(join(tmpdir(), 'clauhort-skill-test-'));
+  mkdirSync(join(workDir, '.claude', 'commands'), { recursive: true });
+  writeFileSync(join(workDir, '.claude', 'commands', 'ping.md'), '---\ndescription: test\n---\npong');
+  after(() => rmSync(workDir, { recursive: true, force: true }));
+
+  test('a hyphenated agent name is recognized as the skill-invocation target', () => {
+    const a = { id: 'a', name: 'TP-Observer', workingDir: workDir };
+    const result = parseSkillInvocation('@TP-Observer /ping', [a]);
+    assert.deepEqual(result, { agent: a, command: '/ping' });
+  });
+
+  test('a longer hyphenated name is not shadowed by a shorter prefix agent name', () => {
+    const short = { id: 'a', name: 'TP', workingDir: workDir };
+    const long = { id: 'b', name: 'TP-Observer', workingDir: workDir };
+    const result = parseSkillInvocation('@TP-Observer /ping', [short, long]);
+    assert.equal(result.agent, long);
   });
 });

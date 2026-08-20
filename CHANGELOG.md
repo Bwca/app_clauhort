@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-08-19
+
+### Fixed
+- `@mention` routing silently broke for any agent name containing a hyphen (or any other non-word character): `@TP-Observer` matched only `@TP`, resolved to no agent, and the message quietly fell back to broadcasting to the whole chat instead of erroring or routing correctly. Found via the new manual test plans in `test-plans/`. `extractMentionedAgents` and `parseSkillInvocation` (`server/services/messageRouter.js`) now match mentions against the chat's actual member names instead of a fixed `\w+` character class, so any character the agent-creation form already allows in a name is mentionable.
+
 ## [1.2.0] - 2026-08-18
 
 ### Added
