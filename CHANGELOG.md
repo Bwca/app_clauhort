@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.2.2] - 2026-08-20
+
+### Fixed
+- An agent whose turn failed at the CLI level (most commonly an invalid `resumeId` — a stale or hand-typed session ID rejected by `--resume`) rendered a completely empty reply bubble with no error text and no indication anything went wrong, and silently failed the exact same way on every later message. The CLI actually reports this as a well-formed `result` event with `is_error: true` and the real message in `errors`, not a crash — `createTurnAccumulator` (`server/services/agentProcessManager.js`) was treating any `result` event as a successful (if possibly empty) completion. It now recognizes `is_error` and rejects the turn instead, surfacing the CLI's actual error message to the user via the existing `AGENT_STREAM_ERROR` path.
+- Two more spots carried the same hyphen-breaking `\w+` mention pattern fixed in 1.2.1, found while fixing it: the client-side spotlight/message-filter mention scan (`extractMentionedAgentIds` in `server/public/app.js`) could show a message under the wrong spotlight filter for a hyphenated-name agent, and the composer's `@`/`/` autocomplete (`updateComposerDropdown`) silently closed the dropdown the moment you typed a hyphen into a mention or an addressed agent's name. Both now match against real agent names / any non-whitespace run instead of `\w`.
+
 ## [1.2.1] - 2026-08-19
 
 ### Fixed
