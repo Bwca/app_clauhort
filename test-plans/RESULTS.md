@@ -231,3 +231,112 @@ easy to spot and clean up. That naming convention is exactly what surfaced
 bug #1 — a happy accident. Future runs should **keep using hyphenated
 names** for at least a couple of test agents, since it's the only thing
 that exposed this bug.
+
+---
+
+# Test run — 2026-08-20 (second pass)
+
+Server was killed and restarted fresh (`npm run debug`) before this pass,
+picking up the messageRouter.js hyphen-mention fix (commit d492dfb). Driven
+mostly via direct REST/WS calls against the live server (faster and more
+deterministic than clicking through the UI for setup), with the browser
+used for anything genuinely UI-specific (Stop button, agent panel, resume
+copy, restart). Environment confound from the prior run
+(`~/.claude/settings.json` → `permissions.defaultMode: "auto"`, bypassing
+the app's own permission-prompt flow) is still in effect and not re-tested.
+
+## Hyphen-mention fix — CONFIRMED HOLDING ✅
+
+`@TP-Alice only you should reply, say exactly: fixed-confirmed` in a chat
+with `TP-Alice`/`TP-Bob` produced exactly 1 responder (`TP-Alice`), both via
+a direct WS call and reproduced in the actual UI. No regression.
+
+## New bug found
+
+### MEDIUM — an agent with an invalid `resumeId` fails every turn completely silently
+**Confirmed via server logs + UI.**
+
+Created an agent with `resumeId: "not-a-real-session-id"` (Plan 01.7's
+exact scenario) and sent it an ordinary message. The `claude` CLI child
+process gives a clear, actionable stderr error and exits:
+```
+server/logs/app.1.log:1979 — stderr: "Error: --resume requires a valid
+session ID or session title when used with --print. Usage: claude -p
+--resume <session-id|title>. Provided value \"not-a-real-session-id\" is
+not a UUID and does not match any session title."
+server/logs/app.1.log:1980 — "agent process exited", code:1
+server/logs/app.1.log:1981 (retry) — same stderr, code:1
+```
+But the app logs `"turn ended"` right after (line 1981 SENT/turn-ended
+sequence) and emits `AGENT_STREAM_END` with `fullText: ""` — no
+`AGENT_STREAM_ERROR`, no partial content. In the UI the agent's reply
+bubble renders **completely empty**: no text, no "ERROR" badge, no
+"Stopped" badge, nothing — the user has zero indication the turn failed,
+let alone why. Every subsequent message to that agent silently fails the
+same way. Root cause looks like `agentProcessManager.js`'s turn handling
+not treating a process that exits non-zero *before emitting any stream-json
+`result` event* as an error condition — it just closes out the turn
+accumulator with whatever (empty) text it collected. This is a real
+footgun: a user who pastes a stale/wrong resume ID at agent-creation time
+gets a silently-broken agent with no diagnostic, and (per the already-
+documented "agents can't be edited after creation" finding above) the only
+fix is deleting and recreating it.
+
+## Newly-covered plans
+
+- **Plan 07 (background-and-stop) — full pass, both steps ✅.** Stop button:
+  clicked mid-turn (during "responding..." before any text streamed),
+  produced a "Stopped" badge, preserved partial streamed text (a partial
+  800-word essay, cut off mid-third-paragraph), and the agent answered
+  normally on the next ordinary message afterward — no corruption.
+  Background task completion: naturally reproduced (the agent's blind
+  `sleep 25 && echo done` was blocked by the sandbox's own tool-use guard,
+  it self-corrected to `run_in_background: true`, and a follow-up message
+  landed on its own several seconds later) and confirmed via
+  `server/logs/app.1.log:1908` — `"msg":"agent reported back on a
+  background task unprompted"` — a real unsolicited-turn event, not a
+  normal reply.
+
+- **Plan 10 (resume-and-persistence) — full pass, all four steps ✅.**
+  10.1: the agent panel's truncated resume-id text is a real "click to
+  copy: `claude --resume <id>`" button; copied id verified live in an
+  actual terminal (`claude --resume <id> --print "reply with the single
+  word: verified"` → `verified`). 10.2: per-turn transcript log shows only
+  the new message content is ever sent, never full history (confirmed
+  across 5 turns in the same chat). 10.3: killed and restarted the server
+  mid-chat — chat/membership/message history all survived (SQLite), and a
+  follow-up turn asking the agent to recall its earlier 800-word essay
+  topic correctly answered "Lighthouses." after the process respawned via
+  `--resume`. 10.4: added an Observer partway through an active chat,
+  confirmed it stayed silent on a broadcast (`TP-Alice`/`TP-Bob` both
+  replied "present", Observer didn't), then `@mention`ed it for a summary —
+  it correctly and accurately summarized the *entire* chat history
+  (everything before it joined, by name, correctly attributed) in one
+  reply, confirming full-history + accurate roster on a catch-up turn.
+
+- **Plan 06.3–06.5 (slash-command edge cases) — full pass, all three ✅.**
+  06.3: bare `/ping` (no `@mention`) in a single-agent chat correctly
+  invoked the real skill ("pong"). 06.4: `@TP-Solo can you run /ping for
+  me?` (command-looking text embedded mid-sentence, not the entire
+  message) correctly was NOT intercepted as a skill invocation — confirmed
+  via the transcript log showing the literal, un-stripped text was sent to
+  the CLI — and the model chose on its own to run `/ping` via a real tool
+  call, still producing "pong" as a natural, expected consequence, not a
+  routing bug. 06.5: `@TP-Solo /does-not-exist` got a clear, helpful reply
+  ("That skill isn't available — I only have: ping, ...") rather than a
+  hang or crash.
+
+## Still not covered
+
+Plan 08.3–08.7 (jump banner / spotlight+search / escaping / empty state /
+close-reopen), Plan 05 (attachments, scheduled-message fire/cancel cycle),
+Plan 09.2 (theme pre-paint flash-on-reload) — all skipped this pass to
+prioritize the gaps explicitly called out in the task (07, 10, 06.3-06.5,
+01.7) and the hyphen-fix regression check.
+
+## Summary
+
+This pass: 1 fix confirmed holding, 1 new bug found (documented above with
+full log evidence), 12 test steps executed across 3 plans, all 12 passing
+except the resumeId-failure discovery. All test agents/chats/scratch dirs
+cleaned up; app left running in debug mode with an empty chats/agents list.
