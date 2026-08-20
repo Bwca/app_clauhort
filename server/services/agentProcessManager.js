@@ -291,6 +291,9 @@ function describeToolUse({ name, input }) {
  * @property {boolean} wasLocalCommand - True if this turn's `assistant`
  *   event was the CLI's synthetic local-command reply, not a real model
  *   turn — see handleEvent's docs.
+ * @property {string | null} errorMessage - Set once a `result` event with
+ *   `is_error: true` has been fed in — see handleEvent's docs. Null for a
+ *   normal, successful turn.
  * @property {(event: object) => void} handleEvent
  */
 
@@ -304,7 +307,7 @@ function describeToolUse({ name, input }) {
  * @param {{ onChunk?: (text: string) => void, onStatus?: (status: string) => void }} [callbacks]
  * @returns {TurnAccumulator}
  */
-function createTurnAccumulator({ onChunk, onStatus } = {}) {
+export function createTurnAccumulator({ onChunk, onStatus } = {}) {
   /** @type {TurnAccumulator} */
   const turn = {
     fullText: '',
@@ -314,6 +317,7 @@ function createTurnAccumulator({ onChunk, onStatus } = {}) {
     toolCalls: new Map(),
     done: false,
     wasLocalCommand: false,
+    errorMessage: null,
     handleEvent(event) {
       if (typeof event.session_id === 'string') turn.sessionId = event.session_id;
 
@@ -365,6 +369,22 @@ function createTurnAccumulator({ onChunk, onStatus } = {}) {
         turn.resultText = typeof event.result === 'string' ? event.result : turn.fullText;
         if (Array.isArray(event.permission_denials) && event.permission_denials.length) {
           turn.permissionDenials = event.permission_denials;
+        }
+        // A `result` event isn't always a successful completion — confirmed
+        // live: an unusable CLI flag (e.g. an agent created with a bogus
+        // resumeId, so --resume is invalid) still produces a well-formed
+        // `result` event, just with is_error:true, subtype
+        // "error_during_execution", and the actual message in `errors`
+        // rather than `result` (which is why the fallback above lands on
+        // turn.fullText — empty, since the model never ran). Without this
+        // check, that error event was previously treated exactly like a
+        // real empty-text success: the turn "completed" with fullText: '',
+        // silently — an empty reply bubble with zero diagnostic, and every
+        // later message to that agent failing the exact same silent way.
+        if (event.is_error) {
+          turn.errorMessage = Array.isArray(event.errors) && event.errors.length
+            ? event.errors.join('; ')
+            : (turn.resultText || 'unknown error');
         }
         turn.done = true;
       }
@@ -620,10 +640,31 @@ function runOneTurn(proc, content, { onChunk, onStatus, signal }) {
       });
     };
 
+    const fail = (message) => {
+      if (settled) return;
+      settled = true;
+      proc.currentTurn = null;
+      if (signal) signal.removeEventListener('abort', killForStop);
+      reject(new Error(message));
+    };
+
     proc.currentTurn = {
       handleEvent(event) {
         turn.handleEvent(event);
         if (event.type !== 'result') return;
+        // A `result` event with is_error:true (e.g. an invalid --resume
+        // flag, or another flag the CLI rejects outright) is a failure, not
+        // a successful empty-text reply — see turn.errorMessage's docs.
+        // Reject here rather than falling through to handleExit's own
+        // non-zero-exit check below: this event already settles the turn
+        // (turn.done = true), so handleExit's `if (settled) return` would
+        // otherwise just silently no-op once the process actually exits a
+        // moment later, and the caller would be left with `finish()`'s
+        // empty-string "success" instead of ever seeing the real error.
+        if (turn.errorMessage) {
+          fail(t('errors.claudeExecutionError', { message: turn.errorMessage }));
+          return;
+        }
         if (looksLikeMcpAuthFailure(turn.resultText)) {
           // Don't block returning this turn's (already-user-visible) error
           // text — evict in the background so the conversation isn't

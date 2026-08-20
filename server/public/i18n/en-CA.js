@@ -160,6 +160,7 @@ export default {
   'errors.invalidTheme': 'theme must be one of: {themes}',
   'errors.cantReadDirectory': "Can't read directory: {message}",
   'errors.claudeExitCode': 'Claude process exited with code {code}',
+  'errors.claudeExecutionError': 'Claude reported an error: {message}',
   'errors.claudeSpawnFailed': 'Failed to spawn Claude: {message}',
   'errors.workingDirMissing': "{name}'s working directory no longer exists on disk: {path}. Update it in the agent's settings before messaging {name} again.",
   'errors.streamErrorPrefix': '[Error: {error}]',

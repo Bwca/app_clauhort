@@ -160,6 +160,7 @@ export default {
   'errors.invalidTheme': "le thème doit être l'un des suivants : {themes}",
   'errors.cantReadDirectory': 'Impossible de lire le répertoire : {message}',
   'errors.claudeExitCode': "Le processus Claude s'est arrêté avec le code {code}",
+  'errors.claudeExecutionError': "Claude a signalé une erreur : {message}",
   'errors.claudeSpawnFailed': 'Échec du démarrage de Claude : {message}',
   'errors.workingDirMissing': "Le répertoire de travail de {name} n'existe plus sur le disque : {path}. Mettez-le à jour dans les paramètres de l'agent avant de contacter {name} à nouveau.",
   'errors.streamErrorPrefix': '[Erreur : {error}]',
