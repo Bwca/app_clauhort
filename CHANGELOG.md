@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.2.3] - 2026-08-20
+
+### Fixed
+- Browser access (`chromeAccess`) was enforced as a single, app-wide singleton — creating or editing a second agent with it enabled returned a 409 conflict. That guard assumed the Claude in Chrome extension only holds one paired connection at a time, but the extension actually bridges through a local WebSocket relay (`ws://localhost:8765`) that scopes each connecting `--chrome` CLI process to its own isolated MCP tab group, so concurrent agents don't steal each other's pairing. Removed the singleton check (`getChromeAccessAgent` in `server/store/db.js`, and both call sites in `server/routes/agents.js`) and the "only one agent app-wide" copy in the UI hint/error strings — any number of agents may now hold browser access at once.
+
 ## [1.2.2] - 2026-08-20
 
 ### Fixed
