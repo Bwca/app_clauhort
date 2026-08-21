@@ -7,7 +7,7 @@ import { Router } from 'express';
 import { spawn } from 'child_process';
 import { existsSync } from 'fs';
 import { v4 as uuidv4 } from 'uuid';
-import { getAgents, getAgent, createAgent, updateAgent, deleteAgent, getChromeAccessAgent } from '../store/db.js';
+import { getAgents, getAgent, createAgent, updateAgent, deleteAgent } from '../store/db.js';
 import { verifyClaudeBinAvailable } from '../services/agentRunner.js';
 import { killAgent, getAgentSkills, spawnForAgent } from '../services/agentProcessManager.js';
 import { listAgentCommands, mergeSkills } from '../services/commands.js';
@@ -52,8 +52,10 @@ router.get('/:id', (req, res) => {
  * @param {boolean} [req.body.dangerouslySkipPermissions] - "YOLO mode", opt-in
  * @param {boolean} [req.body.isObserver] - Observer mode, opt-in (creation-time only in the UI)
  * @param {boolean} [req.body.chromeAccess] - Browser access via the Claude in
- *   Chrome extension, opt-in (creation-time only in the UI). At most one
- *   agent app-wide may have this set — see getChromeAccessAgent's docs.
+ *   Chrome extension, opt-in (creation-time only in the UI). Multiple agents
+ *   may hold this concurrently — the extension's local bridge (ws://localhost:8765)
+ *   scopes each connecting CLI process to its own tab group, so concurrent
+ *   `--chrome` sessions don't steal each other's pairing.
  * @param {string} [req.body.note] - Freeform note for the user's own
  *   reference (why this agent exists) — never sent to the CLI.
  */
@@ -68,10 +70,6 @@ router.post('/', async (req, res) => {
   const verified = await verifyClaudeBinAvailable();
   if (!verified.ok) {
     return res.status(400).json({ error: t('errors.agentVerifyFailed', { message: verified.error }) });
-  }
-  if (chromeAccess) {
-    const holder = getChromeAccessAgent();
-    if (holder) return res.status(409).json({ error: t('errors.chromeAccessConflict', { name: holder.name }) });
   }
   const data = { id: uuidv4(), name, color, workingDir };
   if (resumeId) data.resumeId = resumeId;
@@ -100,8 +98,7 @@ router.post('/', async (req, res) => {
  * @param {boolean} [req.body.chromeAccess] - Not exposed in the UI for
  *   editing, but supported generically here. Baked into spawn args
  *   (--chrome), so turning it on evicts the running process like
- *   dangerouslySkipPermissions does. Subject to the same app-wide
- *   single-holder constraint as the create route.
+ *   dangerouslySkipPermissions does.
  * @param {string} [req.body.note] - Freeform note for the user's own
  *   reference. IS exposed in the UI for editing — purely metadata, never
  *   baked into spawn args, so changing it never evicts the running process.
@@ -123,11 +120,6 @@ router.patch('/:id', async (req, res) => {
       return res.status(400).json({ error: t('errors.agentVerifyFailed', { message: verified.error }) });
     }
   }
-  if (chromeAccess && chromeAccess !== existing.chromeAccess) {
-    const holder = getChromeAccessAgent(existing.id);
-    if (holder) return res.status(409).json({ error: t('errors.chromeAccessConflict', { name: holder.name }) });
-  }
-
   const agent = await updateAgent(req.params.id, { name, color, workingDir, resumeId, dangerouslySkipPermissions, isObserver, chromeAccess, note: note !== undefined ? note.trim() : undefined });
   if (!agent) return res.status(404).json({ error: t('errors.agentNotFound') });
   // workingDir/dangerouslySkipPermissions/resumeId/chromeAccess are all

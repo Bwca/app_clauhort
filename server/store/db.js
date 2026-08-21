@@ -82,10 +82,10 @@ function transaction(fn) {
  *   edit later, though PATCH supports it generically). Purely server-side routing/
  *   context logic — does not affect CLI spawn args at all.
  * @property {boolean} [chromeAccess] - Spawns this agent with `--chrome`, enabling
- *   the Claude in Chrome browser-automation MCP tools. The extension only supports
- *   one paired connection at a time, so at most one agent app-wide may have this
- *   set — enforced at creation/update via getChromeAccessAgent. Opt-in at creation
- *   only (no UI edit later, though PATCH supports it generically).
+ *   the Claude in Chrome browser-automation MCP tools. Multiple agents may hold
+ *   this concurrently — the extension's local bridge scopes each connecting CLI
+ *   process to its own tab group, so no app-wide singleton is needed. Opt-in at
+ *   creation only (no UI edit later, though PATCH supports it generically).
  * @property {string} [note] - Freeform text set by the user, purely a reminder of
  *   why this agent was created / what it's for — never sent to the CLI or the
  *   agent itself. Editable any time (unlike isObserver/chromeAccess) since it
@@ -559,20 +559,6 @@ export function getAgents() {
  */
 export function getAgent(id) {
   const row = db.prepare('SELECT * FROM agents WHERE id = ?').get(id);
-  return row ? rowToAgent(row) : undefined;
-}
-
-/**
- * Returns the one agent (if any) with browser access enabled, other than
- * `excludeId`. The Claude in Chrome extension only holds a single paired
- * connection at a time — a second `--chrome`-enabled agent process would
- * silently steal that pairing out from under the first — so this is used
- * to enforce a single browser-access agent app-wide, not per-chat.
- * @param {string} [excludeId] - Agent id to exclude (e.g. the one being updated)
- * @returns {Agent | undefined}
- */
-export function getChromeAccessAgent(excludeId) {
-  const row = db.prepare('SELECT * FROM agents WHERE chrome_access = 1 AND id != ?').get(excludeId ?? '');
   return row ? rowToAgent(row) : undefined;
 }
 
