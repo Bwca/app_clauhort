@@ -70,13 +70,30 @@ import { APP_VERSION } from './appVersion.js';
  */
 
 /**
+ * Tracks one in-progress agent turn's accumulated state independent of
+ * whether its chat is the one currently on screen — a turn keeps streaming
+ * server-side no matter which chat the user is looking at, so the data
+ * fields below (rawText/statusText/typingHidden/startedAt) are always kept
+ * current. The DOM fields are only populated while `chatId` is the active
+ * chat: selectChat attaches them (attachStreamingBubble) when switching into
+ * this stream's chat and detaches them (detachStreamingBubble) when
+ * switching away, without touching the data fields.
  * @typedef {Object} StreamingEntry
  * @property {string} streamId
+ * @property {string} chatId
  * @property {string} agentId
  * @property {string} agentName
  * @property {string} agentColor
- * @property {HTMLElement} el   - The .msg DOM element
- * @property {HTMLElement} body - The .msg-content text node container
+ * @property {number} startedAt
+ * @property {string} rawText - full accumulated response text so far
+ * @property {string} statusText - last live "what's happening" status line
+ * @property {boolean} typingHidden - true once real text has started streaming (the "responding…" row hides for good at that point)
+ * @property {HTMLElement} [el]   - The .msg DOM element, present only while `chatId` is the active chat
+ * @property {HTMLElement} [body] - The .msg-content text node container
+ * @property {HTMLElement} [typingEl]
+ * @property {HTMLElement} [statusTextEl]
+ * @property {HTMLElement} [elapsedEl]
+ * @property {ReturnType<typeof setInterval>} [timerId]
  */
 
 // ─── State ──────────────────────────────────────────────────────────────────
@@ -760,37 +777,79 @@ function onMessageSaved(message) {
  * @param {{ streamId: string, chatId: string, agentId: string, agentName: string, agentColor: string }} event
  */
 function onStreamStart({ streamId, chatId, agentId, agentName, agentColor }) {
-  if (chatId !== activeChatId) return;
-  const el = createStreamingBubble(agentId, agentName, agentColor);
-  messageList.appendChild(el);
-  scrollToBottom();
-
-  const startedAt = Date.now();
-  const elapsedEl = el.querySelector('.msg-elapsed');
-  const timerId = setInterval(() => {
-    elapsedEl.textContent = t('chat.elapsedSeconds', { seconds: Math.floor((Date.now() - startedAt) / 1000) });
-  }, 1000);
-
-  const stopBtn = el.querySelector('.msg-stop-btn');
-  stopBtn.addEventListener('click', () => {
-    stopAgentStream(streamId);
-    stopBtn.disabled = true;
-    stopBtn.textContent = t('chat.stoppingLabel');
-  });
-
-  streamingEntries[streamId] = {
+  const entry = {
     streamId,
+    chatId,
     agentId,
     agentName,
     agentColor,
-    el,
-    body: el.querySelector('.msg-content'),
+    startedAt: Date.now(),
     rawText: '',
-    typingEl: el.querySelector('.msg-typing'),
-    statusTextEl: el.querySelector('.msg-status-text'),
-    elapsedEl,
-    timerId,
+    statusText: '',
+    typingHidden: false,
   };
+  streamingEntries[streamId] = entry;
+  if (chatId === activeChatId) attachStreamingBubble(entry);
+}
+
+/**
+ * Builds and appends the DOM bubble for a streaming entry that doesn't
+ * currently have one, and wires up its live elapsed-time ticker/stop
+ * button. Used both for a stream that starts while its chat is already
+ * active (onStreamStart) and for one still running in a chat the user
+ * switches back into (selectChat's reconciliation pass) — in the latter
+ * case the entry's data fields (rawText/statusText/typingHidden/startedAt)
+ * already reflect everything that happened while the chat was inactive, so
+ * the rebuilt bubble picks up exactly where the live one would have been.
+ * @param {StreamingEntry} entry
+ */
+function attachStreamingBubble(entry) {
+  const el = createStreamingBubble(entry.agentId, entry.agentName, entry.agentColor);
+  messageList.appendChild(el);
+  scrollToBottom();
+
+  entry.el = el;
+  entry.body = el.querySelector('.msg-content');
+  entry.typingEl = el.querySelector('.msg-typing');
+  entry.statusTextEl = el.querySelector('.msg-status-text');
+  entry.elapsedEl = el.querySelector('.msg-elapsed');
+
+  entry.body.innerHTML = renderMarkdown(entry.rawText);
+  entry.statusTextEl.textContent = entry.statusText || t('chat.respondingLabel');
+  entry.typingEl.hidden = entry.typingHidden;
+  if (!entry.typingHidden) {
+    entry.elapsedEl.textContent = t('chat.elapsedSeconds', { seconds: Math.floor((Date.now() - entry.startedAt) / 1000) });
+    entry.timerId = setInterval(() => {
+      entry.elapsedEl.textContent = t('chat.elapsedSeconds', { seconds: Math.floor((Date.now() - entry.startedAt) / 1000) });
+    }, 1000);
+  }
+
+  const stopBtn = el.querySelector('.msg-stop-btn');
+  stopBtn.addEventListener('click', () => {
+    stopAgentStream(entry.streamId);
+    stopBtn.disabled = true;
+    stopBtn.textContent = t('chat.stoppingLabel');
+  });
+}
+
+/**
+ * Tears down a streaming entry's DOM wiring (and stops its elapsed-time
+ * interval) without discarding the entry itself — called when leaving a
+ * chat, right before selectChat wipes messageList, so that reset doesn't
+ * silently orphan a still-running interval pointing at now-detached
+ * elements. The data fields survive untouched, so attachStreamingBubble can
+ * rebuild an equivalent bubble later if the user switches back before the
+ * stream ends.
+ * @param {StreamingEntry} entry
+ */
+function detachStreamingBubble(entry) {
+  if (entry.timerId) clearInterval(entry.timerId);
+  entry.el = undefined;
+  entry.body = undefined;
+  entry.typingEl = undefined;
+  entry.statusTextEl = undefined;
+  entry.elapsedEl = undefined;
+  entry.timerId = undefined;
 }
 
 /**
@@ -810,14 +869,19 @@ function stopStreamStatus(entry) {
 function onStreamChunk({ streamId, text }) {
   const entry = streamingEntries[streamId];
   if (!entry) return;
-  if (text && !entry.typingEl.hidden) stopStreamStatus(entry);
+  if (text && !entry.typingHidden) {
+    entry.typingHidden = true;
+    if (entry.el) stopStreamStatus(entry);
+  }
+  entry.rawText += text;
   // Re-rendered from the full accumulated text each time, not patched
   // incrementally — a still-open token (half-typed "**bold", an unclosed
   // code fence) just renders as literal text until its closing token
   // arrives and it snaps into formatting. Cosmetic only, self-correcting.
-  entry.rawText += text;
-  entry.body.innerHTML = renderMarkdown(entry.rawText);
-  scrollToBottom();
+  if (entry.body) {
+    entry.body.innerHTML = renderMarkdown(entry.rawText);
+    scrollToBottom();
+  }
 }
 
 /**
@@ -828,8 +892,9 @@ function onStreamChunk({ streamId, text }) {
  */
 function onStreamStatus({ streamId, status }) {
   const entry = streamingEntries[streamId];
-  if (!entry || entry.typingEl.hidden) return;
-  entry.statusTextEl.textContent = status;
+  if (!entry || entry.typingHidden) return;
+  entry.statusText = status;
+  if (entry.statusTextEl) entry.statusTextEl.textContent = status;
 }
 
 /**
@@ -838,36 +903,43 @@ function onStreamStatus({ streamId, status }) {
  *           stopped: boolean }} event
  */
 function onStreamEnd({ streamId, chatId, message, agentId, permissionDenials, stopped }) {
+  const entry = streamingEntries[streamId];
+  if (entry) {
+    if (entry.timerId) clearInterval(entry.timerId);
+    delete streamingEntries[streamId];
+  }
+
   // An agent reply landing in a chat the user isn't currently looking at —
-  // flag it unread. Checked unconditionally (not just inside the `if
-  // (entry)` block below), since a background chat's stream never got an
-  // entry in the first place (onStreamStart bails out early for it too).
+  // flag it unread. There's nothing to render here either way: any bubble
+  // for this stream was already detached (if the user switched away —
+  // see selectChat) or never existed (if this chat was never active during
+  // the whole turn), and the message is safely persisted server-side, so
+  // it'll show up via the normal REST load whenever the user switches in.
   if (chatId !== activeChatId) {
     unreadChatIds.add(chatId);
     renderChatList();
+    return;
   }
 
-  const entry = streamingEntries[streamId];
-  if (entry) {
-    clearInterval(entry.timerId);
-    const finalEl = buildMessageEl(message);
-    entry.el.replaceWith(finalEl);
-    delete streamingEntries[streamId];
+  if ($(`[data-msg-id="${message.id}"]`)) return; // already rendered (e.g. a duplicate event)
 
-    // Purely a live-session annotation — not persisted, so it won't reappear
-    // after a reload. That's fine: it's just telling the user "this is why
-    // the reply cuts off here", not part of the durable record.
-    if (stopped) {
-      finalEl.querySelector('.msg-meta').insertAdjacentHTML(
-        'beforeend',
-        `<span class="msg-stopped-badge" data-testid="msg-stopped-badge" title="${t('chat.stoppedTitle')}">⏹ ${t('chat.stoppedLabel')}</span>`
-      );
-    }
+  const finalEl = buildMessageEl(message);
+  if (entry?.el) entry.el.replaceWith(finalEl);
+  else messageList.appendChild(finalEl);
 
-    if (permissionDenials?.length) {
-      const card = buildPermissionCard(agentId, chatId, permissionDenials);
-      finalEl.after(card);
-    }
+  // Purely a live-session annotation — not persisted, so it won't reappear
+  // after a reload. That's fine: it's just telling the user "this is why
+  // the reply cuts off here", not part of the durable record.
+  if (stopped) {
+    finalEl.querySelector('.msg-meta').insertAdjacentHTML(
+      'beforeend',
+      `<span class="msg-stopped-badge" data-testid="msg-stopped-badge" title="${t('chat.stoppedTitle')}">⏹ ${t('chat.stoppedLabel')}</span>`
+    );
+  }
+
+  if (permissionDenials?.length) {
+    const card = buildPermissionCard(agentId, chatId, permissionDenials);
+    finalEl.after(card);
   }
   scrollToBottom();
 }
@@ -1103,13 +1175,13 @@ function denyPermission(agentId, chatId, toolName, value, autoContinue, outcomes
  */
 function onStreamError({ streamId, error }) {
   const entry = streamingEntries[streamId];
-  if (entry) {
-    stopStreamStatus(entry);
-    entry.body.textContent = t('errors.streamErrorPrefix', { error });
-    entry.body.style.color = 'var(--red)';
-    entry.el.classList.remove('streaming');
-    delete streamingEntries[streamId];
-  }
+  if (!entry) return;
+  delete streamingEntries[streamId];
+  if (!entry.el) return; // errored while its chat wasn't active — not persisted server-side, so nothing to show later either
+  stopStreamStatus(entry);
+  entry.body.textContent = t('errors.streamErrorPrefix', { error });
+  entry.body.style.color = 'var(--red)';
+  entry.el.classList.remove('streaming');
 }
 
 // ─── DOM rendering ───────────────────────────────────────────────────────────
@@ -2099,11 +2171,29 @@ async function selectChat(id) {
   chatTopbarName.textContent = t('chat.channelName', { name: chat?.name ?? '' });
   emptyState.hidden = true;
   chatView.hidden = false;
+
+  // Streaming bubbles for the chat we're leaving are about to be wiped out
+  // by the innerHTML reset below — detach their DOM wiring first so the
+  // underlying streamingEntries survive (data intact) for the
+  // reconciliation pass below to rebuild them if/when the user switches
+  // back in while still streaming.
+  for (const entry of Object.values(streamingEntries)) {
+    if (entry.el) detachStreamingBubble(entry);
+  }
   messageList.innerHTML = '';
 
   const res = await fetch(`/api/chats/${id}/messages`);
   const msgs = /** @type {Message[]} */ (await res.json());
   for (const msg of msgs) appendMessage(msg);
+
+  // Reattach any streams still running in this chat — e.g. the user asked
+  // something, switched away before/while the agent replied, and has now
+  // switched back. Without this, a stream still going while this chat
+  // wasn't active would never show as in-progress, and its finished reply
+  // would silently never render (see onStreamEnd).
+  for (const entry of Object.values(streamingEntries)) {
+    if (entry.chatId === id) attachStreamingBubble(entry);
+  }
 
   scheduledPanel.hidden = true;
   const scheduledRes = await fetch(`/api/chats/${id}/scheduled-messages`);
