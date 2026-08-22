@@ -1043,10 +1043,14 @@ function buildPermissionCard(agentId, chatId, denials) {
   card.dataset.agentId = agentId ?? '';
   card.hidden = !isVisibleUnderMessageFilter(agentId);
 
+  const header = document.createElement('div');
+  header.className = 'perm-header';
+  card.appendChild(header);
+
   const label = document.createElement('p');
   label.className = 'perm-label';
   label.textContent = t('perm.requiredLabel');
-  card.appendChild(label);
+  header.appendChild(label);
 
   // A single turn can carry more than one denial for the exact same
   // tool+command — the model sometimes retries a blocked call itself before
@@ -1088,6 +1092,57 @@ function buildPermissionCard(agentId, chatId, denials) {
   /** @type {({ toolName: string, value: string, granted: boolean } | null)[]} */
   const outcomes = new Array(totalRows).fill(null);
 
+  // Bulk grant, for when a turn racked up several denials at once (e.g. a
+  // multi-file edit, or a few different Bash calls) and clicking "Grant"
+  // one row at a time is just tedium — only worth showing when there's
+  // more than one row to resolve. Reuses the exact same resolveRow path as
+  // an individual row's own button, so a mix of some rows already resolved
+  // by hand and the rest resolved in bulk still ends up with exactly one
+  // autoContinue firing, on whichever click resolves the last row.
+  let grantAllBtn = null;
+  if (totalRows > 1) {
+    grantAllBtn = document.createElement('button');
+    grantAllBtn.className = 'perm-grant-all-btn';
+    grantAllBtn.dataset.testid = 'perm-grant-all-btn';
+    grantAllBtn.textContent = t('perm.grantAllBtn');
+    grantAllBtn.addEventListener('click', () => {
+      grantAllBtn.disabled = true;
+      for (const state of rowStates) {
+        if (!state.resolved) resolveRow(state, true);
+      }
+    });
+    header.appendChild(grantAllBtn);
+  }
+
+  /**
+   * Resolves one row (grant or deny), shared by that row's own button and
+   * the bulk "Grant all" button above. A row can only be resolved one way —
+   * marking it `resolved` and disabling both its buttons rules out
+   * grant-then-deny (or vice versa) on the same denial, whichever path
+   * triggered it.
+   * @param {{ idx: number, denial: import('../services/agentRunner.js').PermissionDenial, value: string, grantBtn: HTMLButtonElement, denyBtn: HTMLButtonElement, resolved: boolean }} state
+   * @param {boolean} granted
+   */
+  function resolveRow(state, granted) {
+    state.resolved = true;
+    resolvedCount += 1;
+    outcomes[state.idx] = { toolName: state.denial.tool_name, value: state.value, granted };
+    const autoContinue = resolvedCount === totalRows;
+    if (granted) {
+      grantPermission(agentId, chatId, state.denial.tool_name, state.value, autoContinue, autoContinue ? outcomes : undefined);
+      state.grantBtn.textContent = t('perm.grantedBtn');
+    } else {
+      denyPermission(agentId, chatId, state.denial.tool_name, state.value, autoContinue, autoContinue ? outcomes : undefined);
+      state.denyBtn.textContent = t('perm.deniedBtn');
+    }
+    state.grantBtn.disabled = true;
+    state.denyBtn.disabled = true;
+    if (grantAllBtn && resolvedCount === totalRows) grantAllBtn.hidden = true;
+  }
+
+  /** @type {{ idx: number, denial: import('../services/agentRunner.js').PermissionDenial, value: string, grantBtn: HTMLButtonElement, denyBtn: HTMLButtonElement, resolved: boolean }[]} */
+  const rowStates = [];
+
   uniqueDenials.forEach(({ denial, value }, idx) => {
     const row = document.createElement('div');
     row.className = 'perm-row';
@@ -1098,27 +1153,10 @@ function buildPermissionCard(agentId, chatId, denials) {
       <button class="perm-grant-btn" data-testid="perm-grant-btn">${t('perm.grantBtn')}</button>`;
     const grantBtn = row.querySelector('.perm-grant-btn');
     const denyBtn = row.querySelector('.perm-deny-btn');
-    // A row can only be resolved one way — once either button is clicked,
-    // disable both so there's no way to grant-then-deny (or vice versa)
-    // the same denial.
-    grantBtn.addEventListener('click', () => {
-      resolvedCount += 1;
-      outcomes[idx] = { toolName: denial.tool_name, value, granted: true };
-      const autoContinue = resolvedCount === totalRows;
-      grantPermission(agentId, chatId, denial.tool_name, value, autoContinue, autoContinue ? outcomes : undefined);
-      grantBtn.textContent = t('perm.grantedBtn');
-      grantBtn.disabled = true;
-      denyBtn.disabled = true;
-    });
-    denyBtn.addEventListener('click', () => {
-      resolvedCount += 1;
-      outcomes[idx] = { toolName: denial.tool_name, value, granted: false };
-      const autoContinue = resolvedCount === totalRows;
-      denyPermission(agentId, chatId, denial.tool_name, value, autoContinue, autoContinue ? outcomes : undefined);
-      denyBtn.textContent = t('perm.deniedBtn');
-      denyBtn.disabled = true;
-      grantBtn.disabled = true;
-    });
+    const state = { idx, denial, value, grantBtn, denyBtn, resolved: false };
+    rowStates.push(state);
+    grantBtn.addEventListener('click', () => resolveRow(state, true));
+    denyBtn.addEventListener('click', () => resolveRow(state, false));
     card.appendChild(row);
   });
 

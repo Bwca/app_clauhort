@@ -249,7 +249,11 @@ html, body { height: 100%; background: var(--bg0); color: var(--text); font-fami
 
 /* ── Permission denial card ─────────────────────────────────────────── */
 .perm-card { margin: -4px 0 0; padding: 10px 14px; border-radius: 8px; background: rgba(243,139,168,.08); border: 1px solid rgba(243,139,168,.25); display: flex; flex-direction: column; gap: 6px; }
+.perm-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .perm-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: var(--red); }
+.perm-grant-all-btn { padding: 3px 10px; border-radius: 5px; border: 1px solid var(--green); background: transparent; color: var(--green); font-size: 11px; font-weight: 600; cursor: pointer; flex-shrink: 0; transition: background .15s, color .15s; }
+.perm-grant-all-btn:hover:not(:disabled) { background: var(--green); color: var(--bg0); }
+.perm-grant-all-btn:disabled { opacity: .6; cursor: default; }
 .perm-row { display: flex; align-items: center; gap: 8px; font-size: 13px; }
 .perm-tool { font-weight: 600; color: var(--red); min-width: 48px; flex-shrink: 0; }
 .perm-path { flex: 1; color: var(--muted); font-family: monospace; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

@@ -116,6 +116,7 @@ export default {
   'perm.grantedBtn': 'Accordé ✓',
   'perm.denyBtn': 'Refuser',
   'perm.deniedBtn': 'Refusé ✕',
+  'perm.grantAllBtn': 'Tout accorder',
 
   'msg.copyTextTitle': 'Copier le texte',
   'msg.copyImageTitle': 'Copier comme image',
