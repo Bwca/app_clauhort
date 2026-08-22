@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.2.6] - 2026-08-22
+
+### Added
+- The schedule-message modal now has its own content field, pre-filled from whatever's in the composer (or from the message being edited) but editable in place — fixes clicking the 🕐 button before typing anything, which used to open a modal with no way to see or fix the "content required" error it produced on submit.
+- Pending scheduled messages can now be edited (✎ button in the scheduled panel) — change the content, attachments, or send time of a message that hasn't fired yet, instead of only being able to cancel and re-create it. Backed by a new `PATCH /api/chats/:id/scheduled-messages/:scheduledId` endpoint.
+
+### Fixed
+- Rescheduling a pending message to a new time re-armed its in-memory timer without clearing the previous one first — the old timer would still fire at the original time with the pre-edit content. `armTimer` (`server/services/scheduler.js`) now clears any existing timer for that id before arming the new one.
+
 ## [1.2.5] - 2026-08-21
 
 ### Added
