@@ -368,4 +368,60 @@ describe('Permission grants', () => {
     assert.equal(existsSync(join(workDir, '.git')), true, 'the Bash action (granted earlier) should now have run');
     assert.equal(existsSync(targetFile), true, 'the Write action (granted last) should have run');
   });
+
+  test('"Grant all" grants every row in a multi-row card at once and auto-continues the turn', async () => {
+    const workDir = agentDir('claudia');
+    const outsideDir = agentDir('outside');
+    const targetFile = join(outsideDir, 'notes.txt');
+
+    await createChat(page, 'Grant All Test');
+    await createAgent(page, { name: 'Claudia', workingDir: workDir, addToChat: true });
+
+    await sendMessage(
+      page,
+      `@Claudia in this single turn, attempt BOTH of the following even if one is denied: ` +
+      `(1) use the Bash tool to run exactly: git init -q && git add -A, and ` +
+      `(2) use the Write tool to create the file ${targetFile} with content: hello. ` +
+      `Then reply with exactly: done`
+    );
+    await waitForAgentResponse(page, { timeout: 30_000 });
+
+    const rows = await waitForPermCard();
+    assert.equal(rows.length, 2, `expected exactly two denial rows, got: ${JSON.stringify(rows)}`);
+
+    const grantAllBtn = await page.$(tid('perm-grant-all-btn'));
+    assert.ok(grantAllBtn, 'expected a "Grant all" button on a multi-row card');
+    await grantAllBtn.click();
+
+    await page.waitForFunction(
+      () => [...document.querySelectorAll('.perm-grant-btn')].every((btn) => btn.textContent.includes('✓')),
+      { timeout: 3000 }
+    );
+
+    // No follow-up message typed — the bulk grant must, on its own, nudge
+    // the agent to retry both actions it was just denied.
+    const responseText = await waitForAgentResponse(page, { timeout: 30_000 });
+    assert.equal(responseText, 'done');
+
+    // Real, independently-observable side effects: BOTH actions ran off a
+    // single click, proving the bulk grant actually authorized every row,
+    // not just triggered the auto-continue on its own.
+    assert.equal(existsSync(join(workDir, '.git')), true, 'the Bash action should have run via the bulk grant');
+    assert.equal(existsSync(targetFile), true, 'the Write action should have run via the bulk grant');
+  });
+
+  test('"Grant all" is not shown on a single-row card — nothing to bulk-resolve', async () => {
+    const dir = agentDir('claudia');
+    await createChat(page, 'Single Row No Bulk Test');
+    await createAgent(page, { name: 'Claudia', workingDir: dir, addToChat: true });
+
+    await sendMessage(page, '@Claudia use the Bash tool to run exactly: git init -q && git add -A');
+    await waitForAgentResponse(page, { timeout: 30_000 });
+
+    const rows = await waitForPermCard();
+    assert.equal(rows.length, 1, `expected exactly one denial row, got: ${JSON.stringify(rows)}`);
+
+    const grantAllBtn = await page.$(tid('perm-grant-all-btn'));
+    assert.equal(grantAllBtn, null, 'a single-row card should not show a bulk grant button');
+  });
 });
