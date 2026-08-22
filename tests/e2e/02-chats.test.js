@@ -185,6 +185,37 @@ describe('Chat management', () => {
     );
   });
 
+  test('switching away and back while a reply is still streaming shows it in progress, not silently missing', async () => {
+    await createChat(page, 'Chat A');
+    await createAgent(page, { name: 'Claudia', workingDir: agentDir('claudia'), addToChat: true });
+    await createChat(page, 'Chat B'); // ends up active — Chat A is now in the background
+
+    await clickChatByName(page, 'Chat A');
+    await sendMessage(page, "@Claudia use the Bash tool to run `sleep 3`, then reply with exactly: done");
+
+    // Switch away before the agent's reply is anywhere near done.
+    await clickChatByName(page, 'Chat B');
+    await new Promise((r) => setTimeout(r, 1500));
+
+    // Switch back into Chat A while Claudia is still working — this is the
+    // exact scenario that used to leave no trace of the in-progress reply.
+    await clickChatByName(page, 'Chat A');
+
+    await page.waitForFunction(
+      () => document.querySelector('[data-testid="streaming-bubble"]') !== null,
+      { timeout: 5000 }
+    );
+    await page.waitForFunction(
+      () => document.querySelector('[data-testid="streaming-bubble"]') === null,
+      { timeout: 30_000 }
+    );
+
+    const messages = await page.$$(tid('message') + '[data-role="agent"]');
+    const last = messages[messages.length - 1];
+    const text = await last.$eval(tid('msg-content'), (el) => el.textContent);
+    assert.equal(text, 'done', 'the finished reply should render once the user is back on its chat');
+  });
+
   test('selecting a chat never touches the URL, but persists via sessionStorage — refreshing returns to that same chat', async () => {
     await createChat(page, 'Chat A');
     await createChat(page, 'Chat B'); // ends up active — createChat selects what it creates
