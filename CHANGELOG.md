@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.2.4] - 2026-08-21
+
+### Fixed
+- Switching away from a chat before or while an agent's reply was still streaming, then switching back, showed no sign the reply was in progress — and once it finished, the reply never rendered at all, only resurfacing after another chat switch forced a fresh reload. `streamingEntries` (`server/public/app.js`) only tracked a stream's state while its chat happened to be the active one, and `selectChat` never reconciled with streams still running elsewhere. Streaming state (accumulated text, live status, elapsed timer) is now tracked per-stream regardless of which chat is on screen, and `selectChat` detaches/reattaches the DOM bubble as you switch chats so an in-progress reply picks back up exactly where it left off.
+
 ## [1.2.3] - 2026-08-20
 
 ### Fixed
