@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.2.5] - 2026-08-21
+
+### Added
+- A "Grant all" button on a permission-denial card with more than one pending row — grants every still-unresolved row in that card at once instead of clicking "Grant" per row, while individual grant/deny buttons remain available for resolving rows one at a time or mixing grants and denials within the same card.
+
 ## [1.2.4] - 2026-08-21
 
 ### Fixed
