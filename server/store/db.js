@@ -1074,6 +1074,26 @@ export async function createScheduledMessage(data) {
 }
 
 /**
+ * Updates a pending scheduled message's content, attachments, and send
+ * time in place — used to reschedule/modify one before it fires. Returns
+ * the updated row, or null if it no longer exists (already fired or
+ * canceled out from under the request).
+ * @param {string} id
+ * @param {{ content: string, attachments: Attachment[], sendAt: string }} data
+ * @returns {Promise<ScheduledMessage | null>}
+ */
+export async function updateScheduledMessage(id, data) {
+  const existing = db.prepare('SELECT id FROM scheduled_messages WHERE id = ?').get(id);
+  if (!existing) return null;
+  db.prepare(`
+    UPDATE scheduled_messages SET content = ?, attachments = ?, send_at = ? WHERE id = ?
+  `).run(data.content, JSON.stringify(data.attachments ?? []), data.sendAt, id);
+  return rowToScheduledMessage(
+    db.prepare('SELECT * FROM scheduled_messages WHERE id = ?').get(id)
+  );
+}
+
+/**
  * Deletes a scheduled message if it still exists, returning what was
  * deleted (or null if it was already gone — already fired, already
  * canceled, or never existed). Used for BOTH cancellation and firing, so

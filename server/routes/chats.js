@@ -22,6 +22,7 @@ import {
   getScheduledMessages,
   getScheduledMessage,
   createScheduledMessage,
+  updateScheduledMessage,
 } from '../store/db.js';
 import { scheduleTimer, cancelScheduledMessage } from '../services/scheduler.js';
 import { spawnForAgent, killAgent } from '../services/agentProcessManager.js';
@@ -239,6 +240,42 @@ export default function createChatsRouter(wss) {
     });
     scheduleTimer(row, wss);
     res.status(201).json(row);
+  });
+
+  /**
+   * PATCH /api/chats/:id/scheduled-messages/:scheduledId
+   * Modifies a pending scheduled message's content/attachments/send time
+   * before it fires, re-arming its timer for the (possibly new) time.
+   * 404s if it already fired or was canceled out from under this request.
+   * Same validation as creating one — see the POST handler above.
+   * @param {Object} req.body
+   * @param {string} [req.body.content]
+   * @param {import('../store/db.js').Attachment[]} [req.body.attachments]
+   * @param {string} req.body.sendAt - ISO 8601 timestamp, must be in the future
+   */
+  router.patch('/:id/scheduled-messages/:scheduledId', async (req, res) => {
+    const existing = getScheduledMessage(req.params.scheduledId);
+    if (!existing || existing.chatId !== req.params.id) {
+      return res.status(404).json({ error: t('errors.scheduleNotFound') });
+    }
+
+    const { content = '', attachments = [], sendAt } = req.body;
+    if (!content.trim() && attachments.length === 0) {
+      return res.status(400).json({ error: t('errors.scheduledContentRequired') });
+    }
+    const sendAtMs = Date.parse(sendAt);
+    if (Number.isNaN(sendAtMs) || sendAtMs <= Date.now()) {
+      return res.status(400).json({ error: t('errors.scheduledSendAtPast') });
+    }
+
+    const row = await updateScheduledMessage(req.params.scheduledId, {
+      content,
+      attachments,
+      sendAt: new Date(sendAtMs).toISOString(),
+    });
+    if (!row) return res.status(404).json({ error: t('errors.scheduleNotFound') });
+    scheduleTimer(row, wss);
+    res.json(row);
   });
 
   /**
