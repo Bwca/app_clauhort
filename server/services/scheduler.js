@@ -50,14 +50,23 @@ async function fireScheduledMessage(id, wss) {
 
 /**
  * Arms (or re-arms) an in-memory timer for a pending scheduled message.
- * Delays beyond MAX_DELAY chain through an intermediate wakeup instead of
- * overflowing; an already-overdue sendAt (e.g. the server was down past
- * it) fires almost immediately rather than being treated as an error.
+ * Clears any timer already armed for this id first — without this, calling
+ * armTimer a second time for the same id (e.g. rescheduling to a new time)
+ * would leave the OLD timeout still live underneath the new one, since
+ * setting a new Map entry doesn't cancel the handle the old one held; the
+ * stale timer would then fire fireScheduledMessage at the original time
+ * with the message's since-edited content. Delays beyond MAX_DELAY chain
+ * through an intermediate wakeup instead of overflowing; an already-overdue
+ * sendAt (e.g. the server was down past it) fires almost immediately
+ * rather than being treated as an error.
  * @param {import('../store/db.js').ScheduledMessage} row
  * @param {import('ws').WebSocketServer} wss
  * @returns {void}
  */
 function armTimer(row, wss) {
+  const existing = timers.get(row.id);
+  if (existing) clearTimeout(existing);
+
   const delay = new Date(row.sendAt).getTime() - Date.now();
   if (delay > MAX_DELAY) {
     timers.set(row.id, setTimeout(() => armTimer(row, wss), MAX_DELAY));
@@ -67,9 +76,9 @@ function armTimer(row, wss) {
 }
 
 /**
- * Persists nothing itself — callers create the DB row first — this just
- * arms the in-memory timer for it. Called right after a scheduled message
- * is created via the REST endpoint.
+ * Persists nothing itself — callers create or update the DB row first —
+ * this just (re-)arms the in-memory timer for it. Called right after a
+ * scheduled message is created or modified via the REST endpoints.
  * @param {import('../store/db.js').ScheduledMessage} row
  * @param {import('ws').WebSocketServer} wss
  * @returns {void}
