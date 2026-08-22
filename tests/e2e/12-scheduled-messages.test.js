@@ -42,10 +42,28 @@ describe('Scheduled messages', () => {
   });
 
   /**
-   * Types `content` into the composer (if given), opens the schedule
-   * modal, sets the datetime-local input to `secondsFromNow` out (the
-   * input has step="1" so second-precision is honored, not rounded to the
-   * current minute), and submits.
+   * Sets the schedule modal's datetime-local input to `secondsFromNow` out
+   * (the input has step="1" so second-precision is honored, not rounded to
+   * the current minute). Assumes the modal is already open.
+   * @param {import('puppeteer').Page} p
+   * @param {number} secondsFromNow
+   * @returns {Promise<void>}
+   */
+  async function setScheduleTimeInput(p, secondsFromNow) {
+    await p.evaluate((secs) => {
+      const d = new Date(Date.now() + secs * 1000);
+      const pad = (n) => String(n).padStart(2, '0');
+      const value = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+      const input = document.querySelector('[data-testid="schedule-time-input"]');
+      input.value = value;
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    }, secondsFromNow);
+  }
+
+  /**
+   * Types `content` into the composer (if given), opens the schedule modal
+   * (which prefills its own content field from the composer), sets the
+   * send time `secondsFromNow` out, and submits.
    * @param {import('puppeteer').Page} p
    * @param {string} content
    * @param {number} secondsFromNow
@@ -61,14 +79,7 @@ describe('Scheduled messages', () => {
       () => !document.querySelector('[data-testid="schedule-overlay"]')?.hidden,
       { timeout: 3000 }
     );
-    await p.evaluate((secs) => {
-      const d = new Date(Date.now() + secs * 1000);
-      const pad = (n) => String(n).padStart(2, '0');
-      const value = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
-      const input = document.querySelector('[data-testid="schedule-time-input"]');
-      input.value = value;
-      input.dispatchEvent(new Event('input', { bubbles: true }));
-    }, secondsFromNow);
+    await setScheduleTimeInput(p, secondsFromNow);
     await p.click(tid('schedule-submit'));
     await p.waitForFunction(
       () => document.querySelector('[data-testid="schedule-overlay"]')?.hidden,
@@ -185,14 +196,7 @@ describe('Scheduled messages', () => {
       () => !document.querySelector('[data-testid="schedule-overlay"]')?.hidden,
       { timeout: 3000 }
     );
-    await page.evaluate(() => {
-      const d = new Date(Date.now() + 120_000);
-      const pad = (n) => String(n).padStart(2, '0');
-      const value = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
-      const input = document.querySelector('[data-testid="schedule-time-input"]');
-      input.value = value;
-      input.dispatchEvent(new Event('input', { bubbles: true }));
-    });
+    await setScheduleTimeInput(page, 120);
     await page.click(tid('schedule-submit'));
     const contentErrorVisible = await page.$eval(tid('schedule-error'), (el) => !el.hidden);
     assert.ok(contentErrorVisible, 'expected a content-required error');
@@ -244,9 +248,11 @@ describe('Scheduled messages', () => {
       () => !document.querySelector('[data-testid="schedule-overlay"]')?.hidden,
       { timeout: 3000 }
     );
-    const modalTitle = await page.$eval('#schedule-header span', (el) => el.textContent);
+    const modalTitle = await page.$eval('#schedule-title', (el) => el.textContent);
     assert.equal(modalTitle, enCA['schedule.modalTitle']);
-    const timeLabel = await page.$eval('#schedule-form .field-label span', (el) => el.textContent);
+    const contentLabel = await page.$eval('#schedule-content-label', (el) => el.textContent);
+    assert.equal(contentLabel, enCA['schedule.contentLabel']);
+    const timeLabel = await page.$eval('#schedule-time-label', (el) => el.textContent);
     assert.equal(timeLabel, enCA['schedule.timeLabel']);
     const submitLabel = await page.$eval(tid('schedule-submit'), (el) => el.textContent);
     assert.equal(submitLabel, enCA['schedule.submitBtn']);
@@ -256,6 +262,8 @@ describe('Scheduled messages', () => {
     await waitForScheduledCount(page, 1);
 
     await page.click(tid('scheduled-btn'));
+    const editTitle = await page.$eval(tid('scheduled-edit-btn'), (el) => el.title);
+    assert.equal(editTitle, enCA['schedule.editTitle']);
     const cancelTitle = await page.$eval(tid('scheduled-cancel-btn'), (el) => el.title);
     assert.equal(cancelTitle, enCA['schedule.cancelTitle']);
 
@@ -273,5 +281,108 @@ describe('Scheduled messages', () => {
     const emptyText = await page.$eval('.scheduled-item-empty', (el) => el.textContent);
     assert.equal(emptyText, enCA['schedule.panelEmpty']);
     await waitForScheduledCount(page, 0);
+  });
+
+  test('the modal has its own content field, so scheduling works even when nothing was ever typed into the composer', async () => {
+    await createChat(page, 'Schedule Direct Type Test');
+
+    // Deliberately never touch msg-input — this is exactly the old trap:
+    // clicking Schedule on an empty composer used to open a modal with only
+    // a time field, so the "content required" error on submit had no field
+    // in the modal itself to fix it from.
+    await page.click(tid('schedule-btn'));
+    await page.waitForFunction(
+      () => !document.querySelector('[data-testid="schedule-overlay"]')?.hidden,
+      { timeout: 3000 }
+    );
+    const prefilled = await page.$eval(tid('schedule-content-input'), (el) => el.value);
+    assert.equal(prefilled, '', 'an empty composer should prefill an empty (not stale) content field');
+
+    await page.type(tid('schedule-content-input'), 'typed straight into the modal');
+    await setScheduleTimeInput(page, 120);
+    await page.click(tid('schedule-submit'));
+    await page.waitForFunction(
+      () => document.querySelector('[data-testid="schedule-overlay"]')?.hidden,
+      { timeout: 3000 }
+    );
+
+    await waitForScheduledCount(page, 1);
+    await page.click(tid('scheduled-btn'));
+    const preview = await page.$eval(tid('scheduled-item-preview'), (el) => el.textContent);
+    assert.equal(preview, 'typed straight into the modal');
+
+    // The composer itself was never touched, so it must still be empty.
+    const composerValue = await page.$eval(tid('msg-input'), (el) => el.value);
+    assert.equal(composerValue, '');
+  });
+
+  test('editing a pending scheduled message updates its content and time, and it fires with the new content instead of the old', async () => {
+    await createChat(page, 'Schedule Edit Test');
+
+    await scheduleMessageViaUi(page, 'original content', 15);
+    await waitForScheduledCount(page, 1);
+
+    await page.click(tid('scheduled-btn'));
+    await page.click(tid('scheduled-edit-btn'));
+    await page.waitForFunction(
+      () => !document.querySelector('[data-testid="schedule-overlay"]')?.hidden,
+      { timeout: 3000 }
+    );
+
+    // Prefilled from the scheduled message itself, not the (empty) composer.
+    const prefilled = await page.$eval(tid('schedule-content-input'), (el) => el.value);
+    assert.equal(prefilled, 'original content');
+    const modalTitle = await page.$eval('#schedule-title', (el) => el.textContent);
+    assert.equal(modalTitle, enCA['schedule.modalTitleEdit']);
+    const submitLabel = await page.$eval(tid('schedule-submit'), (el) => el.textContent);
+    assert.equal(submitLabel, enCA['schedule.saveBtn']);
+
+    await page.$eval(tid('schedule-content-input'), (el) => { el.value = ''; });
+    await page.type(tid('schedule-content-input'), 'edited content');
+    await setScheduleTimeInput(page, 3);
+    await page.click(tid('schedule-submit'));
+    await page.waitForFunction(
+      () => document.querySelector('[data-testid="schedule-overlay"]')?.hidden,
+      { timeout: 3000 }
+    );
+
+    // Still exactly one pending item — editing must not create a second one.
+    await page.click(tid('scheduled-btn'));
+    const items = await page.$$(tid('scheduled-item'));
+    assert.equal(items.length, 1);
+    const preview = await page.$eval(tid('scheduled-item-preview'), (el) => el.textContent);
+    assert.equal(preview, 'edited content');
+
+    await waitForChatMessage(page, 'edited content', 10_000);
+    await waitForScheduledCount(page, 0);
+    const contents = await page.$$eval(tid('msg-content'), (els) => els.map((el) => el.textContent));
+    assert.ok(!contents.includes('original content'), 'the pre-edit content must never be sent');
+  });
+
+  test('validation while editing: clearing the content is rejected and leaves the original schedule intact', async () => {
+    await createChat(page, 'Schedule Edit Validation Test');
+
+    await scheduleMessageViaUi(page, 'keep me', 120);
+    await waitForScheduledCount(page, 1);
+
+    await page.click(tid('scheduled-btn'));
+    await page.click(tid('scheduled-edit-btn'));
+    await page.waitForFunction(
+      () => !document.querySelector('[data-testid="schedule-overlay"]')?.hidden,
+      { timeout: 3000 }
+    );
+    await page.$eval(tid('schedule-content-input'), (el) => { el.value = ''; });
+    await page.click(tid('schedule-submit'));
+    const contentErrorVisible = await page.$eval(tid('schedule-error'), (el) => !el.hidden);
+    assert.ok(contentErrorVisible, 'expected a content-required error');
+    await page.click(tid('schedule-close'));
+
+    // The original, unedited row must still be there server-side.
+    const chatsRes = await fetch(`http://localhost:${TEST_PORT}/api/chats`);
+    const [chat] = await chatsRes.json();
+    const listRes = await fetch(`http://localhost:${TEST_PORT}/api/chats/${chat.id}/scheduled-messages`);
+    const rows = await listRes.json();
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].content, 'keep me');
   });
 });
