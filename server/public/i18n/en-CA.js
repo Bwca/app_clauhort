@@ -127,11 +127,16 @@ export default {
 
   'schedule.btnTitle': 'Schedule message',
   'schedule.modalTitle': 'Schedule message',
+  'schedule.modalTitleEdit': 'Edit scheduled message',
+  'schedule.contentLabel': 'Message',
+  'schedule.contentPlaceholder': 'Message…',
   'schedule.timeLabel': 'Send at',
   'schedule.submitBtn': 'Schedule',
+  'schedule.saveBtn': 'Save',
   'schedule.pastTimeError': 'Pick a time in the future',
   'schedule.panelTitle': 'Scheduled messages',
   'schedule.panelEmpty': 'No scheduled messages',
+  'schedule.editTitle': 'Edit this scheduled message',
   'schedule.cancelTitle': 'Cancel this scheduled message',
 
   'attachments.maxAttachments': 'Only {max} attachments allowed per message',

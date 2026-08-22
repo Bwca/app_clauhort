@@ -127,11 +127,16 @@ export default {
 
   'schedule.btnTitle': 'Programmer un message',
   'schedule.modalTitle': 'Programmer un message',
+  'schedule.modalTitleEdit': 'Modifier le message programmé',
+  'schedule.contentLabel': 'Message',
+  'schedule.contentPlaceholder': 'Message…',
   'schedule.timeLabel': 'Envoyer le',
   'schedule.submitBtn': 'Programmer',
+  'schedule.saveBtn': 'Enregistrer',
   'schedule.pastTimeError': 'Choisissez une heure dans le futur',
   'schedule.panelTitle': 'Messages programmés',
   'schedule.panelEmpty': 'Aucun message programmé',
+  'schedule.editTitle': 'Modifier ce message programmé',
   'schedule.cancelTitle': 'Annuler ce message programmé',
 
   'attachments.maxAttachments': 'Seulement {max} pièces jointes sont permises par message',

@@ -429,6 +429,15 @@ let pendingAttachments = [];
 /** @type {ScheduledMessage[]} pending scheduled messages for the active chat */
 let pendingScheduledMessages = [];
 
+/** @type {Attachment[]} the schedule modal's own attachment set — decoupled
+ *  from pendingAttachments so editing a pending scheduled message's
+ *  attachments never touches whatever's independently in the composer */
+let scheduleModalAttachments = [];
+
+/** @type {string | null} id of the scheduled message the modal is currently
+ *  editing, or null when it's composing a brand new one */
+let editingScheduledId = null;
+
 let pasteTextCounter = 0;
 
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
@@ -491,8 +500,11 @@ const mentionDropdown  = $('#mention-dropdown');
 const scheduledBtn     = $('#scheduled-btn');
 const scheduledPanel   = $('#scheduled-panel');
 const scheduleOverlay  = $('#schedule-overlay');
+const scheduleTitleEl  = $('#schedule-title');
 const scheduleClose    = $('#schedule-close');
 const scheduleForm     = $('#schedule-form');
+const scheduleContentInput = $('#schedule-content-input');
+const scheduleAttachmentChips = $('#schedule-attachment-chips');
 const scheduleTimeInput = $('#schedule-time-input');
 const scheduleError    = $('#schedule-error');
 const scheduleCancel   = $('#schedule-cancel');
@@ -618,6 +630,20 @@ function fmtScheduledTime(iso) {
     hour: '2-digit',
     minute: '2-digit',
   });
+}
+
+/**
+ * Converts an ISO timestamp to the local-time value string a
+ * datetime-local input (step="1") expects — the inverse of reading
+ * `new Date(input.value).getTime()` back out at submit time. Used to
+ * prefill the schedule modal's time field when editing a pending message.
+ * @param {string} iso
+ * @returns {string}
+ */
+function toDatetimeLocalValue(iso) {
+  const date = new Date(iso);
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+  return local.toISOString().slice(0, 19);
 }
 
 /**
@@ -2368,7 +2394,9 @@ function renderScheduledPanel() {
         <span class="scheduled-item-preview" data-testid="scheduled-item-preview">${escHtml(scheduled.content || t('attachments.defaultPastedTextLabel'))}</span>
         <span class="scheduled-item-time" data-testid="scheduled-item-time">${fmtScheduledTime(scheduled.sendAt)}</span>
       </div>
+      <button class="scheduled-edit-btn" data-testid="scheduled-edit-btn" title="${t('schedule.editTitle')}">✎</button>
       <button class="scheduled-cancel-btn" data-testid="scheduled-cancel-btn" title="${t('schedule.cancelTitle')}">✕</button>`;
+    li.querySelector('.scheduled-edit-btn').addEventListener('click', () => openScheduleModalForEdit(scheduled));
     li.querySelector('.scheduled-cancel-btn').addEventListener('click', () => cancelScheduled(scheduled.id));
     scheduledPanel.appendChild(li);
   }
@@ -2385,36 +2413,94 @@ async function cancelScheduled(id) {
 }
 
 /**
- * Opens the schedule modal, defaulting the datetime-local input's minimum
- * to "now" (best-effort — browser support for `min` on this input type
- * varies, so the submit handler re-validates regardless).
+ * Re-renders the schedule modal's own attachment chip row from
+ * scheduleModalAttachments — a separate copy from the composer's
+ * pendingAttachments (see that field's docs), so removing a chip here never
+ * touches whatever's independently pending in the composer.
  */
-function openScheduleModal() {
+function renderScheduleAttachmentChips() {
+  renderAttachmentChipsInto(scheduleAttachmentChips, scheduleModalAttachments, (id) => {
+    scheduleModalAttachments = scheduleModalAttachments.filter((a) => a.id !== id);
+    renderScheduleAttachmentChips();
+  });
+}
+
+/**
+ * Shared tail of opening the schedule modal for either a brand new message
+ * or editing a pending one — everything both cases need after their
+ * distinct fields (title/submit label, content, attachments, time) are
+ * already set.
+ */
+function showScheduleModal() {
   scheduleError.hidden = true;
   scheduleError.textContent = '';
   scheduleSubmit.disabled = false;
-  scheduleTimeInput.value = '';
+  renderScheduleAttachmentChips();
+  // Best-effort min (browser support for `min` on datetime-local varies) —
+  // the submit handler re-validates regardless.
   const now = new Date(Date.now() - new Date().getTimezoneOffset() * 60_000);
   scheduleTimeInput.min = now.toISOString().slice(0, 16);
+  scheduledPanel.hidden = true;
   scheduleOverlay.hidden = false;
-  scheduleTimeInput.focus();
+  scheduleContentInput.focus();
+}
+
+/**
+ * Opens the schedule modal to compose a NEW scheduled message, seeded from
+ * whatever's currently in the main composer (content + attachments) —
+ * same starting point as the old behavior, but from here on the modal owns
+ * its own editable copy of both. That's what fixes the old trap where
+ * clicking Schedule on an empty composer only surfaced a "content
+ * required" error after picking a time, with no field in the modal itself
+ * to fix it from: now there's always a visible, directly-editable content
+ * field right there.
+ */
+function openScheduleModal() {
+  editingScheduledId = null;
+  scheduleTitleEl.textContent = t('schedule.modalTitle');
+  scheduleSubmit.textContent = t('schedule.submitBtn');
+  scheduleContentInput.value = msgInput.value;
+  scheduleModalAttachments = [...pendingAttachments];
+  scheduleTimeInput.value = '';
+  showScheduleModal();
+}
+
+/**
+ * Opens the schedule modal to modify a pending scheduled message already
+ * on the server — same modal and validation as creating one, but the
+ * submit handler PATCHes the existing row (re-arming its timer) instead of
+ * POSTing a new one, and leaves the main composer untouched since none of
+ * this content ever came from it.
+ * @param {ScheduledMessage} scheduled
+ */
+function openScheduleModalForEdit(scheduled) {
+  editingScheduledId = scheduled.id;
+  scheduleTitleEl.textContent = t('schedule.modalTitleEdit');
+  scheduleSubmit.textContent = t('schedule.saveBtn');
+  scheduleContentInput.value = scheduled.content;
+  scheduleModalAttachments = [...scheduled.attachments];
+  scheduleTimeInput.value = toDatetimeLocalValue(scheduled.sendAt);
+  showScheduleModal();
 }
 
 function closeScheduleModal() {
   scheduleOverlay.hidden = true;
+  editingScheduledId = null;
 }
 
 /**
- * Submits the schedule form: schedules whatever's currently in the
- * composer (content + attachments), then clears it exactly like a normal
- * send. @mention targeting is resolved fresh once the message actually
- * fires, same as a live message — nothing about targeting is decided here.
+ * Submits the schedule form: creates a new scheduled message (clearing the
+ * composer afterward, exactly like a normal send) or, when the modal was
+ * opened via openScheduleModalForEdit, PATCHes the existing one in place
+ * instead. @mention targeting is resolved fresh once the message actually
+ * fires either way, same as a live message — nothing about targeting is
+ * decided here.
  * @param {SubmitEvent} e
  */
 async function handleScheduleFormSubmit(e) {
   e.preventDefault();
-  const content = msgInput.value.trim();
-  if (!content && pendingAttachments.length === 0) {
+  const content = scheduleContentInput.value.trim();
+  if (!content && scheduleModalAttachments.length === 0) {
     scheduleError.textContent = t('errors.scheduledContentRequired');
     scheduleError.hidden = false;
     return;
@@ -2426,13 +2512,17 @@ async function handleScheduleFormSubmit(e) {
     return;
   }
 
+  const isEdit = editingScheduledId !== null;
   scheduleSubmit.disabled = true;
   scheduleError.hidden = true;
   try {
-    const res = await fetch(`/api/chats/${activeChatId}/scheduled-messages`, {
-      method: 'POST',
+    const url = isEdit
+      ? `/api/chats/${activeChatId}/scheduled-messages/${editingScheduledId}`
+      : `/api/chats/${activeChatId}/scheduled-messages`;
+    const res = await fetch(url, {
+      method: isEdit ? 'PATCH' : 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ content, attachments: pendingAttachments, sendAt: new Date(sendAtMs).toISOString() }),
+      body: JSON.stringify({ content, attachments: scheduleModalAttachments, sendAt: new Date(sendAtMs).toISOString() }),
     });
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
@@ -2441,9 +2531,14 @@ async function handleScheduleFormSubmit(e) {
       return;
     }
     const scheduled = /** @type {ScheduledMessage} */ (await res.json());
-    pendingScheduledMessages.push(scheduled);
+    if (isEdit) {
+      pendingScheduledMessages = pendingScheduledMessages.map((m) => (m.id === scheduled.id ? scheduled : m));
+    } else {
+      pendingScheduledMessages.push(scheduled);
+      clearComposer();
+    }
+    pendingScheduledMessages.sort((a, b) => a.sendAt.localeCompare(b.sendAt));
     renderScheduledPanel();
-    clearComposer();
     closeScheduleModal();
   } finally {
     scheduleSubmit.disabled = false;
@@ -3063,12 +3158,18 @@ function isLargePaste(text) {
 }
 
 /**
- * Re-renders the pending-attachment chip row from `pendingAttachments`.
+ * Renders attachment chips for `list` into `container`, wiring each chip's
+ * remove button to `onRemove(id)`. Shared by the composer's own chip row
+ * and the schedule modal's (see renderScheduleAttachmentChips) — the two
+ * keep separate backing arrays, this just renders whichever one it's given.
+ * @param {HTMLElement} container
+ * @param {Attachment[]} list
+ * @param {(id: string) => void} onRemove
  */
-function renderAttachmentChips() {
-  attachmentChips.innerHTML = '';
-  attachmentChips.hidden = pendingAttachments.length === 0;
-  for (const att of pendingAttachments) {
+function renderAttachmentChipsInto(container, list, onRemove) {
+  container.innerHTML = '';
+  container.hidden = list.length === 0;
+  for (const att of list) {
     const chip = document.createElement('div');
     chip.className = 'attachment-chip';
     chip.dataset.testid = 'attachment-chip';
@@ -3079,12 +3180,19 @@ function renderAttachmentChips() {
       : `<span class="attachment-chip-icon">📄</span>
          <span class="attachment-chip-label">${escHtml(att.name)}</span>
          <button type="button" class="attachment-chip-remove" data-testid="attachment-chip-remove">×</button>`;
-    chip.querySelector('.attachment-chip-remove').addEventListener('click', () => {
-      pendingAttachments = pendingAttachments.filter((a) => a.id !== att.id);
-      renderAttachmentChips();
-    });
-    attachmentChips.appendChild(chip);
+    chip.querySelector('.attachment-chip-remove').addEventListener('click', () => onRemove(att.id));
+    container.appendChild(chip);
   }
+}
+
+/**
+ * Re-renders the pending-attachment chip row from `pendingAttachments`.
+ */
+function renderAttachmentChips() {
+  renderAttachmentChipsInto(attachmentChips, pendingAttachments, (id) => {
+    pendingAttachments = pendingAttachments.filter((a) => a.id !== id);
+    renderAttachmentChips();
+  });
 }
 
 msgInput.addEventListener('paste', (e) => {

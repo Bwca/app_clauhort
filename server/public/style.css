@@ -127,8 +127,9 @@ html, body { height: 100%; background: var(--bg0); color: var(--text); font-fami
 .scheduled-item-preview { font-size: 12px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .scheduled-item-time { font-size: 11px; color: var(--dim); }
 .scheduled-item-empty { padding: 8px 9px; font-size: 12px; color: var(--dim); }
-.scheduled-cancel-btn { background: none; border: none; color: transparent; font-size: 14px; cursor: pointer; flex-shrink: 0; line-height: 1; transition: color .15s, opacity .15s; opacity: 0; }
-.scheduled-item:hover .scheduled-cancel-btn { color: var(--dim); opacity: 1; }
+.scheduled-edit-btn, .scheduled-cancel-btn { background: none; border: none; color: transparent; font-size: 13px; cursor: pointer; flex-shrink: 0; line-height: 1; transition: color .15s, opacity .15s; opacity: 0; }
+.scheduled-item:hover .scheduled-edit-btn, .scheduled-item:hover .scheduled-cancel-btn { color: var(--dim); opacity: 1; }
+.scheduled-edit-btn:hover { color: var(--text) !important; }
 .scheduled-cancel-btn:hover { color: var(--red) !important; }
 
 #search-btn { background: none; border: none; color: var(--dim); font-size: 14px; cursor: pointer; line-height: 1; padding: 2px; flex-shrink: 0; transition: color .15s; }
@@ -432,11 +433,13 @@ html, body { height: 100%; background: var(--bg0); color: var(--text); font-fami
 
 /* ── Schedule message modal ───────────────────────────────────────── */
 #schedule-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: flex; align-items: center; justify-content: center; z-index: 350; }
-#schedule-modal { background: var(--bg1); border: 1px solid var(--bg3); border-radius: 12px; width: 320px; max-width: 95vw; box-shadow: 0 8px 32px rgba(0,0,0,.5); }
+#schedule-modal { background: var(--bg1); border: 1px solid var(--bg3); border-radius: 12px; width: 360px; max-width: 95vw; box-shadow: 0 8px 32px rgba(0,0,0,.5); }
 #schedule-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; border-bottom: 1px solid var(--border); font-weight: 600; font-size: 15px; }
 #schedule-close { background: none; border: none; color: var(--dim); font-size: 20px; cursor: pointer; line-height: 1; transition: color .15s; }
 #schedule-close:hover { color: var(--red); }
 #schedule-form { padding: 18px; display: flex; flex-direction: column; gap: 14px; }
+#schedule-content-input { resize: vertical; min-height: 2.6em; }
+#schedule-attachment-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: -6px; }
 #schedule-footer { display: flex; gap: 8px; justify-content: flex-end; }
 #schedule-cancel { padding: 7px 14px; border-radius: 7px; border: 1px solid var(--faint); background: transparent; color: var(--muted); font-size: 14px; cursor: pointer; transition: background .15s; }
 #schedule-cancel:hover { background: var(--bg2); }

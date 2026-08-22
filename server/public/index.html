@@ -231,15 +231,20 @@
     </div>
   </div>
 
-  <!-- Schedule message modal, opened from the 🕐 button next to Send -->
+  <!-- Schedule message modal, opened from the 🕐 button next to Send, or
+       from a pending scheduled item's edit button to modify it in place -->
   <div id="schedule-overlay" data-testid="schedule-overlay" hidden>
     <div id="schedule-modal">
       <div id="schedule-header">
-        <span data-i18n="schedule.modalTitle">Schedule message</span>
+        <span id="schedule-title" data-testid="schedule-title">Schedule message</span>
         <button type="button" id="schedule-close" data-testid="schedule-close">×</button>
       </div>
       <form id="schedule-form">
-        <label class="field-label"><span data-i18n="schedule.timeLabel">Send at</span>
+        <label class="field-label"><span id="schedule-content-label" data-i18n="schedule.contentLabel">Message</span>
+          <textarea id="schedule-content-input" data-testid="schedule-content-input" data-i18n-placeholder="schedule.contentPlaceholder" placeholder="Message…" rows="3"></textarea>
+        </label>
+        <div id="schedule-attachment-chips" data-testid="schedule-attachment-chips" hidden></div>
+        <label class="field-label"><span id="schedule-time-label" data-i18n="schedule.timeLabel">Send at</span>
           <input type="datetime-local" id="schedule-time-input" data-testid="schedule-time-input" step="1" required />
         </label>
         <p id="schedule-error" data-testid="schedule-error" class="error-text" hidden></p>
