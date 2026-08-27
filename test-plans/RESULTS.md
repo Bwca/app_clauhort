@@ -340,3 +340,333 @@ This pass: 1 fix confirmed holding, 1 new bug found (documented above with
 full log evidence), 12 test steps executed across 3 plans, all 12 passing
 except the resumeId-failure discovery. All test agents/chats/scratch dirs
 cleaned up; app left running in debug mode with an empty chats/agents list.
+
+---
+
+# Test run — 2026-08-27 (full sweep, all 10 plans)
+
+First **complete** pass through every plan (01→10, run in dependency order:
+01/02 first to seed the shared `TP-Smoke`/`TP-Alice`/`TP-Bob` fixture, then
+03–09 against it, 10 last since it's the disruptive one). Driven entirely
+through the actual browser UI via `claude-in-chrome`, with server logs
+(`server/logs/app.1.log`, `server/logs/chats/<id>.log` — `APP_TRANSCRIPT_LOG`
+was on) and the REST API used to verify/root-cause every finding, not just
+eyeball the UI. `claude` CLI version at the time: **2.1.247**. Scratch dir:
+`/tmp/clauhort-test-workdir` (+ a `.claude/commands/ping.md` skill file for
+Plan 06), removed at cleanup.
+
+**Coverage**: ~62 test steps across all 10 plans, all steps reached except
+Plan 04.3–04.5 (permission grant/deny UI — blocked by an environment
+confound, see below, for the third consecutive run) and Plan 01.7's
+send-a-message-and-observe-the-failure half (agent was created and its
+graceful-creation-succeeds behavior confirmed, but no message was sent to it
+before cleanup — see gaps section). Everything else: full pass or a
+confirmed, root-caused finding.
+
+## Bugs / issues found (ranked by severity)
+
+### 1. HIGH — Agent-to-agent delegation relay prompts the relayed agent with the wrong message, so it reliably declines to act
+**Confirmed via 3 independent reproductions + exact code reference.**
+
+The relay mechanism (an agent's own reply `@mentioning` a teammate triggers
+that teammate once — `server/ws/handler.js`'s `handleUserMessage`,
+`relaySet`/lines 525–549) does genuinely fire a real turn for the mentioned
+agent. But the content sent as that turn's actionable "current message" is
+always `originalMessage` — the **original human message**, not the
+delegating agent's own reply that actually contains the `@mention`:
+
+```js
+// server/ws/handler.js:519-521
+const originalMessage = { content, attachments };
+const newMessage = skillInvocation ? { content: skillInvocation.command, attachments } : originalMessage;
+...
+// line 549, the relay call:
+await runAgentsParallel([...relaySet.values()], members, chat, originalMessage, wss, relayPriorMessages, userMessage.id);
+```
+
+The delegating agent's actual mention-containing reply only appears
+passively inside the `[Since you last responded]` catch-up block — the
+relayed agent's *final content block* (`buildPromptBlocks` line 466,
+`newMessage.content`) is still the human's original message, which was
+never addressed to it.
+
+**Repro (three separate occasions, same outcome each time):**
+1. `@TP-Alice please write a message that says "@TP-Bob can you confirm you
+   received this?" and send exactly that.` — TP-Bob was actually triggered
+   as a **direct broadcast responder**, not via relay, because the human
+   message itself contains a literal `@TP-Bob` substring (whole-message-body
+   scanning, `extractMentionedAgents`, is correct/intentional per
+   `CLAUDE.md`) — confounds this specific wording as a relay test, but
+   surfaced the same downstream symptom.
+2. Retried with wording that avoids a literal `@Bob` in the human message
+   (`@TP-Alice please send a message to your teammate Bob using the proper
+   mention syntax...`). This time the relay genuinely fired *after*
+   TP-Alice's own reply (`@TP-Bob can you confirm you received this?`) —
+   confirmed via `server/logs/chats/<id>.log`: TP-Bob's `SENT` block's final
+   line is the **human's** original message, not Alice's. TP-Bob replied
+   `*No response — this message is addressed to @TP-Alice, not me.*` — a
+   *correct* reading of what it was actually shown, but not what the
+   relay/delegation feature is supposed to accomplish.
+3. Reproduced a third time, incidentally, during Plan 10.4 (Observer
+   summary): TP-Observer's own summary reply happened to quote `@TP-Bob` and
+   `TP-Alice` by name several times while recapping earlier history — this
+   alone was enough to re-trigger the relay and give TP-Bob another
+   `No response...` turn on a message that had nothing to do with it. This
+   shows the misfire isn't limited to deliberate delegation attempts — any
+   agent reply that incidentally contains `@Name` (very likely in any
+   reflective/summarizing turn) spends a real turn and produces the same
+   confused non-response.
+
+**Impact**: the delegation-relay feature — a core part of this app's
+multi-agent design per `CLAUDE.md` — technically fires but essentially never
+succeeds at getting the relayed agent to actually engage, because the prompt
+structure tells it the actionable message is addressed to someone else. This
+also burns a real `claude` CLI turn (cost + latency) for a response that's
+functionally a no-op.
+
+**Suggested fix direction**: for a relay-triggered call, use the delegating
+agent's own message (the one containing the `@mention`) as `newMessage`
+instead of `originalMessage`, or at minimum make the catch-up section
+explicit that catch-up content *is* what the relayed agent should act on
+when there's no separate "for you" content following it.
+
+### 2. MEDIUM-HIGH — Stop button, under the currently-installed CLI, gets permanently stuck showing a raw internal diagnostic instead of "Stopped"
+**Confirmed via UI + exact server log/code trace. Likely a `claude` CLI
+version-dependent regression** — the 2026-08-20 pass (CLI 2.1.236) explicitly
+confirmed clean "Stopped" behavior with preserved partial text; this pass
+(CLI 2.1.247) reproduces a different, broken outcome for the identical UI
+action.
+
+**Repro:**
+1. Asked `TP-Alice` (non-YOLO) to write a 500-word story one sentence at a
+   time; clicked **Stop** while it was actively streaming.
+2. `server/logs/app.1.log`: the app sends `SIGINT` (`agentProcessManager.js`,
+   "killing process via signal (posix)"), then almost immediately logs
+   `"turn errored"` with:
+   ```
+   Error: Claude reported an error: [ede_diagnostic] result_type=user last_content_type=n/a stop_reason=null
+   ```
+3. Root cause: `agentProcessManager.js`'s turn `handleEvent` (~line 640–660)
+   treats **any** `result` event with `is_error: true` as a hard failure via
+   its `fail()` path, regardless of whether a stop was already requested on
+   this turn (`stopped`/`killForStop()` is tracked separately and loses the
+   race — the `result`-event path "already settles the turn" per its own
+   code comment, written for genuine CLI-rejected-flag errors, not for a
+   diagnostic that is itself a direct, expected side effect of the SIGINT
+   the app just sent).
+4. **Effect on the UI**: the message bubble permanently shows the raw
+   diagnostic string in red as if it were message content, and the turn's
+   status badge is stuck on **"Stopping…" forever** — confirmed it never
+   resolves even after 10+ seconds and after a completely separate,
+   successful follow-up turn on the same agent completes normally.
+5. **Session is not corrupted** — immediately asking `TP-Alice` "are you
+   still there?" got a normal `"yes"` reply right away, matching the
+   previous run's finding that stopping one turn doesn't break the agent.
+   Only the stuck bubble/badge from the interrupted turn itself is affected.
+
+**Impact**: every time a user clicks Stop on this CLI version, they're left
+with a permanently broken-looking message bubble (raw internal error text,
+badge stuck mid-action) even though nothing is actually wrong — a
+confusing, unpolished regression in a very commonly-used control.
+
+### 3. MEDIUM — Clicking a search result for an agent hidden by the active spotlight filter silently does nothing visible
+**Confirmed via DOM inspection.**
+
+Search intentionally searches the whole chat regardless of the active
+spotlight filter (a reasonable design — see "not a bug" section below for
+the flip side of this same behavior). But `jumpToMessage`
+(`server/public/app.js` ~line 1524) doesn't check or clear the spotlight
+filter before scrolling/flashing the target message into view.
+
+**Repro:**
+1. Spotlight `TP-Alice` (`Showing only: you + TP-Alice` active).
+2. Search `zephyrtoken` — results correctly include a `TP-Bob` message even
+   though TP-Bob is currently hidden by the spotlight.
+3. Click that TP-Bob result.
+4. Search closes; the spotlight filter is **still active**; nothing visibly
+   changes. Confirmed via `getComputedStyle`: the target message element
+   *does* get `jumpToMessage`'s `highlight-flash` class added correctly, but
+   the element itself has `display: none` (hidden by the spotlight filter's
+   own CSS), so the flash/scroll is entirely invisible. No error, no
+   auto-clearing of spotlight, no "message hidden by filter" notice — from
+   the user's perspective, clicking the search result did nothing at all.
+
+**Suggested fix direction**: `jumpToMessage` should clear the active
+spotlight (same as the "Show all" button) whenever the target message isn't
+part of the current filtered view.
+
+### 4. LOW-MEDIUM — Settings modal silently no-ops on an empty display name, with zero user feedback
+**Confirmed via code + live repro.**
+
+```js
+// server/public/app.js:2688-2691
+async function handleSettingsFormSubmit(e) {
+  e.preventDefault();
+  const userDisplayName = settingsDisplayNameInput.value.trim();
+  if (!userDisplayName) return;
+```
+
+Clearing the display name field and clicking Save does **not** show
+`#settings-error` (confirmed hidden, empty text, via direct DOM check),
+does **not** close the modal, and does **not** save (confirmed via
+`GET /api/settings` — the old name was still there). The "don't save
+garbage" half of Plan 09.4's expectation holds; the "`#settings-error` shows
+a clear message" half does not — the Save button just appears to do
+absolutely nothing.
+
+**Suggested fix**: add a `showSettingsError(...)` call (the same helper
+already used elsewhere in this function) before the early return.
+
+### 5. LOW — Slash-command autocomplete dropdown doesn't dismiss itself after the command is sent
+Sent a bare `/ping` in a single-agent chat; the `/ping — Replies with pong`
+suggestion box stayed visually stuck below the composer after the message
+was sent and the input cleared, surviving even a click elsewhere on the
+page. Only cleared once new text was typed into the input. Cosmetic, but
+looks like a lingering-state bug on first glance.
+
+## Not bugs — clarified / re-scoped this pass
+
+- **Plan 01 step 1's premise doesn't hold**: the agent-creation controls
+  (`#new-agent-btn` and the "+ Add agent" equivalent) are entirely
+  `display: none` when no chat is selected — confirmed via
+  `getComputedStyle`, not just visually. There is currently no way to create
+  the very first agent without first creating/selecting a chat. Once a chat
+  exists, creating a new agent also **auto-adds it as a member of the
+  current chat by default** (an "Add to current chat" checkbox, checked by
+  default, has to be unchecked to opt out) — this isn't a separate step the
+  way `02-chats.md` assumes. Neither is a bug, just worth updating the plan
+  text to match actual flow.
+- **Plan 01 step 6 (Browser-access exclusivity) is testing behavior the app
+  no longer has, on purpose.** Created two agents with `chromeAccess: true`
+  simultaneously — both saved successfully (`GET /api/agents` confirms both
+  have `chromeAccess: true`). This is **intentional**, not a regression:
+  `server/routes/agents.js`'s own doc-comment says *"Multiple agents may
+  hold this concurrently — the extension's local bridge (ws://localhost:8765)
+  scopes each connecting CLI process to its own tab group"*, and the current
+  README says the same ("any number of agents can hold it at once"). The
+  *test-plan file* (`01-agents.md` step 6) still describes an old
+  single-holder-only design and should be updated/removed rather than
+  treated as a spec to satisfy.
+- **No UI to edit an agent post-creation** — reconfirmed, same as the
+  2026-08-19 run's already-documented note #3 (⋮ menu only offers
+  Add-a-note/Open-folder/Restart/Remove-from-chat/Delete-agent). Not new,
+  presumably still an intentional deferral.
+- **Plan 04.3–04.5 (permission grant/deny UI) blocked again** by this
+  machine's own `~/.claude/settings.json` (`permissions.defaultMode:
+  "auto"`), the same environment confound documented in both prior runs.
+  Third consecutive run this has blocked genuine testing of the
+  grant/deny/multi-denial flow — not touched (it's the user's own global
+  Claude Code config, not this app's), but worth flagging again since it
+  means this UI path has now gone three full test passes without real
+  coverage.
+- **Plan 08.3 (jump-to-message banner) root-caused, not exercised.**
+  `jumpedBanner.hidden = false` only fires inside `jumpToMessage`'s
+  "message not already in the loaded DOM" branch (`app.js` ~line 1527–1537),
+  which requires a server round-trip to fetch older context. In this run's
+  test chat, every message stayed within the already-loaded window (no
+  pagination boundary was ever crossed, even scrolled all the way to the
+  top), so this code path never ran — confirmed by testing at the very top
+  of a 40+-message chat and finding the banner still correctly absent, by
+  design. Not a bug; needs a chat large enough to exceed the initial fetch
+  window to actually exercise, which this pass didn't construct.
+- **Short (non-chip) pasted-text behavior inconclusive** — this run
+  simulated paste via synthetic `ClipboardEvent`s (no real OS clipboard
+  available in this environment). The large-paste and image-paste code
+  paths both call `preventDefault()` and build the attachment chip
+  themselves, so synthetic dispatch exercised them fully and correctly. A
+  *short* paste relies on the browser's own native default paste behavior
+  (no `preventDefault()` needed) to insert plain text — which a
+  script-dispatched `ClipboardEvent` does not trigger in Chrome for security
+  reasons. Confirmed the text never landed in the input either way; this is
+  a limitation of the paste-simulation method, not evidence of an app bug.
+- **Plan 08's spotlight/search precedence question (step 4)**: confirmed
+  precisely — search results are **not** scoped to the active spotlight, by
+  design (searches the whole chat). Consistent, but see bug #3 above for
+  the resulting UX gap when combined with spotlight.
+
+## What worked correctly (confirmed pass, not previously covered as thoroughly)
+
+- **Plan 05 in full — attachments and scheduling**, not reached in either
+  prior run: image paste → chip → inline render → lightbox → real model
+  vision (`"It's a solid red image."`) all correct; large pasted text (5.6KB)
+  → chip → full content transmitted (verified via first/last-word echo);
+  oversized image (6MB) → clear `"Image too large (max 5MB)"` error, no
+  crash. **The brand-new schedule-edit feature** (its own content field,
+  `PATCH` reschedule, from this repo's most recent commits) works
+  end-to-end: opening Edit pre-fills the existing content/time correctly,
+  picking a past time is rejected with `"Pick a time in the future"`,
+  saving a new time+content updates both, and — critically — the message
+  fires at the **new, edited** time rather than the original one, live-verified
+  by waiting for it: confirms the "clear the old timer before re-arming"
+  fix (commit `de177bf`) actually holds under a real reschedule.
+- **Plan 09 in full — settings/theme/i18n**, previously only spot-checked:
+  display name/color change retroactively re-renders every historical
+  message (not just future ones) and survives a hard reload (server-side
+  persisted, confirmed via `/api/settings`). Theme pre-paint script verified
+  in both directions — screenshotting immediately after `navigate()` in both
+  a light→dark→reload and dark→light→reload cycle showed the correct theme
+  already applied with no flash observed either way. Locale switch to
+  fr-CA/back is instant, no reload, and spot-checked across the sidebar, the
+  Settings modal itself, the New Agent modal, and message timestamps
+  (24h "09 h 56" style) — no untranslated strings or raw i18n keys found
+  anywhere.
+- **Plan 10 in full**: resume-id copy button verified against a real,
+  separate terminal invocation twice (a plain reply, then a
+  context-referencing question that correctly recalled in-chat content);
+  transcript log confirmed every turn sends only incremental content, never
+  a full-history redump; killed and restarted the actual server process
+  mid-chat and confirmed full survival (chat, membership, message history)
+  plus a `--resume`'d respawn correctly recalling a word ("LIGHTHOUSE")
+  that was only ever told to the agent in the pre-restart process; an
+  Observer added partway through a long, eventful chat correctly ignored
+  two broadcasts and then, on being `@mentioned`, produced an extremely
+  detailed and accurate summary of the *entire* session's history by name
+  — strong confirmation of `OBSERVER_HISTORY_LIMIT` full-history catch-up.
+- Everything already-covered in prior runs and re-checked this pass still
+  holds: hyphenated `@mention` routing (fix from 1.2.1, re-verified live),
+  broadcast/mention/mid-sentence-mention routing, mention autocomplete,
+  spotlight filtering, tool-call single/multi collapsing, one-chat-at-a-time
+  enforcement (now via UI exclusion, confirmed precisely), remove-from-chat
+  session reset (fresh `resumeId`, no memory bleed), unread dots, delete
+  confirmations (agent + chat, cancel and confirm paths), YOLO/Observer/
+  Browser-access badges, background-task unsolicited-message mechanism
+  (confirmed again via server log), and slash-command discovery/invocation/
+  shorthand/unknown-command handling (bug #2 from the 2026-08-19 run
+  remains not reproducible on this CLI version, consistent with the
+  2026-08-19/20 follow-up note).
+
+## Gaps for a future run
+
+- Plan 04.3–04.5 (permission grant/deny UI) — needs a `HOME`/
+  `CLAUDE_CONFIG_DIR` override without `permissions.defaultMode: "auto"` to
+  actually exercise; three runs in a row now without coverage.
+- Plan 01.7 — agent-creation-with-bogus-resume-id was created and confirmed
+  to save successfully, but no message was sent to it before this pass's
+  cleanup, so the actual failure-mode behavior wasn't re-observed this time.
+  The 2026-08-20 run already thoroughly documented this (agent silently
+  fails every turn with an empty reply bubble, no error indication) with
+  full log evidence and no related code has changed since — presumed still
+  present, but not re-confirmed this pass.
+- Plan 08.3's jump-banner code path (needs a chat exceeding the initial
+  message-fetch window to actually trigger — see root-cause note above).
+- Real clipboard-based short-text paste behavior (this run's synthetic
+  `ClipboardEvent`s can't exercise the native-paste-relies-on-browser-default
+  code path — needs a real OS clipboard, e.g. `xclip`/`wl-copy`, unavailable
+  in this environment).
+
+## Summary
+
+This pass: full sweep across all 10 plans, ~62 steps executed, the large
+majority passing cleanly (including two feature areas — Plan 05 scheduling
+including the brand-new edit/reschedule flow, and Plan 09 settings/i18n —
+getting their first-ever full pass). 5 new findings this run (1 high, 1
+medium-high, 1 medium, 2 low/low-medium), all reproduced live and root-caused
+to a specific file/line rather than left as loose observations; 0 of the
+previously-fixed bugs regressed (hyphen-mention fix and the resumeId-failure
+finding both re-confirmed). All `TP-*` test agents and chats deleted (9
+agents, 5 chats including the ephemeral cleanup chat), `/tmp/clauhort-test-workdir`
+and its `.claude/commands/` skill file removed, and the user-settings
+sandbox values (display name, color, locale, theme) restored to their
+pre-run defaults. App left running in debug mode (pid unchanged from before
+this pass except for one intentional restart in Plan 10.3) with an empty
+chats/agents list and default settings.
