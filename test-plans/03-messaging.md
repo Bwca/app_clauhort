@@ -82,6 +82,34 @@ in the message counts, not just a trailing routing line.
    confirm no console error is thrown (`read_console_messages`) and (for
    text) the clipboard content matches the visible message.
 
+## 9. Relay target gets the mentioning reply, not the original user message
+
+Regression check for a bug where a relayed agent was shown the *original
+user message* as its turn-trigger content instead of the teammate reply
+that actually `@mentioned` it — so the relay target would see a final
+message addressed to someone else, conclude "not for me", and hold instead
+of actually engaging with what it was relayed in for (`runAgentsParallel`'s
+relay call in `server/ws/handler.js`).
+
+1. Send a message that itself never mentions or is relevant to `TP-Bob`,
+   but asks `TP-Alice` to relay something `TP-Bob` can only answer by
+   actually reading Alice's reply: `@TP-Alice please write a message that
+   says exactly "@TP-Bob, what is 17 + 25? Reply with just the number." and
+   send exactly that — don't answer the question yourself.`
+2. **Expected**: `TP-Alice` replies with a message containing
+   `@TP-Bob, what is 17 + 25? ...`; this triggers `TP-Bob` once (the relay).
+3. **Expected**: `TP-Bob`'s relayed reply actually answers `42` (or shows
+   clear engagement with the arithmetic question) — proving it was handed
+   Alice's message as the thing to respond to. **Bug signature to watch
+   for**: `TP-Bob` instead says something like "this is addressed to
+   @TP-Alice" / "this isn't for me" and does nothing useful — that means it
+   was shown the original user message (which never mentions Bob or asks a
+   question) as its trigger content instead of Alice's relay message.
+4. Cross-check with `server/logs/chats/<chatId>.log` (debug mode):
+   `TP-Bob`'s `SENT` block should end, after the `[Since you last
+   responded]` catch-up and `---`, with Alice's `@TP-Bob, what is 17 + 25?`
+   line as the final block — not the original user instruction to Alice.
+
 ## Cleanup
 
 Leave `TP-Smoke`, `TP-Alice`, `TP-Bob` in place — reused by later plans.
