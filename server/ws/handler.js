@@ -523,30 +523,53 @@ export async function handleUserMessage(event, wss) {
   const respondedMessages = await runAgentsParallel(responders, members, chat, newMessage, wss, priorMessages, userMessage.id);
 
   // Relay: parse the just-saved agent responses for @mentions of teammates who
-  // haven't responded yet. Trigger those agents once (depth cap = 1 to prevent loops).
-  // Always relays with the ORIGINAL message, never a stripped skill command —
-  // a relayed teammate isn't the skill's target, and a bare "/command" as
-  // their own final content block would risk misfiring an unrelated skill.
+  // haven't responded yet. Trigger those agents once (depth cap = 1 to prevent loops),
+  // using the MENTIONING TEAMMATE'S OWN REPLY as the turn's trigger content —
+  // never the original user message (which typically doesn't mention the
+  // relay target at all, and reads to the model as "not addressed to me",
+  // leaving it to just hold) and never a stripped skill command (a relayed
+  // teammate isn't the skill's target, and a bare "/command" as their own
+  // final content block would risk misfiring an unrelated skill).
   // Scans only the messages produced by THIS call, not a re-fetched window from
   // the DB — an agent's message from an earlier, unrelated turn can still be
   // among the chat's most recent rows (e.g. it responded then, but not this
   // time), and re-querying by "recent N" would wrongly sweep its old @mention
   // back in as if it were a fresh relay trigger.
-  const relaySet = new Map();
+  const relayTargets = new Map(); // targetAgentId -> { agent, message } — first mention wins, so a target relays once even if multiple responders mention it
   for (const msg of respondedMessages.values()) {
     for (const target of extractMentionedAgents(msg.content, members)) {
-      if (!respondedMessages.has(target.id)) relaySet.set(target.id, target);
+      if (respondedMessages.has(target.id) || relayTargets.has(target.id)) continue;
+      relayTargets.set(target.id, { agent: target, message: msg });
     }
   }
 
-  if (relaySet.size > 0) {
+  if (relayTargets.size > 0) {
     // Freshly fetched (not the same priorMessages snapshot) — the just-responded
     // agents' own messages are now persisted, and a relay target's catch-up
     // needs to include those, e.g. the teammate reply that @mentioned it.
-    // excludeMessageId is still userMessage.id: originalMessage is the same
-    // triggering text, now persisted, so it'd otherwise show up twice here too.
     const relayPriorMessages = getMessages(chatId, 20);
-    await runAgentsParallel([...relaySet.values()], members, chat, originalMessage, wss, relayPriorMessages, userMessage.id);
+    // Grouped by triggering message so agents relayed by the same mention still
+    // run together in one runAgentsParallel call; different mentions run as
+    // separate parallel calls since each needs its own trigger content and its
+    // own excludeMessageId (that message, so it isn't duplicated into its own catch-up).
+    const relayGroups = new Map(); // messageId -> { message, agents: [] }
+    for (const { agent, message } of relayTargets.values()) {
+      if (!relayGroups.has(message.id)) relayGroups.set(message.id, { message, agents: [] });
+      relayGroups.get(message.id).agents.push(agent);
+    }
+    await Promise.allSettled(
+      [...relayGroups.values()].map(({ message, agents }) =>
+        runAgentsParallel(
+          agents,
+          members,
+          chat,
+          { content: message.content, attachments: message.attachments },
+          wss,
+          relayPriorMessages,
+          message.id
+        )
+      )
+    );
   }
 }
 
