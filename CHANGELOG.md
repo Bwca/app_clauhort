@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.2.7] - 2026-08-31
+
+### Fixed
+- The agent-to-agent delegation relay (an agent's reply `@mentioning` a teammate, triggering that teammate once) handed the relayed agent the *original user message* as its turn-trigger content instead of the teammate reply that actually contained the mention — so the relay target would see a final message addressed to someone else, conclude it wasn't for them, and hold instead of engaging with what it was relayed in for. `runAgentsParallel`'s relay call (`server/ws/handler.js`) now groups relay targets by the specific message that mentioned them and uses that message's own content as the trigger.
+
 ## [1.2.6] - 2026-08-22
 
 ### Added
