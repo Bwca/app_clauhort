@@ -11,6 +11,7 @@ import {
   getChats,
   getChat,
   createChat,
+  updateChat,
   deleteChat,
   addChatMember,
   removeChatMember,
@@ -99,6 +100,22 @@ export default function createChatsRouter(wss) {
       if (agent) spawnForAgent(agent);
     }
     res.status(201).json(chat);
+  });
+
+  /**
+   * PATCH /api/chats/:id
+   * Updates a chat's mutable settings.
+   * @param {Object} req.body
+   * @param {string} [req.body.name]
+   * @param {boolean} [req.body.freeRelay] - When true, the agent-to-agent
+   *   delegation relay in this chat is no longer depth-capped at one hop
+   *   (see updateChat's docs in db.js and the relay loop in ws/handler.js).
+   */
+  router.patch('/:id', async (req, res) => {
+    const { name, freeRelay } = req.body;
+    const chat = await updateChat(req.params.id, { name, freeRelay });
+    if (!chat) return res.status(404).json({ error: t('errors.chatNotFound') });
+    res.json(chat);
   });
 
   /**
