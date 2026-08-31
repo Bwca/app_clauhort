@@ -302,6 +302,75 @@ describe('Messaging', () => {
     );
   });
 
+  test('relay stays capped at one hop while the chat\'s free-relay toggle is off', async () => {
+    await createChat(page, 'Bounded Relay Test');
+    await createAgent(page, { name: 'Claudia', workingDir: agentDir('claudia'), addToChat: true });
+    await createAgent(page, { name: 'Clauditor', workingDir: agentDir('clauditor'), addToChat: true });
+
+    // Claudia's scripted reply hands Clauditor an instruction that itself
+    // mentions Claudia back — with the toggle off, that back-mention must
+    // NOT trigger a third turn.
+    await sendMessage(
+      page,
+      '@Claudia reply with exactly this text, verbatim, nothing else: @Clauditor reply with exactly this text, verbatim, nothing else: @Claudia ack'
+    );
+    await waitForAgentResponse(page, { timeout: 90_000 });
+    await page.waitForFunction(
+      () => [...document.querySelectorAll('[data-testid="msg-author"]')]
+        .some((el) => el.textContent.trim() === 'Clauditor'),
+      { timeout: 90_000 }
+    );
+    // Give a would-be third hop a beat to (wrongly) start before asserting.
+    await new Promise((r) => setTimeout(r, 3000));
+
+    const authors = await page.$$eval(
+      tid('message') + '[data-role="agent"] ' + tid('msg-author'),
+      (els) => els.map((el) => el.textContent.trim())
+    );
+    assert.deepEqual(authors, ['Claudia', 'Clauditor'], `expected exactly one relay hop, got: ${authors}`);
+  });
+
+  test('free-relay toggle (🔁) lets a relay chain continue past one hop', async () => {
+    await createChat(page, 'Free Relay Test');
+    await createAgent(page, { name: 'Claudia', workingDir: agentDir('claudia'), addToChat: true });
+    await createAgent(page, { name: 'Clauditor', workingDir: agentDir('clauditor'), addToChat: true });
+
+    await page.click(tid('free-relay-btn'));
+    await page.waitForFunction(
+      () => document.querySelector('[data-testid="free-relay-btn"]')?.classList.contains('active'),
+      { timeout: 3000 }
+    );
+
+    // Same scripted exchange as the bounded test above — Clauditor's reply
+    // mentions Claudia back — but this time it should trigger Claudia again.
+    await sendMessage(
+      page,
+      '@Claudia reply with exactly this text, verbatim, nothing else: @Clauditor reply with exactly this text, verbatim, nothing else: @Claudia ack'
+    );
+    await waitForAgentResponse(page, { timeout: 90_000 });
+    await page.waitForFunction(
+      () => [...document.querySelectorAll('[data-testid="msg-author"]')]
+        .filter((el) => el.textContent.trim() === 'Claudia').length >= 2,
+      { timeout: 90_000 }
+    );
+
+    const authors = await page.$$eval(
+      tid('message') + '[data-role="agent"] ' + tid('msg-author'),
+      (els) => els.map((el) => el.textContent.trim())
+    );
+    // Not asserting an exact message sequence — once a relay hop's content
+    // depends on a PREVIOUS relay hop's model output (rather than the
+    // original scripted instruction), the model doesn't reliably forward
+    // "reply verbatim" instructions word-for-word, so the exact chain length
+    // and ordering past hop 2 isn't scriptable. What's actually under test
+    // is the toggle's mechanism: with it off (previous test), Claudia is
+    // provably capped at exactly one message; with it on, she must be
+    // relayed again at least once.
+    assert.deepEqual(authors.slice(0, 2), ['Claudia', 'Clauditor'], `expected the scripted first hop, got: ${authors}`);
+    const claudiaCount = authors.filter((a) => a === 'Claudia').length;
+    assert.ok(claudiaCount >= 2, `expected the relay to continue past one hop (Claudia relayed again), got: ${authors}`);
+  });
+
   test('agent auto-chains its Claude session after the first turn', async () => {
     await createChat(page, 'Chaining Test');
     await createAgent(page, { name: 'Claudia', workingDir: agentDir('claudia'), addToChat: true });
