@@ -31,7 +31,10 @@ via ordinary conversation memory, not because it was re-told.
    message header also show an agent's YOLO badge... and working
    directory").
 
-## 4. Agent-to-agent delegation relay (depth-capped at 1)
+## 4. Agent-to-agent delegation relay (bounded chat, depth-capped at 1)
+
+`TP-Smoke`'s 🔁 free-relay toggle should be **off** (the default) for this
+section — see §10 for the opposite case.
 
 1. Send: `@TP-Alice please write a message that says "@TP-Bob can you
    confirm you received this?" and send exactly that.`
@@ -109,6 +112,36 @@ relay call in `server/ws/handler.js`).
    `TP-Bob`'s `SENT` block should end, after the `[Since you last
    responded]` catch-up and `---`, with Alice's `@TP-Bob, what is 17 + 25?`
    line as the final block — not the original user instruction to Alice.
+
+## 10. Free-relay toggle (🔁) — relay is no longer capped at one hop
+
+Covers the per-chat `freeRelay` setting (`PATCH /api/chats/:id`) that lets
+two agents keep relaying back and forth instead of dead-ending after one
+hop (see `CLAUDE.md`'s relay section and `FREE_RELAY_MAX_ROUNDS` in
+`server/ws/handler.js`).
+
+1. In `TP-Smoke`'s topbar, click the 🔁 button. **Expected**: it turns
+   active/highlighted, and its title (hover tooltip) switches to the "on"
+   text; reload the page (or switch chats and back) — the toggle state
+   should persist (it's a chat-level DB column, not a client-only flag).
+2. Send: `@TP-Alice please write a message that says exactly "@TP-Bob, what
+   is 9 + 4? Reply with just the number, then ask me @TP-Alice a different
+   simple arithmetic question the same way." and send exactly that — don't
+   answer the question yourself.`
+3. **Expected**: `TP-Alice` relays to `TP-Bob` (who answers `13` and asks a
+   question back mentioning `@TP-Alice`), and — unlike §4 — `TP-Alice` gets
+   relayed a **second** time and actually responds to Bob's follow-up
+   question, rather than the chain dead-ending after Bob's first reply. This
+   is the regression case for the depth-cap-1 default: confirm it only
+   continues past one hop when 🔁 is on.
+4. Click 🔁 again to turn it back off. **Expected**: repeating a similar
+   back-and-forth prompt now dead-ends after exactly one relay hop again,
+   matching §4's behavior.
+5. Cross-check `server/logs/chats/<chatId>.log` (debug mode) for the round
+   count if the exchange seems to stop earlier than expected — a single
+   round producing no new `@mention` (e.g. an agent just says "got it,
+   thanks" with no further mention) is the *expected*, non-buggy way the
+   chain ends, not a cap being hit early.
 
 ## Cleanup
 
