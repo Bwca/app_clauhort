@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.2.8] - 2026-08-31
+
+### Added
+- A per-chat "Free agent relay" toggle (🔁 in the chat topbar, `PATCH /api/chats/:id`) — when on, the agent-to-agent delegation relay is no longer capped at one hop: the same agent can be relayed again in a later round for as long as new `@mentions` keep appearing, bounded only by a safety ceiling (`FREE_RELAY_MAX_ROUNDS` in `server/ws/handler.js`, 20 rounds) against a runaway two-agent back-and-forth. Off by default, matching the previous single-hop-only behavior.
+
 ## [1.2.7] - 2026-08-31
 
 ### Fixed
