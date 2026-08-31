@@ -39,6 +39,19 @@ const activeStreams = new Map();
 const OBSERVER_HISTORY_LIMIT = 1000;
 
 /**
+ * Safety ceiling on relay rounds in a chat.freeRelay chat (see
+ * handleUserMessage's relay loop) — a bounded chat never needs this, it
+ * stops after exactly one round regardless. Free relay deliberately allows
+ * the same agent to be re-triggered round after round (an extended
+ * back-and-forth is the whole point), which means nothing else naturally
+ * stops a two-agent mutual-@mention exchange from continuing indefinitely.
+ * 20 is generous headroom for a real multi-turn discussion while still
+ * bounding worst-case cost/time if two agents just keep re-mentioning each
+ * other with nothing new to say.
+ */
+const FREE_RELAY_MAX_ROUNDS = 20;
+
+/**
  * @typedef {Object} UserMessageEvent
  * @property {'USER_MESSAGE'} type
  * @property {string} chatId
@@ -522,42 +535,65 @@ export async function handleUserMessage(event, wss) {
 
   const respondedMessages = await runAgentsParallel(responders, members, chat, newMessage, wss, priorMessages, userMessage.id);
 
-  // Relay: parse the just-saved agent responses for @mentions of teammates who
-  // haven't responded yet. Trigger those agents once (depth cap = 1 to prevent loops),
-  // using the MENTIONING TEAMMATE'S OWN REPLY as the turn's trigger content —
-  // never the original user message (which typically doesn't mention the
-  // relay target at all, and reads to the model as "not addressed to me",
-  // leaving it to just hold) and never a stripped skill command (a relayed
-  // teammate isn't the skill's target, and a bare "/command" as their own
-  // final content block would risk misfiring an unrelated skill).
-  // Scans only the messages produced by THIS call, not a re-fetched window from
-  // the DB — an agent's message from an earlier, unrelated turn can still be
-  // among the chat's most recent rows (e.g. it responded then, but not this
-  // time), and re-querying by "recent N" would wrongly sweep its old @mention
-  // back in as if it were a fresh relay trigger.
-  const relayTargets = new Map(); // targetAgentId -> { agent, message } — first mention wins, so a target relays once even if multiple responders mention it
-  for (const msg of respondedMessages.values()) {
-    for (const target of extractMentionedAgents(msg.content, members)) {
-      if (respondedMessages.has(target.id) || relayTargets.has(target.id)) continue;
-      relayTargets.set(target.id, { agent: target, message: msg });
+  // Relay: parse each round's just-saved agent responses for @mentions of
+  // teammates, and trigger those teammates too, using the MENTIONING
+  // TEAMMATE'S OWN REPLY as the turn's trigger content — never the original
+  // user message (which typically doesn't mention the relay target at all,
+  // and reads to the model as "not addressed to me", leaving it to just
+  // hold) and never a stripped skill command (a relayed teammate isn't the
+  // skill's target, and a bare "/command" as their own final content block
+  // would risk misfiring an unrelated skill).
+  //
+  // Two modes, gated on chat.freeRelay:
+  //   - Bounded (default): exactly one relay round, and never back to an
+  //     agent who already responded this chain (the original depth-cap-1
+  //     behavior — prevents even a two-agent ping-pong from starting).
+  //   - Free (chat.freeRelay): rounds keep going — the same agent CAN be
+  //     relayed again in a later round — for as long as each round actually
+  //     produces new @mentions, up to FREE_RELAY_MAX_ROUNDS as a safety
+  //     ceiling against a genuinely unbounded two-agent back-and-forth
+  //     burning cost/time indefinitely.
+  let roundMessages = respondedMessages;
+  let round = 0;
+  while (roundMessages.size > 0) {
+    // Scans only the messages produced by the PREVIOUS round, not a
+    // re-fetched window from the DB — an agent's message from an earlier,
+    // unrelated turn can still be among the chat's most recent rows (e.g. it
+    // responded then, but not this time), and re-querying by "recent N"
+    // would wrongly sweep its old @mention back in as if it were a fresh
+    // relay trigger.
+    const relayTargets = new Map(); // targetAgentId -> { agent, message } — first mention wins per round, so a target relays once per round even if multiple messages that round mention it
+    for (const msg of roundMessages.values()) {
+      for (const target of extractMentionedAgents(msg.content, members)) {
+        if (target.id === msg.agentId) continue; // an agent mentioning itself doesn't relay to itself
+        if (!chat.freeRelay && respondedMessages.has(target.id)) continue; // bounded mode: never relay back to an original responder
+        if (relayTargets.has(target.id)) continue;
+        relayTargets.set(target.id, { agent: target, message: msg });
+      }
     }
-  }
+    if (relayTargets.size === 0) break;
+    if (!chat.freeRelay && round >= 1) break; // bounded mode: exactly one relay round total
+    if (chat.freeRelay && round >= FREE_RELAY_MAX_ROUNDS) {
+      log.warn({ chatId: chat.id, rounds: round }, 'free relay hit its safety ceiling, stopping the chain');
+      break;
+    }
 
-  if (relayTargets.size > 0) {
-    // Freshly fetched (not the same priorMessages snapshot) — the just-responded
-    // agents' own messages are now persisted, and a relay target's catch-up
-    // needs to include those, e.g. the teammate reply that @mentioned it.
+    // Freshly fetched each round (not the same priorMessages snapshot) — the
+    // previous round's replies are now persisted, and this round's targets'
+    // catch-up needs to include those, e.g. the teammate reply that
+    // @mentioned them.
     const relayPriorMessages = getMessages(chatId, 20);
-    // Grouped by triggering message so agents relayed by the same mention still
-    // run together in one runAgentsParallel call; different mentions run as
-    // separate parallel calls since each needs its own trigger content and its
-    // own excludeMessageId (that message, so it isn't duplicated into its own catch-up).
+    // Grouped by triggering message so agents relayed by the same mention
+    // still run together in one runAgentsParallel call; different mentions
+    // run as separate parallel calls since each needs its own trigger
+    // content and its own excludeMessageId (that message, so it isn't
+    // duplicated into its own catch-up).
     const relayGroups = new Map(); // messageId -> { message, agents: [] }
     for (const { agent, message } of relayTargets.values()) {
       if (!relayGroups.has(message.id)) relayGroups.set(message.id, { message, agents: [] });
       relayGroups.get(message.id).agents.push(agent);
     }
-    await Promise.allSettled(
+    const results = await Promise.allSettled(
       [...relayGroups.values()].map(({ message, agents }) =>
         runAgentsParallel(
           agents,
@@ -570,6 +606,13 @@ export async function handleUserMessage(event, wss) {
         )
       )
     );
+
+    const nextRoundMessages = new Map();
+    for (const result of results) {
+      if (result.status === 'fulfilled') for (const [id, msg] of result.value) nextRoundMessages.set(id, msg);
+    }
+    roundMessages = nextRoundMessages;
+    round++;
   }
 }
 
