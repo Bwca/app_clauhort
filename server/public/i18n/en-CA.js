@@ -33,6 +33,8 @@ export default {
   'chat.channelName': '# {name}',
   'chat.filterBarLabel': 'Showing only: you + {names}',
   'chat.filterBarClearBtn': 'Show all',
+  'chat.freeRelayOnTitle': 'Free agent relay: on — agents can keep relaying to each other without a hop limit',
+  'chat.freeRelayOffTitle': 'Free agent relay: off — an agent\'s @mention of a teammate relays once, then stops',
 
   'search.btnTitle': 'Search messages',
   'search.placeholder': 'Search this chat…',

@@ -29,6 +29,10 @@ import { APP_VERSION } from './appVersion.js';
  * @property {string} id
  * @property {string} name
  * @property {string[]} memberAgentIds
+ * @property {boolean} freeRelay - When true, an agent's @mention of a
+ *   teammate in a reply keeps relaying round after round instead of
+ *   stopping after one hop — see the #free-relay-btn toggle and the relay
+ *   loop in server/ws/handler.js.
  * @property {string} createdAt
  */
 
@@ -478,6 +482,7 @@ const newChatInput     = $('#new-chat-input');
 const emptyState       = $('#empty-state');
 const chatView         = $('#chat-view');
 const chatTopbarName   = $('#chat-topbar-name');
+const freeRelayBtn     = $('#free-relay-btn');
 const reconnNotice     = $('#reconnecting-notice');
 const sidebarEl        = $('#sidebar');
 const sidebarToggleBtn = $('#sidebar-toggle-btn');
@@ -2214,6 +2219,36 @@ function showEmptyChatState() {
  * deliberately not the URL, so the chat id is never exposed there.
  * @param {string} id
  */
+/**
+ * Reflects the active chat's freeRelay setting on #free-relay-btn.
+ */
+function renderFreeRelayBtn() {
+  const on = Boolean(activeChat()?.freeRelay);
+  freeRelayBtn.classList.toggle('active', on);
+  freeRelayBtn.setAttribute('aria-pressed', String(on));
+  freeRelayBtn.title = t(on ? 'chat.freeRelayOnTitle' : 'chat.freeRelayOffTitle');
+}
+
+/**
+ * Toggles the active chat's freeRelay setting via the REST API and updates
+ * the local cache + button in place (mirrors createChat/deleteChat's own
+ * simple fetch-then-patch-local-state pattern — no WS broadcast for this,
+ * same as agent PATCH edits).
+ */
+async function toggleFreeRelay() {
+  const chat = activeChat();
+  if (!chat) return;
+  const res = await fetch(`/api/chats/${chat.id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ freeRelay: !chat.freeRelay }),
+  });
+  const updated = /** @type {Chat} */ (await res.json());
+  const idx = chats.findIndex((c) => c.id === updated.id);
+  if (idx !== -1) chats[idx] = updated;
+  renderFreeRelayBtn();
+}
+
 async function selectChat(id) {
   activeChatId = id;
   sessionStorage.setItem(ACTIVE_CHAT_STORAGE_KEY, id);
@@ -2233,6 +2268,7 @@ async function selectChat(id) {
 
   const chat = activeChat();
   chatTopbarName.textContent = t('chat.channelName', { name: chat?.name ?? '' });
+  renderFreeRelayBtn();
   emptyState.hidden = true;
   chatView.hidden = false;
 
@@ -3331,6 +3367,11 @@ document.addEventListener('click', (e) => {
 scheduledBtn.addEventListener('click', (e) => {
   e.stopPropagation();
   scheduledPanel.hidden = !scheduledPanel.hidden;
+});
+
+freeRelayBtn.addEventListener('click', (e) => {
+  e.stopPropagation();
+  toggleFreeRelay();
 });
 
 searchBtn.addEventListener('click', (e) => {
