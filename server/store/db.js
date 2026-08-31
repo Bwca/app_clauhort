@@ -104,6 +104,14 @@ function transaction(fn) {
  *   creation. Used to decide whether an already-spoken agent needs a fresh
  *   roster note even when nothing else happened since its last turn — see
  *   buildPromptBlocks in ws/handler.js.
+ * @property {boolean} freeRelay - When true, the agent-to-agent delegation
+ *   relay (an agent's reply `@mentioning` a teammate — see
+ *   extractMentionedAgents/handleUserMessage in ws/handler.js) is NOT
+ *   depth-capped at one hop: the same agent can be relayed repeatedly across
+ *   rounds, up to the safety ceiling (FREE_RELAY_MAX_ROUNDS in
+ *   ws/handler.js), so members of this chat can carry on an extended
+ *   back-and-forth without the user re-prompting each hop. Defaults to
+ *   false (the original single-hop-only behavior) for every other chat.
  * @property {string} createdAt - ISO 8601 timestamp
  */
 
@@ -166,6 +174,7 @@ CREATE TABLE IF NOT EXISTS chats (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
   roster_changed_at TEXT,
+  free_relay INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL
 );
 
@@ -379,6 +388,18 @@ function migrateChatsRosterChangedAt() {
 }
 
 /**
+ * Adds the `free_relay` column to `chats` if it's missing, same reasoning
+ * as migrateAgentsAllowedToolPatterns above.
+ * @returns {void}
+ */
+function migrateChatsFreeRelay() {
+  const hasColumn = db.prepare("PRAGMA table_info(chats)").all()
+    .some((col) => col.name === 'free_relay');
+  if (hasColumn) return;
+  db.exec('ALTER TABLE chats ADD COLUMN free_relay INTEGER NOT NULL DEFAULT 0');
+}
+
+/**
  * Maps a raw `agents` row to the public Agent shape.
  * @param {Record<string, unknown>} row
  * @returns {Agent}
@@ -413,7 +434,7 @@ function rowToChat(row) {
     .prepare('SELECT agent_id FROM chat_members WHERE chat_id = ? ORDER BY rowid')
     .all(row.id)
     .map((r) => r.agent_id);
-  return { id: row.id, name: row.name, memberAgentIds, rosterChangedAt: row.roster_changed_at ?? null, createdAt: row.created_at };
+  return { id: row.id, name: row.name, memberAgentIds, rosterChangedAt: row.roster_changed_at ?? null, freeRelay: Boolean(row.free_relay), createdAt: row.created_at };
 }
 
 /**
@@ -536,6 +557,7 @@ export async function loadDb() {
   migrateAgentsNote();
   migrateChatMembersUniqueAgent();
   migrateChatsRosterChangedAt();
+  migrateChatsFreeRelay();
 
   if (!isMemory && isNewDatabase && existsSync(JSON_DATA_FILE)) {
     importLegacyJson();
@@ -715,6 +737,32 @@ export async function createChat(data) {
   });
   txn();
   return getChat(data.id);
+}
+
+/**
+ * Updates a chat's mutable settings (currently name and freeRelay). Unlike
+ * agent flag updates, neither of these is baked into any spawn args, so
+ * there's no process to evict here.
+ * @param {string} id
+ * @param {{ name?: string, freeRelay?: boolean }} updates
+ * @returns {Promise<Chat | null>} the updated chat, or null if not found
+ */
+export async function updateChat(id, updates) {
+  if (!getChat(id)) return null;
+
+  const columns = {
+    name: updates.name,
+    // Boolean, so explicitly checked against undefined — `false` (turning
+    // free relay back off) is a meaningful, common value, not "absent".
+    free_relay: updates.freeRelay !== undefined ? (updates.freeRelay ? 1 : 0) : undefined,
+  };
+  const entries = Object.entries(columns).filter(([, v]) => v !== undefined);
+  if (entries.length === 0) return getChat(id);
+
+  const setClause = entries.map(([col]) => `${col} = ?`).join(', ');
+  const values = entries.map(([, v]) => v);
+  db.prepare(`UPDATE chats SET ${setClause} WHERE id = ?`).run(...values, id);
+  return getChat(id);
 }
 
 /**
