@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.2.9] - 2026-09-03
+
+### Added
+- The sidebar logo is now clickable — opens the full-size logo in the same lightbox overlay used for message image attachments, instead of only ever showing as a 20px header icon.
+
 ## [1.2.8] - 2026-08-31
 
 ### Added
