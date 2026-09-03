@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.2.10] - 2026-09-03
+
+### Added
+- The agent panel now flags an agent with a small blue dot when they've sent a message while the message filter (🔎 spotlight) was focused on someone else — easy to miss a reply otherwise, since a non-spotlighted agent's messages stay hidden in place. Clears the moment that agent gets spotlighted or the filter is cleared.
+
 ## [1.2.9] - 2026-09-03
 
 ### Added
