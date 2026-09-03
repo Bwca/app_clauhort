@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.2.11] - 2026-09-03
+
+### Added
+- Each agent message now has an "@" button next to the author's name that inserts `@Name ` into the composer — a quicker way to address a specific agent in a multi-agent chat than typing "@" and picking them off the autocomplete dropdown every time.
+
 ## [1.2.10] - 2026-09-03
 
 ### Added
