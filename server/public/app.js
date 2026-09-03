@@ -138,6 +138,18 @@ const unreadChatIds = new Set();
  */
 const messageFilterAgentIds = new Set();
 
+/**
+ * Agent IDs with a message that arrived, in the active chat, while the
+ * message filter was spotlighting OTHER agents — the "you might have missed
+ * this while focused on someone else" signal. Purely a live-session
+ * annotation, same as unreadChatIds: never persisted, and cleared the
+ * moment that agent gets spotlighted (their messages become visible again,
+ * see toggleMessageFilter) or the filter is cleared entirely (see
+ * clearMessageFilter) or the active chat changes (see selectChat).
+ * @type {Set<string>}
+ */
+const unseenOutsideFocusAgentIds = new Set();
+
 /** @type {number} bumped on every search-input keystroke; guards against an
  * older in-flight search response overwriting a newer one, same pattern as
  * browseRequestId. */
@@ -973,6 +985,7 @@ function onStreamEnd({ streamId, chatId, message, agentId, permissionDenials, st
     const card = buildPermissionCard(agentId, chatId, permissionDenials);
     finalEl.after(card);
   }
+  flagUnseenOutsideFocus(agentId);
   scrollToBottom();
 }
 
@@ -997,6 +1010,7 @@ function onAgentBackgroundMessage({ chatId, agentId, message, permissionDenials 
     const card = buildPermissionCard(agentId, chatId, permissionDenials);
     $(`[data-msg-id="${message.id}"]`)?.after(card);
   }
+  flagUnseenOutsideFocus(agentId);
   scrollToBottom();
 }
 
@@ -1361,8 +1375,12 @@ function refreshAgentDisplayColors() {
  * @returns {void}
  */
 function toggleMessageFilter(agentId) {
-  if (messageFilterAgentIds.has(agentId)) messageFilterAgentIds.delete(agentId);
-  else messageFilterAgentIds.add(agentId);
+  if (messageFilterAgentIds.has(agentId)) {
+    messageFilterAgentIds.delete(agentId);
+  } else {
+    messageFilterAgentIds.add(agentId);
+    unseenOutsideFocusAgentIds.delete(agentId); // spotlighted — their messages are visible now
+  }
   applyMessageFilterToDom();
   renderAgentPanel();
   renderMessageFilterBar();
@@ -1375,9 +1393,26 @@ function toggleMessageFilter(agentId) {
 function clearMessageFilter() {
   if (messageFilterAgentIds.size === 0) return;
   messageFilterAgentIds.clear();
+  unseenOutsideFocusAgentIds.clear(); // everything's visible again
   applyMessageFilterToDom();
   renderAgentPanel();
   renderMessageFilterBar();
+}
+
+/**
+ * Flags `agentId` as having an unseen message if the message filter is
+ * currently spotlighting other agents — called for any agent message
+ * landing in the chat the user is actively looking at (onStreamEnd,
+ * onAgentBackgroundMessage), so a reply from outside the current focus
+ * doesn't go unnoticed. No-op when there's no filter active or `agentId` is
+ * itself spotlighted (its messages are already visible).
+ * @param {string | null} agentId
+ * @returns {void}
+ */
+function flagUnseenOutsideFocus(agentId) {
+  if (!agentId || messageFilterAgentIds.size === 0 || messageFilterAgentIds.has(agentId)) return;
+  unseenOutsideFocusAgentIds.add(agentId);
+  renderAgentPanel();
 }
 
 /**
@@ -2070,14 +2105,15 @@ function renderAgentPanel() {
   const members = chat.memberAgentIds.map(agentById).filter(Boolean);
   agentList.innerHTML = '';
   for (const agent of members) {
+    const hasUnseen = unseenOutsideFocusAgentIds.has(agent.id);
     const li = document.createElement('li');
-    li.className = 'agent-item';
+    li.className = 'agent-item' + (hasUnseen ? ' has-unseen-outside-focus' : '');
     li.dataset.testid = 'agent-item';
     li.dataset.agentId = agent.id;
     li.innerHTML = `
       <div class="agent-avatar" style="background:${agentDisplayColor(agent.color)}">${agent.name[0].toUpperCase()}</div>
       <div class="agent-info">
-        <span class="agent-name" data-testid="agent-name">${escHtml(agent.name)}${agent.dangerouslySkipPermissions ? ` <span class="agent-yolo-badge" data-testid="agent-yolo-badge" title="${t('agent.yoloBadgeTitle')}">🔥</span>` : ''}${agent.isObserver ? ` <span class="agent-observer-badge" data-testid="agent-observer-badge" title="${t('agent.observerBadgeTitle')}">👁</span>` : ''}${agent.chromeAccess ? ` <span class="agent-chrome-badge" data-testid="agent-chrome-badge" title="${t('agent.chromeBadgeTitle')}">🌐</span>` : ''}</span>
+        <span class="agent-name" data-testid="agent-name">${escHtml(agent.name)}${hasUnseen ? ` <span class="agent-unseen-dot" data-testid="agent-unseen-dot" title="${t('agent.unseenOutsideFocusTitle', { name: agent.name })}"></span>` : ''}${agent.dangerouslySkipPermissions ? ` <span class="agent-yolo-badge" data-testid="agent-yolo-badge" title="${t('agent.yoloBadgeTitle')}">🔥</span>` : ''}${agent.isObserver ? ` <span class="agent-observer-badge" data-testid="agent-observer-badge" title="${t('agent.observerBadgeTitle')}">👁</span>` : ''}${agent.chromeAccess ? ` <span class="agent-chrome-badge" data-testid="agent-chrome-badge" title="${t('agent.chromeBadgeTitle')}">🌐</span>` : ''}</span>
         <span class="agent-dir" title="${escHtml(agent.workingDir)}">${escHtml(shortDir(agent.workingDir))}</span>
         ${agent.note ? `<span class="agent-note" data-testid="agent-note" title="${escHtml(agent.note)}">📝 ${escHtml(agent.note)}</span>` : ''}
         ${agent.resumeId ? `<button class="agent-session-btn" data-testid="agent-session-btn" title="${t('agent.copySessionTitle', { resumeId: escHtml(agent.resumeId) })}">⧉ ${agent.resumeId.slice(0, 8)}…</button>` : ''}
@@ -2255,6 +2291,7 @@ async function selectChat(id) {
   sessionStorage.setItem(ACTIVE_CHAT_STORAGE_KEY, id);
   unreadChatIds.delete(id);
   messageFilterAgentIds.clear();
+  unseenOutsideFocusAgentIds.clear();
   renderMessageFilterBar();
   closeSearchBar();
   isViewingSearchContext = false;

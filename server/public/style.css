@@ -314,9 +314,12 @@ html, body { height: 100%; background: var(--bg0); color: var(--text); font-fami
 #agent-list { list-style: none; padding: 8px; flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
 .agent-item { display: flex; align-items: center; gap: 9px; padding: 8px 9px; border-radius: 8px; background: var(--bg0); transition: background .1s; }
 .agent-item:hover { background: var(--bg2); }
+.agent-item.has-unseen-outside-focus { background: color-mix(in srgb, var(--blue) 8%, var(--bg0)); }
+.agent-item.has-unseen-outside-focus:hover { background: color-mix(in srgb, var(--blue) 8%, var(--bg2)); }
 .agent-avatar { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px; color: var(--bg0); flex-shrink: 0; }
 .agent-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .agent-name { font-size: 13px; font-weight: 600; }
+.agent-unseen-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--blue); vertical-align: middle; }
 .agent-yolo-badge { font-size: 11px; cursor: help; }
 .agent-observer-badge { font-size: 11px; cursor: help; }
 .agent-chrome-badge { font-size: 11px; cursor: help; }
