@@ -564,6 +564,7 @@ const confirmCancel    = $('#confirm-cancel');
 const confirmOk        = $('#confirm-ok');
 const imageLightboxOverlay = $('#image-lightbox-overlay');
 const imageLightboxImg = $('#image-lightbox-img');
+const appLogo          = $('#app-logo');
 const settingsBtn      = $('#settings-btn');
 const settingsOverlay  = $('#settings-overlay');
 const settingsClose    = $('#settings-close');
@@ -3408,6 +3409,8 @@ document.addEventListener('keydown', (e) => {
 });
 
 imageLightboxOverlay.addEventListener('click', (e) => { if (e.target === imageLightboxOverlay) closeImageLightbox(); });
+
+appLogo.addEventListener('click', () => openImageLightbox('assets/logo.png', appLogo.alt));
 
 newAgentBtn.addEventListener('click', openModal);
 modalClose.addEventListener('click', closeModal);
