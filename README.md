@@ -10,8 +10,8 @@ A multi-agent Claude chat app. Each participant in a conversation is a Claude Co
 - Send messages; agents respond in parallel with streaming output, showing a live status of what they're doing (reading a file, running a command, etc.) and how long they've been at it
 - Each tool call's real output (command results, diffs, MCP responses) is one click away — collapsed by default so it doesn't clutter the conversation; a reply with several tool calls nests them behind a single "N tool calls" toggle instead of stacking one row per call
 - If an agent starts something in the background (e.g. a long-running Bash command) and says it'll let you know once it's done, it actually does — the follow-up lands in the chat on its own when the task finishes, no need to prompt it again
-- Getting lost in a busy multi-agent chat? Click an agent's 🔎 in the panel to spotlight it — the message list then shows that agent's messages plus your own that are actually relevant to it (a broadcast, or one that `@mentions` it), not every message you've sent to everyone else too; click again, or the filter bar's **Show all**, to go back to everyone. Resets automatically when you switch chats
-- Use `@AgentName` to route a message to a specific agent; no mention = everyone responds — the mention autocomplete and every message header also show an agent's YOLO badge (if any) and working directory, so it's clear who (and where) you're talking to
+- Getting lost in a busy multi-agent chat? Click an agent's 🔎 in the panel to spotlight it — the message list then shows that agent's messages plus your own that are actually relevant to it (a broadcast, or one that `@mentions` it), not every message you've sent to everyone else too; click again, or the filter bar's **Show all**, to go back to everyone. Resets automatically when you switch chats. If a non-spotlighted agent replies while you're focused elsewhere, their row in the panel gets a small blue dot so you don't miss it — clears once you spotlight them too or clear the filter
+- Use `@AgentName` to route a message to a specific agent; no mention = everyone responds — the mention autocomplete and every message header also show an agent's YOLO badge (if any) and working directory, so it's clear who (and where) you're talking to. Or skip typing it out entirely: click the **@** button next to an agent's name on any of their messages to drop `@Name` straight into the composer
 - Agents can delegate to teammates by writing `@Name` in their reply
 - Use `@AgentName /command` (or just `/command` in a chat with only one agent) to invoke one of that agent's real Claude Code skills — typing `/` shows an autocomplete of that agent's available commands, with descriptions
 - Interrupt an agent mid-response with the **Stop** button
@@ -23,6 +23,7 @@ A multi-agent Claude chat app. Each participant in a conversation is a Claude Co
 - Grant an agent **Browser access** at creation time to give it real control of your Chrome browser via the Claude in Chrome extension, shown with a 🌐 badge — any number of agents can hold it at once
 - Chats with new activity you haven't seen yet (an agent finished a task while you were elsewhere) show an unread dot in the sidebar
 - Hover a reply to copy it as text or as a PNG image
+- Click the logo in the sidebar header to view it full-size
 - Deleting a chat or agent asks for confirmation first (irreversible)
 - Customize your own display name, message color, UI language (English/French, Canada), and light/dark theme from **Settings** (⚙ icon)
 
