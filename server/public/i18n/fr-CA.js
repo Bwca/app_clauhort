@@ -101,6 +101,7 @@ export default {
   'agent.restartHint': "Arrêter et relancer le processus de cet agent — sans perte d'historique — pour appliquer des changements qu'un processus déjà en cours ne peut pas voir (p. ex. un connecteur MCP nouvellement autorisé)",
   'agent.filterOnTitle': "Afficher seulement les messages de {name}",
   'agent.filterOffTitle': "Retirer {name} du filtre de messages",
+  'agent.unseenOutsideFocusTitle': "{name} a envoyé un message pendant que vous étiez concentré ailleurs — cliquez sur 🔎 pour le voir",
   'agent.removeFromChatTitle': 'Retirer de la discussion',
   'agent.deleteTitle': "Supprimer l'agent",
   'agent.copySessionTitle': 'Cliquez pour copier : claude --resume {resumeId}',

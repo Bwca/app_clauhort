@@ -101,6 +101,7 @@ export default {
   'agent.restartHint': 'Kill and respawn this agent’s process — no history lost — to pick up changes a running process can’t (e.g. a newly authorized MCP connector)',
   'agent.filterOnTitle': "Show only {name}'s messages",
   'agent.filterOffTitle': "Remove {name} from the message filter",
+  'agent.unseenOutsideFocusTitle': "{name} sent a message while you were focused elsewhere — click 🔎 to see it",
   'agent.removeFromChatTitle': 'Remove from chat',
   'agent.deleteTitle': 'Delete agent',
   'agent.copySessionTitle': 'Click to copy: claude --resume {resumeId}',
