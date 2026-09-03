@@ -7,6 +7,7 @@ export default {
   'common.settings': 'Paramètres',
   'common.help': 'Aide',
   'common.changelog': 'Journal des modifications',
+  'common.viewLogo': 'Voir le logo',
   'common.toggleChats': 'Afficher/masquer les discussions',
   'common.toggleAgents': 'Afficher/masquer les agents',
 

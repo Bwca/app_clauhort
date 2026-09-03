@@ -7,6 +7,7 @@ export default {
   'common.settings': 'Settings',
   'common.help': 'Help',
   'common.changelog': 'Changelog',
+  'common.viewLogo': 'View logo',
   'common.toggleChats': 'Toggle chats',
   'common.toggleAgents': 'Toggle agents',
 
