@@ -559,4 +559,45 @@ describe('Messaging', () => {
     });
     assert.equal(clauditorHasDotAfter, false, 'spotlighting the agent should clear their unseen-outside-focus indicator');
   });
+
+  test('the "@" button on an agent message inserts a mention into the composer', async () => {
+    await createChat(page, 'Quick Mention Test');
+    await createAgent(page, { name: 'Claudia', workingDir: agentDir('claudia'), addToChat: true });
+    await createAgent(page, { name: 'Clauditor', workingDir: agentDir('clauditor'), addToChat: true });
+
+    // Broadcast so both agents reply — gives each their own message (and
+    // their own "@" button) to click.
+    await sendMessage(page, 'Both of you: reply with exactly this text, verbatim, nothing else: ack');
+    await page.waitForFunction(
+      () => new Set(
+        [...document.querySelectorAll('[data-testid="message"][data-role="agent"] [data-testid="msg-author"]')]
+          .map((el) => el.textContent.trim())
+      ).size >= 2,
+      { timeout: 90_000 }
+    );
+
+    /** Clicks the "@" button on `authorName`'s message. */
+    const clickMentionBtn = (authorName) => page.evaluate((authorName) => {
+      const msg = [...document.querySelectorAll('[data-testid="message"][data-role="agent"]')]
+        .find((el) => el.querySelector('[data-testid="msg-author"]')?.textContent.trim() === authorName);
+      msg.querySelector('[data-testid="msg-mention-btn"]').click();
+    }, authorName);
+
+    // Something already typed, no trailing space — the button should add
+    // one before the mention rather than running the two together.
+    await page.click(tid('msg-input'));
+    await page.type(tid('msg-input'), 'hey');
+
+    await clickMentionBtn('Claudia');
+    const value = await page.$eval(tid('msg-input'), (el) => el.value);
+    assert.equal(value, 'hey @Claudia ', `expected the mention inserted with a separating space, got: ${JSON.stringify(value)}`);
+
+    // Clicking a second agent's button appends theirs too, addressing both.
+    await clickMentionBtn('Clauditor');
+    const valueAfterSecond = await page.$eval(tid('msg-input'), (el) => el.value);
+    assert.equal(
+      valueAfterSecond, 'hey @Claudia @Clauditor ',
+      `expected both agents mentioned, got: ${JSON.stringify(valueAfterSecond)}`
+    );
+  });
 });
