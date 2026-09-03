@@ -1636,6 +1636,7 @@ function buildMessageEl(msg) {
     <div class="msg-body">
       <div class="msg-meta">
         <span class="msg-author" data-testid="msg-author">${escHtml(msg.authorName)}</span>
+        ${msg.role === 'agent' ? `<button class="msg-mention-btn" data-testid="msg-mention-btn" title="${t('msg.mentionTitle', { name: escHtml(msg.authorName) })}">@</button>` : ''}
         ${agent?.dangerouslySkipPermissions ? `<span class="msg-author-yolo-badge" data-testid="msg-author-yolo-badge" title="${t('agent.yoloBadgeTitle')}">🔥</span>` : ''}
         ${agent?.chromeAccess ? `<span class="msg-author-chrome-badge" data-testid="msg-author-chrome-badge" title="${t('agent.chromeBadgeTitle')}">🌐</span>` : ''}
         ${agent ? `<span class="msg-author-dir" data-testid="msg-author-dir" title="${escHtml(agent.workingDir)}">${escHtml(shortDir(agent.workingDir))}</span>` : ''}
@@ -1655,6 +1656,10 @@ function buildMessageEl(msg) {
     el.querySelector('.msg-body').appendChild(buildToolCallsEl(msg.toolCalls));
   }
   if (msg.role === 'agent') {
+    // Prefer the agent's CURRENT name over msg.authorName (a snapshot from
+    // when this message was sent) — if the agent's been renamed since,
+    // inserting the stale name would produce an @mention nothing resolves.
+    el.querySelector('.msg-mention-btn').addEventListener('click', () => quickMention(agent?.name ?? msg.authorName));
     el.querySelector('.msg-copy-text-btn').addEventListener('click', (e) => copyMessageText(e.currentTarget, msg.content));
     el.querySelector('.msg-copy-image-btn').addEventListener('click', (e) => copyMessageAsImage(e.currentTarget, el));
   }
@@ -3126,6 +3131,31 @@ function insertMention(name) {
   msgInput.value = msgInput.value.slice(0, atIdx) + `@${name} ` + msgInput.value.slice(cursor);
   hideMentionDropdown();
   msgInput.focus();
+}
+
+/**
+ * Appends "@Name " to the composer at the current cursor position and
+ * focuses it — the quick "reply to this agent" button next to a message's
+ * author name, sparing a trip through typing "@" and picking off the
+ * autocomplete dropdown every time you want to address a specific agent in
+ * a multi-agent chat. Unlike insertMention (which replaces an in-progress
+ * "@query" the user already typed), there's no existing token to replace
+ * here, so this inserts cleanly — adding a leading space first if the
+ * character right before the cursor isn't already whitespace, so it never
+ * runs the new mention into whatever's already typed.
+ * @param {string} name
+ * @returns {void}
+ */
+function quickMention(name) {
+  const cursor = msgInput.selectionStart ?? msgInput.value.length;
+  const before = msgInput.value.slice(0, cursor);
+  const needsLeadingSpace = before.length > 0 && !/\s$/.test(before);
+  const insertion = (needsLeadingSpace ? ' ' : '') + `@${name} `;
+  msgInput.value = before + insertion + msgInput.value.slice(cursor);
+  const newCursor = before.length + insertion.length;
+  hideMentionDropdown();
+  msgInput.focus();
+  msgInput.setSelectionRange(newCursor, newCursor);
 }
 
 /**

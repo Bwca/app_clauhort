@@ -180,6 +180,9 @@ html, body { height: 100%; background: var(--bg0); color: var(--text); font-fami
 .msg-body { flex: 1; min-width: 0; }
 .msg-meta { display: flex; align-items: baseline; gap: 7px; margin-bottom: 2px; }
 .msg-author { font-weight: 600; font-size: 14px; color: var(--author-color); }
+.msg-mention-btn { background: none; border: none; color: var(--dim); font-size: 12px; font-weight: 700; cursor: pointer; line-height: 1; padding: 1px 5px; border-radius: 4px; flex-shrink: 0; opacity: 0; transition: opacity .15s, background .15s, color .15s; }
+.msg:hover .msg-mention-btn { opacity: 1; }
+.msg-mention-btn:hover { background: var(--bg2); color: var(--blue); }
 .msg-author-yolo-badge { font-size: 11px; cursor: help; flex-shrink: 0; }
 .msg-author-chrome-badge { font-size: 11px; cursor: help; flex-shrink: 0; }
 .msg-author-dir { font-size: 11px; color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
