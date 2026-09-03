@@ -505,4 +505,58 @@ describe('Messaging', () => {
       `message addressed to a removed agent should stay hidden under a different agent's filter, got: ${JSON.stringify(visibleAfterReload)}`
     );
   });
+
+  test('spotlighting an agent flags a reply from someone outside the focus as unseen', async () => {
+    await createChat(page, 'Unseen Focus Test');
+    await createAgent(page, { name: 'Claudia', workingDir: agentDir('claudia'), addToChat: true });
+    await createAgent(page, { name: 'Clauditor', workingDir: agentDir('clauditor'), addToChat: true });
+
+    // Spotlight Claudia before anyone's spoken — the indicator should only
+    // ever reflect messages that arrive DURING focus mode, never retroactively.
+    await page.evaluate(() => {
+      const items = [...document.querySelectorAll('[data-testid="agent-item"]')];
+      const item = items.find((el) => el.querySelector('[data-testid="agent-name"]')?.textContent.trim() === 'Claudia');
+      item.querySelector('.agent-filter-btn').click();
+    });
+
+    await sendMessage(page, 'Both of you: reply with exactly this text, verbatim, nothing else: ack');
+    await page.waitForFunction(
+      () => new Set(
+        [...document.querySelectorAll('[data-testid="message"][data-role="agent"] [data-testid="msg-author"]')]
+          .map((el) => el.textContent.trim())
+      ).size >= 2,
+      { timeout: 90_000 }
+    );
+
+    // Clauditor replied while spotlighted out — should show the
+    // unseen-outside-focus dot; Claudia, being spotlighted, should not.
+    await page.waitForFunction(
+      () => {
+        const items = [...document.querySelectorAll('[data-testid="agent-item"]')];
+        const clauditor = items.find((el) => el.querySelector('[data-testid="agent-name"]')?.textContent.trim() === 'Clauditor');
+        return clauditor?.querySelector('[data-testid="agent-unseen-dot"]') != null;
+      },
+      { timeout: 5000 }
+    );
+    const claudiaHasDot = await page.evaluate(() => {
+      const items = [...document.querySelectorAll('[data-testid="agent-item"]')];
+      const claudia = items.find((el) => el.querySelector('[data-testid="agent-name"]')?.textContent.trim() === 'Claudia');
+      return claudia?.querySelector('[data-testid="agent-unseen-dot"]') != null;
+    });
+    assert.equal(claudiaHasDot, false, 'the spotlighted agent should never show the unseen-outside-focus indicator');
+
+    // Spotlighting Clauditor too clears their indicator — their messages are
+    // visible now, nothing left to flag as missed.
+    await page.evaluate(() => {
+      const items = [...document.querySelectorAll('[data-testid="agent-item"]')];
+      const item = items.find((el) => el.querySelector('[data-testid="agent-name"]')?.textContent.trim() === 'Clauditor');
+      item.querySelector('.agent-filter-btn').click();
+    });
+    const clauditorHasDotAfter = await page.evaluate(() => {
+      const items = [...document.querySelectorAll('[data-testid="agent-item"]')];
+      const clauditor = items.find((el) => el.querySelector('[data-testid="agent-name"]')?.textContent.trim() === 'Clauditor');
+      return clauditor?.querySelector('[data-testid="agent-unseen-dot"]') != null;
+    });
+    assert.equal(clauditorHasDotAfter, false, 'spotlighting the agent should clear their unseen-outside-focus indicator');
+  });
 });
