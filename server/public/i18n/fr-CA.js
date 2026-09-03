@@ -122,6 +122,7 @@ export default {
   'perm.deniedBtn': 'Refusé ✕',
   'perm.grantAllBtn': 'Tout accorder',
 
+  'msg.mentionTitle': 'Répondre à {name}',
   'msg.copyTextTitle': 'Copier le texte',
   'msg.copyImageTitle': 'Copier comme image',
   'msg.toolCallNoOutput': 'Aucune sortie',
