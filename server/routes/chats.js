@@ -16,6 +16,8 @@ import {
   addChatMember,
   removeChatMember,
   getMessages,
+  getMessageCount,
+  getMessagesPage,
   searchMessages,
   getMessagesAround,
   getAgent,
@@ -176,13 +178,43 @@ export default function createChatsRouter(wss) {
 
   /**
    * GET /api/chats/:id/messages
-   * Returns message history for a chat.
+   * Without `page`: returns the most-recent-N window (unchanged behavior,
+   * still what ws/handler.js's own direct getMessages calls rely on for
+   * turn context — this route is a separate consumer of the same function).
    * @param {string} [req.query.limit] - Max number of messages (default 50)
    * @param {string} [req.query.before] - Message ID to paginate before
+   *
+   * With `page`: forum-thread-style pagination instead — page 1 is the
+   * OLDEST messages, ordered oldest-first, sized by `pageSize`. `page` may
+   * also be the literal string "last" to fetch whichever page is currently
+   * the final one, without the caller needing to already know totalPages.
+   * The resolved page/totalPages/totalMessages/pageSize come back as
+   * response headers (X-Page, X-Total-Pages, X-Total-Messages,
+   * X-Page-Size) rather than reshaping the JSON body, so this stays a
+   * plain Message[] either way — existing callers of the no-`page` form
+   * (including tests) don't have to change.
+   * @param {string} [req.query.page] - 1-indexed page number, or "last"
+   * @param {string} [req.query.pageSize] - Messages per page (default 50)
    */
   router.get('/:id/messages', (req, res) => {
     const chat = getChat(req.params.id);
     if (!chat) return res.status(404).json({ error: t('errors.chatNotFound') });
+
+    if (req.query.page !== undefined) {
+      const pageSize = parseInt(req.query.pageSize, 10) || 50;
+      const totalMessages = getMessageCount(req.params.id);
+      const totalPages = Math.max(1, Math.ceil(totalMessages / pageSize));
+      const requestedPage = req.query.page === 'last' ? totalPages : parseInt(req.query.page, 10);
+      const page = Number.isFinite(requestedPage) ? Math.min(Math.max(requestedPage, 1), totalPages) : totalPages;
+      res.set({
+        'X-Page': String(page),
+        'X-Total-Pages': String(totalPages),
+        'X-Total-Messages': String(totalMessages),
+        'X-Page-Size': String(pageSize),
+      });
+      return res.json(getMessagesPage(req.params.id, page, pageSize));
+    }
+
     const limit = parseInt(req.query.limit, 10) || 50;
     const before = req.query.before;
     const messages = getMessages(req.params.id, limit, before);
