@@ -6,10 +6,12 @@
 import { WebSocket, WebSocketServer } from 'ws';
 import { v4 as uuidv4 } from 'uuid';
 import { dirname } from 'path';
-import { getChat, getAgent, getAgentChatId, getMessages, addMessage, grantAgentPath, grantAgentToolPattern, setAgentResumeIdIfUnset, getUserDisplayName } from '../store/db.js';
+import { getChat, getAgent, getAgentChatId, getMessages, addMessage, grantAgentPath, grantAgentToolPattern, setAgentResumeIdIfUnset, getUserDisplayName, createScheduledMessage } from '../store/db.js';
 import { parseResponders, extractMentionedAgents, parseSkillInvocation } from '../services/messageRouter.js';
 import { runAgentStream, FILE_PATH_TOOLS, deriveToolPatterns, dedupePermissionDenials } from '../services/agentRunner.js';
 import { killAgent, onBackgroundTurn } from '../services/agentProcessManager.js';
+import { scheduleTimer } from '../services/scheduler.js';
+import { parseSessionLimitReset } from '../services/sessionLimitReset.js';
 import { t } from '../i18n/t.js';
 import { logger } from '../logger.js';
 import { logTranscript } from '../transcriptLog.js';
@@ -666,6 +668,55 @@ function makeBackgroundTurnHandler(agentId, wss) {
 }
 
 /**
+ * Scheduled-message content that nudges a single agent to continue once its
+ * session limit resets. @-targeted (not a bare "please continue") so
+ * parseResponders resolves it to just that agent at fire time, not a
+ * broadcast to the whole chat — see messageRouter.js.
+ * @param {import('../store/db.js').Agent} agent
+ * @returns {string}
+ */
+function buildAutoContinueMessage(agent) {
+  return `@${agent.name} Your session limit has reset. Please continue with what you were doing.`;
+}
+
+/**
+ * chat.autoContinue's whole mechanism: when an agent's turn errors out on
+ * Claude's own session-limit message ("You've hit your session limit ·
+ * resets 7:20pm (Australia/Darwin)" — see services/sessionLimitReset.js),
+ * auto-arms a scheduled message targeted at just that agent for one minute
+ * after the limit resets — the exact same mechanism a user gets from the
+ * scheduled-message panel (visible there, cancelable, survives a restart),
+ * so the user doesn't have to notice the limit cleared and say "please go
+ * on" themselves.
+ *
+ * A silent no-op whenever the error text doesn't actually name a reset time
+ * (parseSessionLimitReset returns null) — this runs on EVERY turn error in
+ * an autoContinue chat, not just session-limit ones, so anything else (a
+ * bad --resume flag, a crashed process) must fall through without
+ * scheduling anything.
+ * @param {import('../store/db.js').Chat} chat
+ * @param {import('../store/db.js').Agent} agent
+ * @param {string} errorMessage
+ * @param {WebSocketServer} wss
+ * @returns {Promise<void>}
+ */
+async function maybeScheduleAutoContinue(chat, agent, errorMessage, wss) {
+  if (!chat.autoContinue) return;
+  const resetAt = parseSessionLimitReset(errorMessage);
+  if (!resetAt) return;
+  const sendAt = new Date(resetAt.getTime() + 60_000);
+  const row = await createScheduledMessage({
+    id: uuidv4(),
+    chatId: chat.id,
+    content: buildAutoContinueMessage(agent),
+    attachments: [],
+    sendAt: sendAt.toISOString(),
+  });
+  scheduleTimer(row, wss);
+  log.info({ agentId: agent.id, chatId: chat.id, sendAt: row.sendAt }, 'auto-continue scheduled after session limit');
+}
+
+/**
  * Runs a set of agents in parallel, streaming each response as it arrives.
  * Saves every completed response before resolving.
  * Returns the messages produced, keyed by agent ID — not just which agents
@@ -809,6 +860,7 @@ async function runAgentsParallel(agents, allMembers, chat, userMessage, wss, pri
         error: err.message,
       });
       log.error({ agentId: agent.id, chatId: chat.id, streamId, err }, 'turn errored');
+      await maybeScheduleAutoContinue(chat, agent, err.message, wss);
     } finally {
       activeStreams.delete(streamId);
     }
