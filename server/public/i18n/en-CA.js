@@ -38,6 +38,11 @@ export default {
   'chat.freeRelayOffTitle': 'Free agent relay: off — an agent\'s @mention of a teammate relays once, then stops',
   'chat.autoContinueOnTitle': 'Auto-continue after session limit: on — hitting a session limit auto-schedules a "please continue" for one minute after it resets',
   'chat.autoContinueOffTitle': 'Auto-continue after session limit: off',
+  'chat.pageFirstBtn': '« First',
+  'chat.pagePrevBtn': '‹ Prev',
+  'chat.pageNextBtn': 'Next ›',
+  'chat.pageLastBtn': 'Last »',
+  'chat.pageIndicator': 'Page {page} of {totalPages}',
 
   'search.btnTitle': 'Search messages',
   'search.placeholder': 'Search this chat…',

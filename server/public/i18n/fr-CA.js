@@ -38,6 +38,11 @@ export default {
   'chat.freeRelayOffTitle': 'Relais libre entre agents : désactivé — la mention @ d\'un coéquipier par un agent relaie une fois, puis s\'arrête',
   'chat.autoContinueOnTitle': 'Continuation automatique après une limite de session : activée — atteindre une limite de session planifie automatiquement un « veuillez continuer » une minute après sa réinitialisation',
   'chat.autoContinueOffTitle': 'Continuation automatique après une limite de session : désactivée',
+  'chat.pageFirstBtn': '« Début',
+  'chat.pagePrevBtn': '‹ Précédent',
+  'chat.pageNextBtn': 'Suivant ›',
+  'chat.pageLastBtn': 'Fin »',
+  'chat.pageIndicator': 'Page {page} sur {totalPages}',
 
   'search.btnTitle': 'Rechercher dans les messages',
   'search.placeholder': 'Rechercher dans cette discussion…',
