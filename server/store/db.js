@@ -112,6 +112,14 @@ function transaction(fn) {
  *   ws/handler.js), so members of this chat can carry on an extended
  *   back-and-forth without the user re-prompting each hop. Defaults to
  *   false (the original single-hop-only behavior) for every other chat.
+ * @property {boolean} autoContinue - When true, an agent turn that errors
+ *   out on Claude's own session-limit message (e.g. "You've hit your
+ *   session limit · resets 7:20pm (Australia/Darwin)" — see
+ *   services/sessionLimitReset.js and the catch block in
+ *   runAgentsParallel/ws/handler.js) gets a scheduled message auto-armed for
+ *   one minute after that reset time, nudging just that agent to continue
+ *   without the user having to notice the limit cleared and say so
+ *   themselves. Defaults to false for every other chat.
  * @property {string} createdAt - ISO 8601 timestamp
  */
 
@@ -175,6 +183,7 @@ CREATE TABLE IF NOT EXISTS chats (
   name TEXT NOT NULL,
   roster_changed_at TEXT,
   free_relay INTEGER NOT NULL DEFAULT 0,
+  auto_continue INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL
 );
 
@@ -400,6 +409,18 @@ function migrateChatsFreeRelay() {
 }
 
 /**
+ * Adds the `auto_continue` column to `chats` if it's missing, same reasoning
+ * as migrateChatsFreeRelay above.
+ * @returns {void}
+ */
+function migrateChatsAutoContinue() {
+  const hasColumn = db.prepare("PRAGMA table_info(chats)").all()
+    .some((col) => col.name === 'auto_continue');
+  if (hasColumn) return;
+  db.exec('ALTER TABLE chats ADD COLUMN auto_continue INTEGER NOT NULL DEFAULT 0');
+}
+
+/**
  * Maps a raw `agents` row to the public Agent shape.
  * @param {Record<string, unknown>} row
  * @returns {Agent}
@@ -434,7 +455,7 @@ function rowToChat(row) {
     .prepare('SELECT agent_id FROM chat_members WHERE chat_id = ? ORDER BY rowid')
     .all(row.id)
     .map((r) => r.agent_id);
-  return { id: row.id, name: row.name, memberAgentIds, rosterChangedAt: row.roster_changed_at ?? null, freeRelay: Boolean(row.free_relay), createdAt: row.created_at };
+  return { id: row.id, name: row.name, memberAgentIds, rosterChangedAt: row.roster_changed_at ?? null, freeRelay: Boolean(row.free_relay), autoContinue: Boolean(row.auto_continue), createdAt: row.created_at };
 }
 
 /**
@@ -558,6 +579,7 @@ export async function loadDb() {
   migrateChatMembersUniqueAgent();
   migrateChatsRosterChangedAt();
   migrateChatsFreeRelay();
+  migrateChatsAutoContinue();
 
   if (!isMemory && isNewDatabase && existsSync(JSON_DATA_FILE)) {
     importLegacyJson();
@@ -740,11 +762,11 @@ export async function createChat(data) {
 }
 
 /**
- * Updates a chat's mutable settings (currently name and freeRelay). Unlike
- * agent flag updates, neither of these is baked into any spawn args, so
- * there's no process to evict here.
+ * Updates a chat's mutable settings (currently name, freeRelay, and
+ * autoContinue). Unlike agent flag updates, none of these is baked into any
+ * spawn args, so there's no process to evict here.
  * @param {string} id
- * @param {{ name?: string, freeRelay?: boolean }} updates
+ * @param {{ name?: string, freeRelay?: boolean, autoContinue?: boolean }} updates
  * @returns {Promise<Chat | null>} the updated chat, or null if not found
  */
 export async function updateChat(id, updates) {
@@ -755,6 +777,7 @@ export async function updateChat(id, updates) {
     // Boolean, so explicitly checked against undefined — `false` (turning
     // free relay back off) is a meaningful, common value, not "absent".
     free_relay: updates.freeRelay !== undefined ? (updates.freeRelay ? 1 : 0) : undefined,
+    auto_continue: updates.autoContinue !== undefined ? (updates.autoContinue ? 1 : 0) : undefined,
   };
   const entries = Object.entries(columns).filter(([, v]) => v !== undefined);
   if (entries.length === 0) return getChat(id);
