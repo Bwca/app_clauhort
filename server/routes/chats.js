@@ -110,10 +110,14 @@ export default function createChatsRouter(wss) {
    * @param {boolean} [req.body.freeRelay] - When true, the agent-to-agent
    *   delegation relay in this chat is no longer depth-capped at one hop
    *   (see updateChat's docs in db.js and the relay loop in ws/handler.js).
+   * @param {boolean} [req.body.autoContinue] - When true, a session-limit
+   *   error auto-arms a scheduled "please continue" nudge for the affected
+   *   agent (see updateChat's docs in db.js and runAgentsParallel's catch
+   *   block in ws/handler.js).
    */
   router.patch('/:id', async (req, res) => {
-    const { name, freeRelay } = req.body;
-    const chat = await updateChat(req.params.id, { name, freeRelay });
+    const { name, freeRelay, autoContinue } = req.body;
+    const chat = await updateChat(req.params.id, { name, freeRelay, autoContinue });
     if (!chat) return res.status(404).json({ error: t('errors.chatNotFound') });
     res.json(chat);
   });
