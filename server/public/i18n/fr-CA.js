@@ -36,6 +36,8 @@ export default {
   'chat.filterBarClearBtn': 'Tout afficher',
   'chat.freeRelayOnTitle': 'Relais libre entre agents : activé — les agents peuvent continuer à se relayer sans limite de sauts',
   'chat.freeRelayOffTitle': 'Relais libre entre agents : désactivé — la mention @ d\'un coéquipier par un agent relaie une fois, puis s\'arrête',
+  'chat.autoContinueOnTitle': 'Continuation automatique après une limite de session : activée — atteindre une limite de session planifie automatiquement un « veuillez continuer » une minute après sa réinitialisation',
+  'chat.autoContinueOffTitle': 'Continuation automatique après une limite de session : désactivée',
 
   'search.btnTitle': 'Rechercher dans les messages',
   'search.placeholder': 'Rechercher dans cette discussion…',

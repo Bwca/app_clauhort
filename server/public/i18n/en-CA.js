@@ -36,6 +36,8 @@ export default {
   'chat.filterBarClearBtn': 'Show all',
   'chat.freeRelayOnTitle': 'Free agent relay: on — agents can keep relaying to each other without a hop limit',
   'chat.freeRelayOffTitle': 'Free agent relay: off — an agent\'s @mention of a teammate relays once, then stops',
+  'chat.autoContinueOnTitle': 'Auto-continue after session limit: on — hitting a session limit auto-schedules a "please continue" for one minute after it resets',
+  'chat.autoContinueOffTitle': 'Auto-continue after session limit: off',
 
   'search.btnTitle': 'Search messages',
   'search.placeholder': 'Search this chat…',
