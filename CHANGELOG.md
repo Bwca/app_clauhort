@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.2.12] - 2026-09-04
+
+### Added
+- A per-chat "Auto-continue" toggle (⏳ in the chat topbar, `PATCH /api/chats/:id`) — when on, an agent turn that errors out on Claude's own session-limit message (e.g. "You've hit your session limit · resets 7:20pm (Australia/Darwin)") auto-arms a scheduled `@Agent` "please continue" message for one minute after that reset time, using the same scheduled-message mechanism as the 🕐 panel (visible there, cancelable, survives a restart). Off by default. See `server/services/sessionLimitReset.js` for the timezone-aware reset-time parsing and `maybeScheduleAutoContinue` in `server/ws/handler.js`.
+
 ## [1.2.11] - 2026-09-03
 
 ### Added
