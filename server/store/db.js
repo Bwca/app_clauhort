@@ -920,6 +920,42 @@ export function getMessages(chatId, limit = 50, beforeId) {
 }
 
 /**
+ * Total message count for a chat — the denominator behind the forum-style
+ * page-number pagination in getMessagesPage (see its docs and the
+ * GET /api/chats/:id/messages?page=… handler in routes/chats.js).
+ * @param {string} chatId
+ * @returns {number}
+ */
+export function getMessageCount(chatId) {
+  return db.prepare('SELECT COUNT(*) as n FROM messages WHERE chat_id = ?').get(chatId).n;
+}
+
+/**
+ * Returns one 1-indexed page of a chat's messages, oldest-first — page 1 is
+ * the oldest messages, not the most recent (the opposite of getMessages'
+ * "most recent N" window). Deliberately offset-based rather than
+ * cursor-based like getMessages: a page NUMBER (not "before this id") is
+ * exactly what a forum-thread-style "Page 3 of 12" nav needs, and this
+ * app's per-chat message volumes never get large enough for OFFSET's O(n)
+ * cost to matter.
+ *
+ * Out-of-range pages return an empty array rather than clamping — callers
+ * (the REST route) are expected to clamp against getMessageCount-derived
+ * totalPages themselves, since only they know the page size being used.
+ * @param {string} chatId
+ * @param {number} page - 1-indexed
+ * @param {number} pageSize
+ * @returns {Message[]}
+ */
+export function getMessagesPage(chatId, page, pageSize) {
+  const rows = db.prepare(`
+    SELECT * FROM messages WHERE chat_id = ?
+    ORDER BY created_at ASC, rowid ASC LIMIT ? OFFSET ?
+  `).all(chatId, pageSize, Math.max(page - 1, 0) * pageSize);
+  return rows.map(rowToMessage);
+}
+
+/**
  * Escapes SQL LIKE wildcards (`%`, `_`) in user-supplied search text so
  * they're matched literally rather than as LIKE patterns — otherwise typing
  * e.g. "50%" or "foo_bar" into the search box would silently behave as a
