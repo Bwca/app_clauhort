@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.2.13] - 2026-09-06
+
+### Added
+- Forum-thread-style pagination for the message view — a chat's history is now split into fixed-size pages (50 messages), with « First / ‹ Prev / Next › / Last » controls. Opening a chat (or a browser refresh) lands on the latest page, same as before; older pages are reachable via the nav bar instead of being invisible once a chat passes 50 messages. Live messages/streaming only render while viewing the latest page — an older page is a frozen snapshot, matching a forum thread rather than an auto-scrolling feed. See `getMessagesPage`/`getMessageCount` in `server/store/db.js` and `loadMessagesPage` in `server/public/app.js`.
+
+### Fixed
+- Nothing was actually being deleted, but a chat past 50 messages previously had no way to reach anything older than the default recent-message window after a reload — the pagination above is the fix.
+
 ## [1.2.12] - 2026-09-04
 
 ### Added
