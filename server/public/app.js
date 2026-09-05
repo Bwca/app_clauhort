@@ -168,6 +168,20 @@ let searchDebounceTimer = null;
  * @type {boolean} */
 let isViewingSearchContext = false;
 
+/**
+ * Forum-thread-style pagination state for the active chat's normal (not
+ * search-context) message view — see loadMessagesPage. Page 1 is the
+ * chat's oldest messages; currentPage === totalPages means "viewing the
+ * latest page," which is the only state live WS events (onMessageSaved,
+ * onStreamStart) render into — see isViewingLatestPage. Both reset to 1
+ * whenever loadMessagesPage runs, so they're never stale for a chat that
+ * hasn't been loaded yet.
+ * @type {number}
+ */
+let currentPage = 1;
+/** @type {number} */
+let totalPages = 1;
+
 /** @type {string} currently selected color in the create-agent modal */
 let selectedColor = '#89b4fa';
 
@@ -514,6 +528,12 @@ const searchClose      = $('#search-close');
 const searchResultsEl  = $('#search-results');
 const jumpedBanner     = $('#jumped-banner');
 const jumpedBannerBackBtn = $('#jumped-banner-back-btn');
+const pageNav          = $('#page-nav');
+const pageFirstBtn     = $('#page-first-btn');
+const pagePrevBtn      = $('#page-prev-btn');
+const pageIndicator    = $('#page-indicator');
+const pageNextBtn      = $('#page-next-btn');
+const pageLastBtn      = $('#page-last-btn');
 const messageList      = $('#message-list');
 const msgInput         = $('#msg-input');
 const scheduleBtn      = $('#schedule-btn');
@@ -819,6 +839,9 @@ function onScheduledMessageFired({ chatId, id }) {
  */
 function onMessageSaved(message) {
   if (message.chatId !== activeChatId) return;
+  // A page other than the latest is a frozen snapshot the user is reading
+  // further back in — see loadMessagesPage/isViewingLatestPage's docs.
+  if (!isViewingSearchContext && !isViewingLatestPage()) return;
   appendMessage(message);
 }
 
@@ -838,7 +861,10 @@ function onStreamStart({ streamId, chatId, agentId, agentName, agentColor }) {
     typingHidden: false,
   };
   streamingEntries[streamId] = entry;
-  if (chatId === activeChatId) attachStreamingBubble(entry);
+  // See onMessageSaved's matching guard — an older page is a frozen
+  // snapshot; the bubble stays un-rendered (entry itself is still tracked)
+  // until the user pages back to the end.
+  if (chatId === activeChatId && (isViewingSearchContext || isViewingLatestPage())) attachStreamingBubble(entry);
 }
 
 /**
@@ -1579,6 +1605,7 @@ async function jumpToMessage(msg) {
     for (const m of contextMsgs) messageList.appendChild(buildMessageEl(m));
     isViewingSearchContext = true;
     jumpedBanner.hidden = false;
+    pageNav.hidden = true;
     el = messageList.querySelector(`[data-msg-id="${msg.id}"]`);
   }
   if (!el) return;
@@ -1592,17 +1619,91 @@ async function jumpToMessage(msg) {
 }
 
 /**
- * Returns the message list to the normal tail-of-chat view after a search
- * jump, by simply re-running the same load selectChat does on open.
+ * Returns the message list to the normal paginated view after a search
+ * jump, landing on the latest page.
  * @returns {Promise<void>}
  */
 async function backToLatestMessages() {
   isViewingSearchContext = false;
   jumpedBanner.hidden = true;
-  messageList.innerHTML = '';
-  const res = await fetch(`/api/chats/${activeChatId}/messages`);
+  await loadMessagesPage(activeChatId, 'last');
+}
+
+/**
+ * True exactly when the active chat's normal (non-search-context) message
+ * view is showing its latest page — the only state in which live WS events
+ * (onMessageSaved, onStreamStart) should render into the DOM. Viewing an
+ * older page is deliberately a frozen snapshot: new activity doesn't
+ * silently splice into a page the user is in the middle of reading further
+ * back — see loadMessagesPage's docs.
+ * @returns {boolean}
+ */
+function isViewingLatestPage() {
+  return currentPage === totalPages;
+}
+
+/**
+ * Reflects currentPage/totalPages onto #page-nav: hidden entirely for a
+ * chat short enough to fit on one page (no clutter for the common case),
+ * otherwise shown with First/Prev disabled on page 1 and Next/Last
+ * disabled on the last page.
+ */
+function renderPageNav() {
+  pageNav.hidden = totalPages <= 1;
+  pageIndicator.textContent = t('chat.pageIndicator', { page: currentPage, totalPages });
+  pageFirstBtn.disabled = currentPage === 1;
+  pagePrevBtn.disabled = currentPage === 1;
+  pageNextBtn.disabled = currentPage === totalPages;
+  pageLastBtn.disabled = currentPage === totalPages;
+}
+
+/**
+ * Loads one forum-thread-style page of `chatId`'s messages — page 1 is the
+ * oldest messages, `page` may also be the literal string "last" to fetch
+ * whichever page is currently final without the caller needing to already
+ * know totalPages (see the route's own docs in routes/chats.js). Replaces
+ * the message list wholesale, same as a chat switch.
+ *
+ * Streaming reconciliation mirrors selectChat's, but scoped to just this
+ * chat since only the message list (not the whole chat view) is being
+ * swapped: any bubble still attached is detached before the list is wiped
+ * (otherwise its DOM node would vanish out from under its still-ticking
+ * interval), and reattached afterward ONLY if the page that loaded turned
+ * out to be the latest one — an in-progress reply has no natural place on
+ * an older, frozen page, so it simply stays un-rendered (data intact in
+ * streamingEntries) until the user pages back to the end.
+ * @param {string} chatId
+ * @param {number | 'last'} page
+ * @returns {Promise<void>}
+ */
+async function loadMessagesPage(chatId, page) {
+  const url = new URL(`/api/chats/${chatId}/messages`, location.origin);
+  url.searchParams.set('page', String(page));
+  const res = await fetch(url);
   const msgs = /** @type {Message[]} */ (await res.json());
+
+  for (const entry of Object.values(streamingEntries)) {
+    if (entry.chatId === chatId && entry.el) detachStreamingBubble(entry);
+  }
+
+  messageList.innerHTML = '';
   for (const msg of msgs) appendMessage(msg);
+
+  currentPage = Number(res.headers.get('X-Page')) || 1;
+  totalPages = Number(res.headers.get('X-Total-Pages')) || 1;
+  renderPageNav();
+
+  // appendMessage scrolls to the bottom on every call, which is right for
+  // the latest page (jump straight to the newest activity) but wrong for
+  // any earlier one — a "page" here means reading from its start, like
+  // turning to the top of a book page, not landing on its last line.
+  if (!isViewingLatestPage()) messageList.scrollTop = 0;
+
+  if (isViewingLatestPage()) {
+    for (const entry of Object.values(streamingEntries)) {
+      if (entry.chatId === chatId) attachStreamingBubble(entry);
+    }
+  }
 }
 
 /**
@@ -2335,6 +2436,7 @@ async function selectChat(id) {
   closeSearchBar();
   isViewingSearchContext = false;
   jumpedBanner.hidden = true;
+  pageNav.hidden = true;
   renderChatList();
   renderAgentPanel();
   // On a narrow viewport the chat list a user just picked from is an
@@ -2360,18 +2462,13 @@ async function selectChat(id) {
   }
   messageList.innerHTML = '';
 
-  const res = await fetch(`/api/chats/${id}/messages`);
-  const msgs = /** @type {Message[]} */ (await res.json());
-  for (const msg of msgs) appendMessage(msg);
-
-  // Reattach any streams still running in this chat — e.g. the user asked
+  // Lands on the latest page and (since that's always where 'last' lands)
+  // reattaches any stream still running in this chat — e.g. the user asked
   // something, switched away before/while the agent replied, and has now
   // switched back. Without this, a stream still going while this chat
   // wasn't active would never show as in-progress, and its finished reply
   // would silently never render (see onStreamEnd).
-  for (const entry of Object.values(streamingEntries)) {
-    if (entry.chatId === id) attachStreamingBubble(entry);
-  }
+  await loadMessagesPage(id, 'last');
 
   scheduledPanel.hidden = true;
   const scheduledRes = await fetch(`/api/chats/${id}/scheduled-messages`);
@@ -3493,6 +3590,11 @@ searchInput.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') closeSearchBar();
 });
 jumpedBannerBackBtn.addEventListener('click', backToLatestMessages);
+
+pageFirstBtn.addEventListener('click', () => loadMessagesPage(activeChatId, 1));
+pagePrevBtn.addEventListener('click', () => loadMessagesPage(activeChatId, currentPage - 1));
+pageNextBtn.addEventListener('click', () => loadMessagesPage(activeChatId, currentPage + 1));
+pageLastBtn.addEventListener('click', () => loadMessagesPage(activeChatId, 'last'));
 
 scheduleBtn.addEventListener('click', openScheduleModal);
 scheduleClose.addEventListener('click', closeScheduleModal);
