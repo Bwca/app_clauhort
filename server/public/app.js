@@ -33,6 +33,10 @@ import { APP_VERSION } from './appVersion.js';
  *   teammate in a reply keeps relaying round after round instead of
  *   stopping after one hop — see the #free-relay-btn toggle and the relay
  *   loop in server/ws/handler.js.
+ * @property {boolean} autoContinue - When true, an agent hitting Claude's
+ *   own session-limit error auto-schedules a "please continue" message for
+ *   one minute after the limit resets — see the #auto-continue-btn toggle
+ *   and maybeScheduleAutoContinue in server/ws/handler.js.
  * @property {string} createdAt
  */
 
@@ -495,6 +499,7 @@ const emptyState       = $('#empty-state');
 const chatView         = $('#chat-view');
 const chatTopbarName   = $('#chat-topbar-name');
 const freeRelayBtn     = $('#free-relay-btn');
+const autoContinueBtn  = $('#auto-continue-btn');
 const reconnNotice     = $('#reconnecting-notice');
 const sidebarEl        = $('#sidebar');
 const sidebarToggleBtn = $('#sidebar-toggle-btn');
@@ -2291,6 +2296,35 @@ async function toggleFreeRelay() {
   renderFreeRelayBtn();
 }
 
+/**
+ * Reflects the active chat's autoContinue setting on #auto-continue-btn.
+ */
+function renderAutoContinueBtn() {
+  const on = Boolean(activeChat()?.autoContinue);
+  autoContinueBtn.classList.toggle('active', on);
+  autoContinueBtn.setAttribute('aria-pressed', String(on));
+  autoContinueBtn.title = t(on ? 'chat.autoContinueOnTitle' : 'chat.autoContinueOffTitle');
+}
+
+/**
+ * Toggles the active chat's autoContinue setting via the REST API and
+ * updates the local cache + button in place — same fetch-then-patch-local-
+ * state pattern as toggleFreeRelay.
+ */
+async function toggleAutoContinue() {
+  const chat = activeChat();
+  if (!chat) return;
+  const res = await fetch(`/api/chats/${chat.id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ autoContinue: !chat.autoContinue }),
+  });
+  const updated = /** @type {Chat} */ (await res.json());
+  const idx = chats.findIndex((c) => c.id === updated.id);
+  if (idx !== -1) chats[idx] = updated;
+  renderAutoContinueBtn();
+}
+
 async function selectChat(id) {
   activeChatId = id;
   sessionStorage.setItem(ACTIVE_CHAT_STORAGE_KEY, id);
@@ -2312,6 +2346,7 @@ async function selectChat(id) {
   const chat = activeChat();
   chatTopbarName.textContent = t('chat.channelName', { name: chat?.name ?? '' });
   renderFreeRelayBtn();
+  renderAutoContinueBtn();
   emptyState.hidden = true;
   chatView.hidden = false;
 
@@ -3440,6 +3475,11 @@ scheduledBtn.addEventListener('click', (e) => {
 freeRelayBtn.addEventListener('click', (e) => {
   e.stopPropagation();
   toggleFreeRelay();
+});
+
+autoContinueBtn.addEventListener('click', (e) => {
+  e.stopPropagation();
+  toggleAutoContinue();
 });
 
 searchBtn.addEventListener('click', (e) => {
