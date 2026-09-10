@@ -597,6 +597,9 @@ const noteTextarea     = $('#note-textarea');
 const noteCancel       = $('#note-cancel');
 const confirmOverlay   = $('#confirm-overlay');
 const confirmMessage   = $('#confirm-message');
+const confirmCheckboxRow   = $('#confirm-checkbox-row');
+const confirmCheckbox      = $('#confirm-checkbox');
+const confirmCheckboxLabel = $('#confirm-checkbox-label');
 const confirmCancel    = $('#confirm-cancel');
 const confirmOk        = $('#confirm-ok');
 const imageLightboxOverlay = $('#image-lightbox-overlay');
@@ -711,24 +714,34 @@ let pendingConfirmResolve = null;
 
 /**
  * Shows the generic confirmation modal with the given message and resolves
- * once the user picks Cancel (false) or Delete (true). Used to gate
- * irreversible actions (deleting a chat or an agent) behind an explicit step.
+ * once the user picks Cancel or Delete. Used to gate irreversible actions
+ * (deleting a chat or an agent) behind an explicit step. When
+ * `checkboxLabel` is given, an extra opt-in checkbox is shown beneath the
+ * message (e.g. "also delete its agents") and its final state is returned
+ * alongside the confirm/cancel choice; otherwise the row stays hidden and
+ * `checked` is always false.
  * @param {string} message
- * @returns {Promise<boolean>}
+ * @param {{ checkboxLabel?: string }} [opts]
+ * @returns {Promise<{ confirmed: boolean, checked: boolean }>}
  */
-function confirmDialog(message) {
+function confirmDialog(message, opts = {}) {
   confirmMessage.textContent = message;
+  confirmCheckboxRow.hidden = !opts.checkboxLabel;
+  if (opts.checkboxLabel) {
+    confirmCheckboxLabel.textContent = opts.checkboxLabel;
+    confirmCheckbox.checked = false;
+  }
   confirmOverlay.hidden = false;
   return new Promise((resolve) => { pendingConfirmResolve = resolve; });
 }
 
 /**
  * Resolves the in-flight confirmDialog() promise and hides the modal.
- * @param {boolean} result
+ * @param {boolean} confirmed
  */
-function resolveConfirm(result) {
+function resolveConfirm(confirmed) {
   confirmOverlay.hidden = true;
-  pendingConfirmResolve?.(result);
+  pendingConfirmResolve?.({ confirmed, checked: !confirmCheckboxRow.hidden && confirmCheckbox.checked });
   pendingConfirmResolve = null;
 }
 
@@ -2255,9 +2268,8 @@ function renderAgentPanel() {
     li.querySelector('.agent-remove-btn').addEventListener('click', () => { closeAgentMenu(); removeMember(agent.id); });
     li.querySelector('.agent-del-btn').addEventListener('click', async () => {
       closeAgentMenu();
-      if (await confirmDialog(t('confirm.deleteAgent', { name: agent.name }))) {
-        deleteGlobalAgent(agent.id);
-      }
+      const { confirmed } = await confirmDialog(t('confirm.deleteAgent', { name: agent.name }));
+      if (confirmed) deleteGlobalAgent(agent.id);
     });
     li.querySelector('.agent-session-btn')?.addEventListener('click', () => copySessionCommand(agent));
     agentList.appendChild(li);
@@ -2284,9 +2296,8 @@ function renderAgentPanel() {
     li.querySelector('.add-menu-avatar').addEventListener('click', () => addMember(agent.id));
     li.querySelector('.agent-del-btn').addEventListener('click', async (e) => {
       e.stopPropagation();
-      if (await confirmDialog(t('confirm.deleteAgent', { name: agent.name }))) {
-        deleteGlobalAgent(agent.id);
-      }
+      const { confirmed } = await confirmDialog(t('confirm.deleteAgent', { name: agent.name }));
+      if (confirmed) deleteGlobalAgent(agent.id);
     });
     addAgentMenu.appendChild(li);
   }
