@@ -2174,7 +2174,7 @@ function renderChatList() {
     li.dataset.testid = 'chat-item';
     li.innerHTML = `
       ${unread ? `<span class="chat-unread-dot" data-testid="chat-unread-dot" title="${t('chat.unreadTitle')}"></span>` : ''}
-      <span class="chat-item-name" data-testid="chat-item-name">${t('chat.channelName', { name: escHtml(chat.name) })}</span>
+      <span class="chat-item-name" data-testid="chat-item-name" title="${escHtml(chat.name)}">${t('chat.channelName', { name: escHtml(chat.name) })}</span>
       <button class="chat-del-btn" data-testid="chat-del-btn" data-del-chat="${chat.id}" title="${t('chat.deleteTitle')}">×</button>`;
     li.addEventListener('click', (e) => {
       if (e.target.closest('[data-del-chat]')) return;
