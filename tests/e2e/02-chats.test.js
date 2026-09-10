@@ -4,12 +4,40 @@
 
 import { test, describe, before, after, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { startServer, stopServer, resetData } from '../helpers/server.js';
+import { startServer, stopServer, resetData, TEST_PORT } from '../helpers/server.js';
 import {
   launchBrowser, closeBrowser, openPage, closePage,
   tid, createChat, createAgent, sendMessage, reloadAndWaitForConnection,
 } from '../helpers/browser.js';
 import { agentDir, cleanupAgentDirs } from '../helpers/fixtures.js';
+
+/**
+ * Hovers and clicks the delete button on the sidebar chat item whose visible
+ * name includes `name`, waits for the confirm modal, optionally checks its
+ * "also delete agents" checkbox, then confirms or cancels.
+ * @param {import('puppeteer').Page} page
+ * @param {string} name
+ * @param {{ deleteAgents?: boolean, confirm?: boolean }} [opts]
+ * @returns {Promise<void>}
+ */
+async function deleteChatByName(page, name, { deleteAgents = false, confirm = true } = {}) {
+  const items = await page.$$(tid('chat-item'));
+  let target = null;
+  for (const item of items) {
+    const text = await item.evaluate((el) => el.textContent);
+    if (text.includes(name)) { target = item; break; }
+  }
+  if (!target) throw new Error(`no chat-item found containing "${name}"`);
+  await target.hover();
+  const delBtn = await target.$(tid('chat-del-btn'));
+  await delBtn.click();
+  await page.waitForFunction(
+    () => !document.querySelector('[data-testid="confirm-overlay"]')?.hidden,
+    { timeout: 3000 }
+  );
+  if (deleteAgents) await page.click(tid('confirm-checkbox'));
+  await page.click(tid(confirm ? 'confirm-ok' : 'confirm-cancel'));
+}
 
 /**
  * Clicks the sidebar chat item whose visible name includes `name` — chats
@@ -145,6 +173,41 @@ describe('Chat management', () => {
 
     const emptyVisible = await page.$eval(tid('empty-state'), (el) => !el.hidden);
     assert.ok(emptyVisible, 'empty state should reappear after deleting active chat');
+  });
+
+  test('deleting a chat with "also delete agents" checked permanently removes only that chat\'s agents', async () => {
+    await createChat(page, 'Chat With Agents');
+    await createAgent(page, { name: 'Doomed', workingDir: agentDir('doomed'), addToChat: true });
+
+    await createChat(page, 'Other Chat');
+    await createAgent(page, { name: 'Survivor', workingDir: agentDir('survivor'), addToChat: true });
+
+    await deleteChatByName(page, 'Chat With Agents', { deleteAgents: true });
+
+    await page.waitForFunction(
+      (n) => ![...document.querySelectorAll('[data-testid="chat-item-name"]')].some((el) => el.textContent.includes(n)),
+      { timeout: 3000 },
+      'Chat With Agents'
+    );
+
+    const agents = await (await fetch(`http://localhost:${TEST_PORT}/api/agents`)).json();
+    assert.ok(!agents.some((a) => a.name === 'Doomed'), 'Doomed should have been permanently deleted along with its chat');
+    assert.ok(agents.some((a) => a.name === 'Survivor'), "Survivor belongs to a different chat and must be untouched");
+  });
+
+  test('deleting a chat without checking "also delete agents" leaves its agents intact', async () => {
+    await createChat(page, 'Chat Kept Agents');
+    await createAgent(page, { name: 'Spared', workingDir: agentDir('spared'), addToChat: true });
+
+    await deleteChatByName(page, 'Chat Kept Agents', { deleteAgents: false });
+
+    await page.waitForFunction(
+      () => document.querySelectorAll('[data-testid="chat-item"]').length === 0,
+      { timeout: 3000 }
+    );
+
+    const agents = await (await fetch(`http://localhost:${TEST_PORT}/api/agents`)).json();
+    assert.ok(agents.some((a) => a.name === 'Spared'), 'agent should survive its chat being deleted by default');
   });
 
   test('an agent reply landing in a background chat shows an unread indicator; opening the chat clears it', async () => {
