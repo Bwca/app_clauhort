@@ -2195,9 +2195,12 @@ function renderChatList() {
     });
     li.querySelector('[data-del-chat]').addEventListener('click', async (e) => {
       e.stopPropagation();
-      if (await confirmDialog(t('confirm.deleteChat', { name: chat.name }))) {
-        deleteChat(chat.id);
-      }
+      const memberCount = chat.memberAgentIds.length;
+      const opts = memberCount > 0
+        ? { checkboxLabel: t('confirm.deleteChatAgentsCheckbox', { count: memberCount }) }
+        : {};
+      const { confirmed, checked } = await confirmDialog(t('confirm.deleteChat', { name: chat.name }), opts);
+      if (confirmed) deleteChat(chat.id, checked);
     });
     chatList.appendChild(li);
   }
@@ -2504,17 +2507,27 @@ async function createChat(name) {
 }
 
 /**
- * Deletes a chat via the REST API.
+ * Deletes a chat via the REST API. When `deleteAgents` is true, also
+ * permanently deletes every agent that was a member of this chat — safe to
+ * do unconditionally since an agent belongs to at most one chat at a time,
+ * so none of them can be a member of some *other* chat we'd be pulling the
+ * rug out from under.
  * @param {string} id
+ * @param {boolean} [deleteAgents]
  */
-async function deleteChat(id) {
-  await fetch(`/api/chats/${id}`, { method: 'DELETE' });
+async function deleteChat(id, deleteAgents = false) {
+  const deletedAgentIds = deleteAgents ? (chats.find((c) => c.id === id)?.memberAgentIds ?? []) : [];
+  await fetch(`/api/chats/${id}${deleteAgents ? '?deleteAgents=true' : ''}`, { method: 'DELETE' });
   chats = chats.filter((c) => c.id !== id);
   unreadChatIds.delete(id);
+  if (deletedAgentIds.length > 0) {
+    agents = agents.filter((a) => !deletedAgentIds.includes(a.id));
+  }
   if (activeChatId === id) {
     showEmptyChatState();
   }
   renderChatList();
+  if (deletedAgentIds.length > 0) renderAgentPanel();
 }
 
 // ─── Member actions ───────────────────────────────────────────────────────────

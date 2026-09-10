@@ -99,6 +99,8 @@ export default {
   'settingsModal.saveBtn': 'Save',
 
   'confirm.deleteChat': 'Delete chat "{name}"? This can\'t be undone.',
+  'confirm.deleteChatAgentsCheckbox_one': 'Also permanently delete its {count} agent.',
+  'confirm.deleteChatAgentsCheckbox_other': 'Also permanently delete its {count} agents.',
   'confirm.deleteAgent': 'Delete agent "{name}"? This can\'t be undone.',
   'confirm.deleteBtn': 'Delete',
 

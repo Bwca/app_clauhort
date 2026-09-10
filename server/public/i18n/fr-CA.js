@@ -99,6 +99,8 @@ export default {
   'settingsModal.saveBtn': 'Enregistrer',
 
   'confirm.deleteChat': 'Supprimer la discussion « {name} »? Cette action est irréversible.',
+  'confirm.deleteChatAgentsCheckbox_one': 'Supprimer aussi définitivement son {count} agent.',
+  'confirm.deleteChatAgentsCheckbox_other': 'Supprimer aussi définitivement ses {count} agents.',
   'confirm.deleteAgent': "Supprimer l'agent « {name} »? Cette action est irréversible.",
   'confirm.deleteBtn': 'Supprimer',
 
