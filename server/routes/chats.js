@@ -13,6 +13,7 @@ import {
   createChat,
   updateChat,
   deleteChat,
+  deleteAgent,
   addChatMember,
   removeChatMember,
   getMessages,
@@ -126,7 +127,11 @@ export default function createChatsRouter(wss) {
 
   /**
    * DELETE /api/chats/:id
-   * Deletes a chat and all its messages.
+   * Deletes a chat and all its messages. With `?deleteAgents=true`, also
+   * permanently deletes every agent that was a member — safe to do
+   * unconditionally since an agent belongs to at most one chat at a time
+   * (see getAgentChatId's docs), so none of them can belong to some other
+   * chat this would be pulling out from under.
    */
   router.delete('/:id', async (req, res) => {
     // Captured before deletion — deleteChat's return value is just a
@@ -137,6 +142,9 @@ export default function createChatsRouter(wss) {
     // Mirrors deleteChat's own resumeId reset (db.js) — the live process is
     // the other place that session now lives.
     await Promise.all(memberAgentIds.map((agentId) => killAgent(agentId)));
+    if (req.query.deleteAgents === 'true') {
+      await Promise.all(memberAgentIds.map((agentId) => deleteAgent(agentId)));
+    }
     res.status(204).end();
   });
 
