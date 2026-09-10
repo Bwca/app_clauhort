@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.2.14] - 2026-09-10
+
+### Added
+- Deleting a chat now offers an "also permanently delete its N agents" checkbox in the confirmation dialog — a convenience for tearing down a whole chat's worth of agents at once instead of deleting each one individually afterward. Safe by construction: an agent belongs to at most one chat at a time, so a chat's members can never belong to some *other* chat this would affect. Off by default, matching the previous behavior. See the `DELETE /api/chats/:id?deleteAgents=true` route in `server/routes/chats.js`.
+
 ## [1.2.13] - 2026-09-06
 
 ### Added
