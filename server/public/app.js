@@ -2188,10 +2188,15 @@ function renderChatList() {
     li.innerHTML = `
       ${unread ? `<span class="chat-unread-dot" data-testid="chat-unread-dot" title="${t('chat.unreadTitle')}"></span>` : ''}
       <span class="chat-item-name" data-testid="chat-item-name" title="${escHtml(chat.name)}">${t('chat.channelName', { name: escHtml(chat.name) })}</span>
+      <button class="chat-rename-btn" data-testid="chat-rename-btn" data-rename-chat="${chat.id}" title="${t('chat.renameTitle')}">✏️</button>
       <button class="chat-del-btn" data-testid="chat-del-btn" data-del-chat="${chat.id}" title="${t('chat.deleteTitle')}">×</button>`;
     li.addEventListener('click', (e) => {
-      if (e.target.closest('[data-del-chat]')) return;
+      if (e.target.closest('[data-del-chat], [data-rename-chat]')) return;
       selectChat(chat.id);
+    });
+    li.querySelector('[data-rename-chat]').addEventListener('click', (e) => {
+      e.stopPropagation();
+      startRenameChat(chat, li);
     });
     li.querySelector('[data-del-chat]').addEventListener('click', async (e) => {
       e.stopPropagation();
@@ -2204,6 +2209,59 @@ function renderChatList() {
     });
     chatList.appendChild(li);
   }
+}
+
+/**
+ * Swaps a sidebar chat item's name span for a text input so it can be
+ * renamed in place. Commits via PATCH on Enter or blur (fetch-then-patch-
+ * local-state, same pattern as toggleFreeRelay/toggleAutoContinue); Escape
+ * or a blank/unchanged value cancels without a network call. Either way
+ * ends with a renderChatList() to rebuild the row from current state.
+ * @param {Chat} chat
+ * @param {HTMLElement} li
+ */
+function startRenameChat(chat, li) {
+  const nameSpan = li.querySelector('[data-testid="chat-item-name"]');
+  if (!nameSpan || li.querySelector('.chat-rename-input')) return;
+
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'chat-rename-input';
+  input.dataset.testid = 'chat-rename-input';
+  input.value = chat.name;
+  nameSpan.replaceWith(input);
+  input.focus();
+  input.select();
+
+  let settled = false;
+  const finish = async (commit) => {
+    if (settled) return;
+    settled = true;
+    const newName = input.value.trim();
+    if (commit && newName && newName !== chat.name) {
+      const res = await fetch(`/api/chats/${chat.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newName }),
+      });
+      if (res.ok) {
+        const updated = /** @type {Chat} */ (await res.json());
+        const idx = chats.findIndex((c) => c.id === updated.id);
+        if (idx !== -1) chats[idx] = updated;
+        if (chat.id === activeChatId) {
+          chatTopbarName.textContent = t('chat.channelName', { name: updated.name });
+        }
+      }
+    }
+    renderChatList();
+  };
+
+  input.addEventListener('click', (e) => e.stopPropagation());
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); finish(true); }
+    else if (e.key === 'Escape') { e.preventDefault(); finish(false); }
+  });
+  input.addEventListener('blur', () => finish(true));
 }
 
 // ─── Agent panel rendering ───────────────────────────────────────────────────
