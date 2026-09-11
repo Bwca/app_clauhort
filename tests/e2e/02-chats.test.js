@@ -40,6 +40,33 @@ async function deleteChatByName(page, name, { deleteAgents = false, confirm = tr
 }
 
 /**
+ * Hovers and clicks the rename (pencil) button on the sidebar chat item
+ * whose visible name includes `name`, types `newName` into the resulting
+ * inline input, then commits it (Enter) or discards it (Escape).
+ * @param {import('puppeteer').Page} page
+ * @param {string} name
+ * @param {string} newName
+ * @param {{ key?: 'Enter' | 'Escape' }} [opts]
+ * @returns {Promise<void>}
+ */
+async function renameChatByName(page, name, newName, { key = 'Enter' } = {}) {
+  const items = await page.$$(tid('chat-item'));
+  let target = null;
+  for (const item of items) {
+    const text = await item.evaluate((el) => el.textContent);
+    if (text.includes(name)) { target = item; break; }
+  }
+  if (!target) throw new Error(`no chat-item found containing "${name}"`);
+  await target.hover();
+  const renameBtn = await target.$(tid('chat-rename-btn'));
+  await renameBtn.click();
+  const input = await target.$(tid('chat-rename-input'));
+  await input.click({ clickCount: 3 });
+  await input.type(newName);
+  await input.press(key);
+}
+
+/**
  * Clicks the sidebar chat item whose visible name includes `name` — chats
  * are only reachable by name in the UI (no per-chat testid), unlike agents.
  * @param {import('puppeteer').Page} page
@@ -109,6 +136,36 @@ describe('Chat management', () => {
 
     const count = await page.$$eval(tid('chat-item'), (els) => els.length);
     assert.equal(count, 3);
+  });
+
+  test('renames a chat via the sidebar and reflects the new name in the topbar', async () => {
+    await createChat(page, 'Old Name');
+
+    await renameChatByName(page, 'Old Name', 'New Name');
+
+    await page.waitForFunction(
+      () => [...document.querySelectorAll('[data-testid="chat-item-name"]')].some((el) => el.textContent.includes('New Name')),
+      { timeout: 3000 }
+    );
+    const topbarText = await page.$eval(tid('chat-topbar-name'), (el) => el.textContent.trim());
+    assert.ok(topbarText.includes('New Name'), `topbar: "${topbarText}"`);
+
+    const chats = await (await fetch(`http://localhost:${TEST_PORT}/api/chats`)).json();
+    assert.ok(chats.some((c) => c.name === 'New Name'), 'renamed name should be persisted server-side');
+  });
+
+  test('pressing Escape while renaming a chat discards the edit', async () => {
+    await createChat(page, 'Untouched Name');
+
+    await renameChatByName(page, 'Untouched Name', 'Should Not Stick', { key: 'Escape' });
+
+    await page.waitForFunction(
+      () => document.querySelector('[data-testid="chat-rename-input"]') === null,
+      { timeout: 3000 }
+    );
+    const names = await page.$$eval(tid('chat-item-name'), (els) => els.map((el) => el.textContent));
+    assert.ok(names.some((n) => n.includes('Untouched Name')), `names: ${names}`);
+    assert.ok(!names.some((n) => n.includes('Should Not Stick')), `names: ${names}`);
   });
 
   test('deletes a chat and removes it from the sidebar', async () => {
