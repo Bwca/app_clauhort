@@ -109,7 +109,8 @@ export default function createChatsRouter(wss) {
    * PATCH /api/chats/:id
    * Updates a chat's mutable settings.
    * @param {Object} req.body
-   * @param {string} [req.body.name]
+   * @param {string} [req.body.name] - New chat name; rejected with 400 if
+   *   present but blank.
    * @param {boolean} [req.body.freeRelay] - When true, the agent-to-agent
    *   delegation relay in this chat is no longer depth-capped at one hop
    *   (see updateChat's docs in db.js and the relay loop in ws/handler.js).
@@ -120,6 +121,12 @@ export default function createChatsRouter(wss) {
    */
   router.patch('/:id', async (req, res) => {
     const { name, freeRelay, autoContinue } = req.body;
+    // `name` is optional here (freeRelay/autoContinue-only PATCHes send no
+    // name at all), but if the caller did include it, it can't be blanked
+    // out — same non-empty requirement as chat creation (POST above).
+    if (name !== undefined && !name.trim()) {
+      return res.status(400).json({ error: t('errors.chatNameRequired') });
+    }
     const chat = await updateChat(req.params.id, { name, freeRelay, autoContinue });
     if (!chat) return res.status(404).json({ error: t('errors.chatNotFound') });
     res.json(chat);
