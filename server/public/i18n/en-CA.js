@@ -30,6 +30,7 @@ export default {
   'chat.stoppedTitle': 'This response was interrupted before it finished',
   'chat.stoppedEmptyPlaceholder': '(stopped before responding)',
   'chat.deleteTitle': 'Delete chat',
+  'chat.renameTitle': 'Rename chat',
   'chat.unreadTitle': 'New activity in this chat',
   'chat.channelName': '# {name}',
   'chat.filterBarLabel': 'Showing only: you + {names}',

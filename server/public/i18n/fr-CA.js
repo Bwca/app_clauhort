@@ -30,6 +30,7 @@ export default {
   'chat.stoppedTitle': 'Cette réponse a été interrompue avant sa fin',
   'chat.stoppedEmptyPlaceholder': '(arrêté avant de répondre)',
   'chat.deleteTitle': 'Supprimer la discussion',
+  'chat.renameTitle': 'Renommer la discussion',
   'chat.unreadTitle': 'Nouvelle activité dans cette discussion',
   'chat.channelName': '# {name}',
   'chat.filterBarLabel': 'Affichage limité à : vous + {names}',
