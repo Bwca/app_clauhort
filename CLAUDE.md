@@ -59,7 +59,7 @@ Key env vars (see README for the full table): `PORT`, `CLAUDE_BIN` (override the
 
 ### Request flow
 
-`server/index.js` wires up Express (`/api/*` REST routes + static `server/public/`) and one `WebSocketServer` at `/ws`. All actual chat traffic — sending a message, streaming a response, granting a permission, stopping an agent — goes over the WebSocket, handled entirely in `server/ws/handler.js`. REST routes (`server/routes/`) only cover CRUD for agents/chats/settings and directory browsing.
+`server/index.js` wires up Express (`/api/*` REST routes + static `server/public/`) and one `WebSocketServer` at `/ws`. Live chat traffic — sending a message, streaming a response, granting a permission, stopping an agent — goes over the WebSocket, handled entirely in `server/ws/handler.js`. REST routes (`server/routes/`) cover CRUD for agents/chats/settings, directory browsing, scheduled-message CRUD, and reading message history (including the paginated `GET /api/chats/:id/messages?page=N|last` used by the forum-style page nav in `app.js`, plus search and jump-to-context) — anything that's a read, or doesn't need a live agent turn, is REST rather than a WS round-trip.
 
 ### The agent process model (the core mechanism)
 
@@ -88,6 +88,10 @@ Agents normally run with `--permission-mode acceptEdits` (or fully unrestricted 
 - Everything else (`Bash`, etc.) derives `allowedToolPatterns` → `--allowedTools`, with Bash chains (`a && b`, pipes, `;`) split into one pattern per sub-command (`deriveToolPatterns`) so a multi-command denial doesn't accidentally under- or over-grant.
 
 Since a turn already ended by the time a denial is resolved (headless mode can't retry mid-turn), granting/denying auto-sends a synthetic follow-up message once every row in a multi-denial card is resolved (`buildContinueMessage`), not before.
+
+### Auto-continue after a session limit
+
+A chat's `autoContinue` flag (toggled per-chat via the ⏳ button in the topbar, `PATCH /api/chats/:id`, same shape as `freeRelay` above) makes a turn error that names Claude's own session-limit reset time self-heal instead of just sitting there. `maybeScheduleAutoContinue` in `ws/handler.js` runs on every turn error in such a chat; `services/sessionLimitReset.js`'s `parseSessionLimitReset` looks for that specific "resets 7:20pm (Australia/Darwin)"-shaped substring in the error text (a silent no-op for any other kind of error — a bad `--resume` flag, a crashed process — since this runs unconditionally, not just for session-limit errors) and resolves it to a concrete instant via an `Intl.DateTimeFormat` round-trip (no date library in this project). One minute after that instant, it arms a `@Agent` "please continue" message through the exact same scheduled-message mechanism the 🕐 panel uses (visible there, cancelable, survives a restart) — so the user doesn't have to notice the limit cleared and prompt the agent themselves.
 
 ### Persistence (`server/store/db.js`)
 

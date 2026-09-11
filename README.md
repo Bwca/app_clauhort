@@ -7,24 +7,27 @@ A multi-agent Claude chat app. Each participant in a conversation is a Claude Co
 - Create named agents, each with its own working directory and color
 - Give an agent a note (optional, at creation or any time after via 🗒 in the panel) — a purely personal reminder of why it exists, so a long-running or multi-day chat doesn't leave you wondering what a given agent was for
 - Group multiple agents into a chat — but each agent belongs to only one chat at a time; remove it from a chat to free it up for another (this also resets its Claude session, so it starts fresh with no memory of the old chat)
+- Rename a chat any time via the ✏️ button in the sidebar
 - Send messages; agents respond in parallel with streaming output, showing a live status of what they're doing (reading a file, running a command, etc.) and how long they've been at it
+- Long chats are split into pages (« First / ‹ Prev / Next › / Last ») rather than one endless scroll — opening a chat lands on the latest page
 - Each tool call's real output (command results, diffs, MCP responses) is one click away — collapsed by default so it doesn't clutter the conversation; a reply with several tool calls nests them behind a single "N tool calls" toggle instead of stacking one row per call
 - If an agent starts something in the background (e.g. a long-running Bash command) and says it'll let you know once it's done, it actually does — the follow-up lands in the chat on its own when the task finishes, no need to prompt it again
 - Getting lost in a busy multi-agent chat? Click an agent's 🔎 in the panel to spotlight it — the message list then shows that agent's messages plus your own that are actually relevant to it (a broadcast, or one that `@mentions` it), not every message you've sent to everyone else too; click again, or the filter bar's **Show all**, to go back to everyone. Resets automatically when you switch chats. If a non-spotlighted agent replies while you're focused elsewhere, their row in the panel gets a small blue dot so you don't miss it — clears once you spotlight them too or clear the filter
 - Use `@AgentName` to route a message to a specific agent; no mention = everyone responds — the mention autocomplete and every message header also show an agent's YOLO badge (if any) and working directory, so it's clear who (and where) you're talking to. Or skip typing it out entirely: click the **@** button next to an agent's name on any of their messages to drop `@Name` straight into the composer
-- Agents can delegate to teammates by writing `@Name` in their reply
+- Agents can delegate to teammates by writing `@Name` in their reply — by default that relay stops after one hop and won't fire back to an agent who already responded in the chain; toggle 🔁 **Free relay** per chat to lift the cap and let agents keep delegating back and forth
 - Use `@AgentName /command` (or just `/command` in a chat with only one agent) to invoke one of that agent's real Claude Code skills — typing `/` shows an autocomplete of that agent's available commands, with descriptions
 - Interrupt an agent mid-response with the **Stop** button
 - Attach images or large pasted text blocks to a message
 - Schedule a message for later via the 🕐 button next to Send — pending ones show as a badge count you can open, review, and cancel before they fire
 - Agents keep one continuous native Claude session for as long as they're in a chat (auto-chained via `--resume` after their first reply) — copy the `claude --resume <id>` command from the agent panel to continue that session in a terminal
 - When an agent's tool call is denied — a path outside its working directory, a Bash command, etc. — a card appears with **Grant** and **Deny** buttons; either one lets the agent continue right away, no need to send a follow-up message
+- Toggle ⏳ **Auto-continue** per chat so a session-limit error ("You've hit your session limit · resets 7:20pm...") auto-schedules a "please continue" message for one minute after it resets, instead of sitting there until you notice and prompt it yourself
 - Enable **YOLO mode** per agent at creation time to skip all permission checks entirely, shown with a 🔥 badge — use with care
 - Grant an agent **Browser access** at creation time to give it real control of your Chrome browser via the Claude in Chrome extension, shown with a 🌐 badge — any number of agents can hold it at once
 - Chats with new activity you haven't seen yet (an agent finished a task while you were elsewhere) show an unread dot in the sidebar
 - Hover a reply to copy it as text or as a PNG image
 - Click the logo in the sidebar header to view it full-size
-- Deleting a chat or agent asks for confirmation first (irreversible)
+- Deleting a chat or agent asks for confirmation first (irreversible) — deleting a chat offers an opt-in checkbox to also permanently delete its member agents, instead of removing each one separately afterward
 - Customize your own display name, message color, UI language (English/French, Canada), and light/dark theme from **Settings** (⚙ icon)
 
 ## Stack
