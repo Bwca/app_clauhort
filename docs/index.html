@@ -428,6 +428,11 @@ http://localhost:3001</pre>
       label: 'Free relay',
       desc: "With free relay on, two agents keep bouncing @mentions for multiple rounds instead of stopping after one hop — the same agent can be relayed again later in the chain.",
     },
+    {
+      slug: 'observer-agent',
+      label: 'Observer agent',
+      desc: "An Observer agent stays silent through broadcast messages, then answers a direct @mention by recalling everything it silently saw.",
+    },
   ];
 
   const tabsEl = document.getElementById('tabs');
