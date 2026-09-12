@@ -127,6 +127,9 @@
   .mechanism-note strong { color: var(--text); }
   .note-warn { border-left-color: var(--peach); }
   .note-warn strong { color: var(--peach); }
+  .note-warn ul { margin: 10px 0; padding-left: 20px; }
+  .note-warn li { margin-bottom: 8px; }
+  .note-warn li:last-child { margin-bottom: 0; }
 
   /* ── Demo ────────────────────────────────────────────────────────── */
   .tabs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
@@ -369,12 +372,17 @@ http://localhost:3001</pre>
     </p>
 
     <div class="mechanism-note note-warn">
-      <strong>Disclaimer:</strong> Clauhort is provided "as is," with no warranty of any kind — see the
+      <strong>Disclaimer:</strong> Clauhort is provided "AS IS", WITHOUT WARRANTY OF ANY KIND, express or implied — see the
       <a href="https://github.com/Bwca/app_clauhort/blob/master/LICENSE" target="_blank" rel="noopener">MIT license</a> for the full text.
-      Agents run as real, unrestricted <code>claude</code> CLI processes with real tool access — file edits, shell commands, MCP servers,
-      and, if you enable YOLO mode, no permission checks at all; browser access grants an agent real control of your Chrome browser.
-      You're solely responsible for what you authorize an agent to do, for reviewing permission grants and tool calls before approving
-      them, and for anything an agent does as a result. Use at your own risk.
+      The authors and contributors are not liable for any claim, damages, or other liability arising from the software or its use.
+      <ul>
+        <li>Agents run as real, unrestricted <code>claude</code> CLI processes with real file, shell, and network access — including, under YOLO mode, with no permission checks at all, and, with browser access granted, real control of your Chrome browser. You're solely responsible for reviewing every grant and tool call, and for anything an agent does as a result.</li>
+        <li>No guarantee of correctness, security, or availability — back up anything you can't afford to lose.</li>
+        <li>Any Anthropic API usage charges, rate limits, or outages are between you and Anthropic, not this project.</li>
+        <li>Clauhort is an independent project, not affiliated with, endorsed by, or sponsored by Anthropic. "Claude" and "Claude Code" are Anthropic trademarks, referenced only to describe compatibility.</li>
+      </ul>
+      You use this software entirely at your own risk. Full text in the
+      <a href="https://github.com/Bwca/app_clauhort#disclaimer" target="_blank" rel="noopener">README</a>.
     </div>
   </div>
 </section>
