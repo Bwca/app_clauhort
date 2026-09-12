@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Clauhort — live demo</title>
+<link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32x32.png" />
+<link rel="icon" type="image/png" sizes="16x16" href="assets/favicon-16x16.png" />
+<link rel="stylesheet" href="https://unpkg.com/rrweb-player@2.1.4/dist/style.css" />
+<style>
+  :root {
+    color-scheme: dark;
+    --bg0: #1e1e2e;
+    --bg1: #181825;
+    --bg2: #2a2a3e;
+    --bg3: #313244;
+    --border: #2a2a3e;
+    --text: #cdd6f4;
+    --muted: #a6adc8;
+    --dim: #6c7086;
+    --blue: #89b4fa;
+    --blue-hover: #b4d0ff;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg0); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+  a { color: var(--blue); }
+
+  header { display: flex; align-items: center; gap: 14px; padding: 28px 24px 8px; max-width: 980px; margin: 0 auto; }
+  header img { height: 40px; }
+  header h1 { font-size: 22px; margin: 0; }
+  header p.tagline { margin: 2px 0 0; color: var(--muted); font-size: 14px; }
+
+  main { max-width: 980px; margin: 0 auto; padding: 8px 24px 60px; }
+
+  .intro { color: var(--muted); font-size: 14px; line-height: 1.6; margin-bottom: 22px; }
+
+  .tabs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+  .tabs button {
+    background: var(--bg2); color: var(--text); border: 1px solid var(--border);
+    border-radius: 8px; padding: 9px 14px; font-size: 13px; cursor: pointer;
+    transition: background .15s, border-color .15s;
+  }
+  .tabs button:hover { background: var(--bg3); }
+  .tabs button.active { border-color: var(--blue); color: var(--blue); background: var(--bg3); }
+
+  .tab-desc { color: var(--muted); font-size: 13px; margin-bottom: 14px; min-height: 18px; }
+
+  #player-wrap {
+    border: 1px solid var(--border); border-radius: 10px; overflow: hidden;
+    background: var(--bg1); display: flex; align-items: center; justify-content: center;
+    min-height: 200px;
+  }
+  #player-status { color: var(--dim); font-size: 13px; padding: 40px; }
+
+  footer { max-width: 980px; margin: 0 auto; padding: 0 24px 40px; color: var(--dim); font-size: 12px; }
+</style>
+</head>
+<body>
+
+<header>
+  <img src="assets/logo-header.png" alt="Clauhort logo" />
+  <div>
+    <h1>Clauhort — live demo</h1>
+    <p class="tagline">A multi-agent Claude chat app — recorded walkthroughs, no server required to watch</p>
+  </div>
+</header>
+
+<main>
+  <p class="intro">
+    Each clip below is a real session captured with <a href="https://github.com/rrweb-io/rrweb" target="_blank" rel="noopener">rrweb</a> against a
+    live instance of the app — real agents, real replies — then replayed here as a recording. Pick a use case to load it.
+    See the <a href="https://github.com/Bwca/app_clauhort" target="_blank" rel="noopener">source repo</a> for the real, runnable app.
+  </p>
+
+  <div class="tabs" id="tabs"></div>
+  <p class="tab-desc" id="tab-desc"></p>
+
+  <div id="player-wrap">
+    <p id="player-status">Pick a use case above to load its recording.</p>
+  </div>
+</main>
+
+<footer>
+  Clauhort is a Node.js/Express + WebSocket app — GitHub Pages can only serve static files, so this page shows recorded sessions rather than the running app itself.
+</footer>
+
+<script src="https://unpkg.com/rrweb-player@2.1.4/dist/rrweb-player.umd.cjs"></script>
+<script>
+  const USE_CASES = [
+    {
+      slug: 'create-agent-chat',
+      label: 'Create agent + chat',
+      desc: 'Creating an agent, creating a chat, sending a first message, and watching a streamed reply.',
+    },
+    {
+      slug: 'mention-relay',
+      label: '@mention relay',
+      desc: 'Two agents in one chat — the user @mentions one, who delegates to the other by @mentioning them back in its reply.',
+    },
+    {
+      slug: 'permission-flow',
+      label: 'Permission grant',
+      desc: "An agent's tool call gets denied, surfacing a permission card; granting it lets the agent continue right away.",
+    },
+    {
+      slug: 'chat-rename',
+      label: 'Rename a chat',
+      desc: 'Renaming a chat in place from the sidebar — click the pencil, edit, Enter to save.',
+    },
+  ];
+
+  const tabsEl = document.getElementById('tabs');
+  const descEl = document.getElementById('tab-desc');
+  const wrapEl = document.getElementById('player-wrap');
+  let activeSlug = null;
+
+  for (const uc of USE_CASES) {
+    const btn = document.createElement('button');
+    btn.textContent = uc.label;
+    btn.addEventListener('click', () => loadUseCase(uc));
+    btn.dataset.slug = uc.slug;
+    tabsEl.appendChild(btn);
+  }
+
+  async function loadUseCase(uc) {
+    if (activeSlug === uc.slug) return;
+    activeSlug = uc.slug;
+    for (const btn of tabsEl.querySelectorAll('button')) {
+      btn.classList.toggle('active', btn.dataset.slug === uc.slug);
+    }
+    descEl.textContent = uc.desc;
+    wrapEl.innerHTML = '<p id="player-status">Loading recording…</p>';
+
+    let events;
+    try {
+      const res = await fetch(`recordings/${uc.slug}.json`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      events = await res.json();
+    } catch (err) {
+      wrapEl.innerHTML = `<p id="player-status">Couldn't load this recording (${err.message}).</p>`;
+      return;
+    }
+
+    wrapEl.innerHTML = '';
+    const Player = rrwebPlayer.default || rrwebPlayer.Player || rrwebPlayer;
+    new Player({
+      target: wrapEl,
+      props: {
+        events,
+        width: 900,
+        height: 520,
+        autoPlay: true,
+        showController: true,
+      },
+    });
+  }
+
+  loadUseCase(USE_CASES[0]);
+</script>
+</body>
+</html>
