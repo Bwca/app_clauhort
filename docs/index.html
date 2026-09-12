@@ -3,7 +3,12 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Clauhort — live demo</title>
+<title>Clauhort — Multi-Agent Claude Chat</title>
+<meta name="description" content="Clauhort is a multi-agent Claude chat app — a group chat where every participant is a real Claude Code CLI instance with its own project, tools, and permissions." />
+<meta property="og:title" content="Clauhort — Multi-Agent Claude Chat" />
+<meta property="og:description" content="A group chat where every participant is a real Claude Code CLI instance — real tools, real MCP servers, real work." />
+<meta property="og:image" content="assets/logo.png" />
+<meta property="og:type" content="website" />
 <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32x32.png" />
 <link rel="icon" type="image/png" sizes="16x16" href="assets/favicon-16x16.png" />
 <link rel="stylesheet" href="https://unpkg.com/rrweb-player@2.1.4/dist/style.css" />
@@ -18,22 +23,110 @@
     --text: #cdd6f4;
     --muted: #a6adc8;
     --dim: #6c7086;
+    --faint: #45475a;
     --blue: #89b4fa;
     --blue-hover: #b4d0ff;
+    --green: #a6e3a1;
+    --peach: #fab387;
+    --red: #f38ba8;
+    --nav-h: 60px;
   }
   * { box-sizing: border-box; }
-  html, body { margin: 0; background: var(--bg0); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+  html { scroll-behavior: smooth; scroll-padding-top: calc(var(--nav-h) + 14px); }
+  html, body { margin: 0; background: var(--bg0); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.5; }
+  img { max-width: 100%; }
   a { color: var(--blue); }
+  code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
 
-  header { display: flex; align-items: center; gap: 14px; padding: 28px 24px 8px; max-width: 980px; margin: 0 auto; }
-  header img { height: 40px; }
-  header h1 { font-size: 22px; margin: 0; }
-  header p.tagline { margin: 2px 0 0; color: var(--muted); font-size: 14px; }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
+  section { padding: 72px 0; border-bottom: 1px solid var(--border); }
+  section:last-of-type { border-bottom: none; }
+  h2 { font-size: 28px; margin: 0 0 10px; }
+  h2 .accent { color: var(--blue); }
+  .section-kicker { text-transform: uppercase; letter-spacing: 1.2px; font-size: 12px; font-weight: 700; color: var(--blue); margin: 0 0 8px; }
+  .section-lede { color: var(--muted); font-size: 15px; max-width: 680px; margin: 0 0 40px; }
 
-  main { max-width: 980px; margin: 0 auto; padding: 8px 24px 60px; }
+  /* ── Nav ─────────────────────────────────────────────────────────── */
+  #nav {
+    position: sticky; top: 0; z-index: 20; height: var(--nav-h);
+    display: flex; align-items: center; gap: 20px;
+    background: rgba(24, 24, 37, 0.9); backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--border);
+  }
+  #nav .wrap { display: flex; align-items: center; gap: 24px; width: 100%; flex-wrap: wrap; }
+  #nav .brand { display: flex; align-items: center; gap: 8px; font-weight: 700; color: var(--text); text-decoration: none; margin-right: auto; }
+  #nav .brand img { height: 24px; }
+  #nav .links { display: flex; gap: 4px; flex-wrap: wrap; }
+  #nav .links a {
+    color: var(--muted); text-decoration: none; font-size: 13.5px; padding: 8px 10px; border-radius: 6px;
+    transition: color .15s, background .15s;
+  }
+  #nav .links a:hover { color: var(--text); background: var(--bg2); }
+  #nav .links a.active { color: var(--blue); }
+  #nav .gh-btn {
+    display: flex; align-items: center; gap: 6px; background: var(--bg2); color: var(--text); text-decoration: none;
+    border: 1px solid var(--border); border-radius: 7px; padding: 7px 12px; font-size: 13px; white-space: nowrap;
+    transition: background .15s, border-color .15s;
+  }
+  #nav .gh-btn:hover { background: var(--bg3); border-color: var(--faint); }
 
-  .intro { color: var(--muted); font-size: 14px; line-height: 1.6; margin-bottom: 22px; }
+  /* ── Hero ────────────────────────────────────────────────────────── */
+  .hero { padding: 76px 0 64px; border-bottom: 1px solid var(--border); }
+  .hero .kicker { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 13px; margin-bottom: 18px; }
+  .hero .kicker img { height: 30px; }
+  .hero h1 { font-size: 44px; line-height: 1.12; margin: 0 0 18px; max-width: 760px; }
+  .hero h1 .accent { color: var(--blue); }
+  .hero p.lede { font-size: 17px; color: var(--muted); max-width: 620px; margin: 0 0 30px; }
+  .hero .ctas { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 34px; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px; text-decoration: none; font-size: 14px; font-weight: 600;
+    padding: 12px 20px; border-radius: 8px; border: 1px solid transparent; cursor: pointer; transition: background .15s, border-color .15s, transform .1s;
+  }
+  .btn:active { transform: translateY(1px); }
+  .btn-primary { background: var(--blue); color: #11111b; }
+  .btn-primary:hover { background: var(--blue-hover); }
+  .btn-ghost { background: transparent; color: var(--text); border-color: var(--border); }
+  .btn-ghost:hover { border-color: var(--faint); background: var(--bg2); }
+  .hero .badges { display: flex; gap: 8px; flex-wrap: wrap; }
+  .badge { font-size: 11.5px; color: var(--dim); border: 1px solid var(--border); border-radius: 20px; padding: 4px 10px; }
 
+  /* ── Why / benefits ──────────────────────────────────────────────── */
+  .benefit-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 20px; }
+  .benefit-card { background: var(--bg1); border: 1px solid var(--border); border-radius: 12px; padding: 22px; }
+  .benefit-card .icon { font-size: 22px; margin-bottom: 12px; display: block; }
+  .benefit-card h3 { font-size: 16px; margin: 0 0 8px; }
+  .benefit-card p { font-size: 13.5px; color: var(--muted); margin: 0; line-height: 1.6; }
+
+  /* ── Features ────────────────────────────────────────────────────── */
+  .feature-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+  .feature-card { display: flex; gap: 14px; padding: 16px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg1); }
+  .feature-card .icon { font-size: 19px; flex-shrink: 0; width: 28px; text-align: center; }
+  .feature-card h3 { font-size: 14.5px; margin: 0 0 4px; }
+  .feature-card p { font-size: 13px; color: var(--muted); margin: 0; line-height: 1.55; }
+
+  /* ── How it works ────────────────────────────────────────────────── */
+  .steps { display: flex; flex-direction: column; gap: 0; max-width: 760px; }
+  .step { display: flex; gap: 20px; padding-bottom: 34px; position: relative; }
+  .step:last-child { padding-bottom: 0; }
+  .step .num {
+    flex-shrink: 0; width: 34px; height: 34px; border-radius: 50%; background: var(--bg2); border: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px; color: var(--blue);
+    position: relative; z-index: 1;
+  }
+  .step:not(:last-child)::before {
+    content: ''; position: absolute; left: 17px; top: 34px; bottom: 0; width: 1px; background: var(--border);
+  }
+  .step h3 { font-size: 16px; margin: 4px 0 6px; }
+  .step p { font-size: 13.5px; color: var(--muted); margin: 0; max-width: 600px; line-height: 1.6; }
+  .step code { background: var(--bg2); border: 1px solid var(--border); border-radius: 4px; padding: 1px 6px; font-size: 12.5px; color: var(--peach); }
+
+  .mechanism-note {
+    margin-top: 36px; background: var(--bg1); border: 1px solid var(--border); border-left: 3px solid var(--blue);
+    border-radius: 8px; padding: 18px 20px; font-size: 13.5px; color: var(--muted); max-width: 760px; line-height: 1.65;
+  }
+  .mechanism-note strong { color: var(--text); }
+
+  /* ── Demo ────────────────────────────────────────────────────────── */
   .tabs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
   .tabs button {
     background: var(--bg2); color: var(--text); border: 1px solid var(--border);
@@ -42,46 +135,249 @@
   }
   .tabs button:hover { background: var(--bg3); }
   .tabs button.active { border-color: var(--blue); color: var(--blue); background: var(--bg3); }
-
   .tab-desc { color: var(--muted); font-size: 13px; margin-bottom: 14px; min-height: 18px; }
-
   #player-wrap {
     border: 1px solid var(--border); border-radius: 10px; overflow: hidden;
     background: var(--bg1); display: flex; align-items: center; justify-content: center;
     min-height: 200px;
   }
   #player-status { color: var(--dim); font-size: 13px; padding: 40px; }
+  .demo-note { color: var(--dim); font-size: 12.5px; margin-top: 14px; }
 
-  footer { max-width: 980px; margin: 0 auto; padding: 0 24px 40px; color: var(--dim); font-size: 12px; }
+  /* ── Get started ─────────────────────────────────────────────────── */
+  .req-table { width: 100%; border-collapse: collapse; font-size: 13.5px; margin-bottom: 32px; max-width: 640px; }
+  .req-table th { text-align: left; color: var(--dim); font-weight: 600; font-size: 11.5px; text-transform: uppercase; letter-spacing: .5px; padding: 0 0 8px; }
+  .req-table td { padding: 10px 0; border-top: 1px solid var(--border); color: var(--muted); vertical-align: top; }
+  .req-table td:first-child { color: var(--text); white-space: nowrap; padding-right: 20px; }
+  pre.code-block {
+    background: var(--bg1); border: 1px solid var(--border); border-radius: 10px; padding: 18px 20px;
+    font-size: 13px; overflow-x: auto; max-width: 640px; line-height: 1.7; color: var(--text);
+  }
+  pre.code-block .comment { color: var(--dim); }
+  .get-started-links { margin-top: 20px; font-size: 13.5px; color: var(--muted); }
+
+  /* ── Footer ──────────────────────────────────────────────────────── */
+  footer { padding: 36px 0 60px; color: var(--dim); font-size: 12.5px; }
+  footer .wrap { display: flex; flex-wrap: wrap; gap: 8px 24px; align-items: center; justify-content: space-between; }
+  footer .links { display: flex; gap: 18px; flex-wrap: wrap; }
+  footer a { color: var(--dim); }
+  footer a:hover { color: var(--muted); }
+
+  @media (max-width: 720px) {
+    section { padding: 52px 0; }
+    .hero { padding: 52px 0 44px; }
+    .hero h1 { font-size: 32px; }
+    #nav .links { gap: 0; }
+    #nav .links a { padding: 8px 8px; font-size: 12.5px; }
+  }
 </style>
 </head>
 <body>
 
-<header>
-  <img src="assets/logo-header.png" alt="Clauhort logo" />
-  <div>
-    <h1>Clauhort — live demo</h1>
-    <p class="tagline">A multi-agent Claude chat app — recorded walkthroughs, no server required to watch</p>
+<nav id="nav">
+  <div class="wrap">
+    <a class="brand" href="#top">
+      <img src="assets/logo-header.png" alt="" />
+      Clauhort
+    </a>
+    <div class="links" id="nav-links">
+      <a href="#why">Why</a>
+      <a href="#features">Features</a>
+      <a href="#how-it-works">How it works</a>
+      <a href="#demo">Live demo</a>
+      <a href="#get-started">Get started</a>
+    </div>
+    <a class="gh-btn" href="https://github.com/Bwca/app_clauhort" target="_blank" rel="noopener">
+      ★ GitHub
+    </a>
+  </div>
+</nav>
+
+<header id="top" class="hero">
+  <div class="wrap">
+    <div class="kicker"><img src="assets/logo-header.png" alt="" /> Multi-agent Claude chat</div>
+    <h1>A group chat where every participant is a real <span class="accent">Claude Code</span> instance.</h1>
+    <p class="lede">
+      Create named agents, each running in its own project directory with its own tools, skills, and MCP servers.
+      Chat with one or many at once, watch them work in real time, and let them delegate to each other — like a team
+      channel, except every member can actually get things done.
+    </p>
+    <div class="ctas">
+      <a class="btn btn-primary" href="#get-started">Get started</a>
+      <a class="btn btn-ghost" href="#demo">Watch it in action</a>
+      <a class="btn btn-ghost" href="https://github.com/Bwca/app_clauhort" target="_blank" rel="noopener">View source</a>
+    </div>
+    <div class="badges">
+      <span class="badge">Node.js + Express + WebSocket</span>
+      <span class="badge">No build step, no framework</span>
+      <span class="badge">SQLite, zero native deps</span>
+      <span class="badge">MIT licensed</span>
+    </div>
   </div>
 </header>
 
-<main>
-  <p class="intro">
-    Each clip below is a real session captured with <a href="https://github.com/rrweb-io/rrweb" target="_blank" rel="noopener">rrweb</a> against a
-    live instance of the app — real agents, real replies — then replayed here as a recording. Pick a use case to load it.
-    See the <a href="https://github.com/Bwca/app_clauhort" target="_blank" rel="noopener">source repo</a> for the real, runnable app.
-  </p>
-
-  <div class="tabs" id="tabs"></div>
-  <p class="tab-desc" id="tab-desc"></p>
-
-  <div id="player-wrap">
-    <p id="player-status">Pick a use case above to load its recording.</p>
+<section id="why">
+  <div class="wrap">
+    <p class="section-kicker">Why Clauhort</p>
+    <h2>Not a sandbox. Not a demo. The real thing.</h2>
+    <p class="section-lede">Every agent in a Clauhort chat is a genuine, unrestricted Claude Code CLI process — the same tool you'd run in a terminal, just given a seat in a group chat.</p>
+    <div class="benefit-grid">
+      <div class="benefit-card">
+        <span class="icon">⚙️</span>
+        <h3>Full tool access, per agent</h3>
+        <p>Each agent runs against its own working directory with its own real tools, skills, and MCP servers — nothing stripped down or simulated for the chat UI.</p>
+      </div>
+      <div class="benefit-card">
+        <span class="icon">🤝</span>
+        <h3>Agents that work together</h3>
+        <p>@mention a specific agent, or let its reply @mention a teammate to bring them in — with loop protection built in so delegation can't run away on you.</p>
+      </div>
+      <div class="benefit-card">
+        <span class="icon">👁️</span>
+        <h3>Nothing happens off-screen</h3>
+        <p>Tool calls, background tasks, and streamed replies all show up live, with real status ("reading a file", "running a command") instead of a spinner.</p>
+      </div>
+      <div class="benefit-card">
+        <span class="icon">🔐</span>
+        <h3>You stay in control</h3>
+        <p>Every risky tool call surfaces a grant/deny card before it runs — or opt an individual agent into YOLO mode when you trust it completely.</p>
+      </div>
+    </div>
   </div>
-</main>
+</section>
+
+<section id="features">
+  <div class="wrap">
+    <p class="section-kicker">What it offers</p>
+    <h2>Everything a multi-agent workflow needs</h2>
+    <p class="section-lede">A complete rundown of what's in the app today.</p>
+    <div class="feature-grid">
+      <div class="feature-card"><span class="icon">👥</span><div><h3>Multi-agent chats</h3><p>Group any number of agents into one conversation. An agent belongs to at most one chat at a time — remove it to free it up for another.</p></div></div>
+      <div class="feature-card"><span class="icon">@</span><div><h3>@mention routing</h3><p>Address a specific agent, or send with no mention to broadcast to everyone in the chat at once.</p></div></div>
+      <div class="feature-card"><span class="icon">🔁</span><div><h3>Agent-to-agent relay</h3><p>An agent's reply can @mention a teammate to delegate. Bounded to one hop by default; toggle Free Relay to lift the cap.</p></div></div>
+      <div class="feature-card"><span class="icon">🧩</span><div><h3>Real skills &amp; MCP</h3><p>Invoke an agent's actual Claude Code skills with <code>@Name /command</code> — read straight from its live process, autocomplete included.</p></div></div>
+      <div class="feature-card"><span class="icon">🔍</span><div><h3>Spotlight filter</h3><p>Focus a busy chat on one agent's relevant messages only; a quiet blue dot flags replies you'd otherwise miss elsewhere.</p></div></div>
+      <div class="feature-card"><span class="icon">🕶️</span><div><h3>Observer agents</h3><p>An agent that only speaks up when explicitly @mentioned, catching up on the full chat history instead of the recent window.</p></div></div>
+      <div class="feature-card"><span class="icon">🔐</span><div><h3>Permission flow</h3><p>Grant or deny file and command access per tool call, with scoped patterns — or skip checks entirely with per-agent YOLO mode.</p></div></div>
+      <div class="feature-card"><span class="icon">🕐</span><div><h3>Scheduled messages</h3><p>Queue a message for later; an auto-continue toggle re-arms itself automatically after a session-limit reset.</p></div></div>
+      <div class="feature-card"><span class="icon">📄</span><div><h3>Paginated history</h3><p>Long chats split into forum-style pages instead of one endless scroll, with full-text search across the whole history.</p></div></div>
+      <div class="feature-card"><span class="icon">🌐</span><div><h3>Browser access</h3><p>Grant an agent real control of your Chrome browser via the Claude in Chrome extension — any number of agents at once.</p></div></div>
+      <div class="feature-card"><span class="icon">♻️</span><div><h3>Persistent sessions</h3><p>Each agent keeps one continuous native Claude session, auto-chained across turns — copy <code>claude --resume &lt;id&gt;</code> to pick it up in a terminal.</p></div></div>
+      <div class="feature-card"><span class="icon">✏️</span><div><h3>Full chat management</h3><p>Rename chats in place, delete a chat with an option to clean up its agents too, and browse or search everything after the fact.</p></div></div>
+    </div>
+  </div>
+</section>
+
+<section id="how-it-works">
+  <div class="wrap">
+    <p class="section-kicker">How it works</p>
+    <h2>From an empty chat to a working team</h2>
+    <p class="section-lede">The mental model is closer to Slack than to a chatbot widget — the difference is that every participant can actually do the work.</p>
+    <div class="steps">
+      <div class="step">
+        <div class="num">1</div>
+        <div>
+          <h3>Create an agent</h3>
+          <p>Give it a name and point it at a real project directory on disk — that directory is its working scope, the same as if you'd run <code>claude</code> there yourself.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="num">2</div>
+        <div>
+          <h3>Group agents into a chat</h3>
+          <p>One agent, or several — mix agents from different projects in the same conversation if the work spans more than one codebase.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="num">3</div>
+        <div>
+          <h3>Send a message</h3>
+          <p><code>@Name</code> to address someone specific, or send with no mention to broadcast to every non-observer agent in the chat.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="num">4</div>
+        <div>
+          <h3>Watch it work, live</h3>
+          <p>Streamed replies, real tool-call status, and inline permission prompts — a denied tool call surfaces a Grant/Deny card without breaking the conversation.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="num">5</div>
+        <div>
+          <h3>Let agents hand off work</h3>
+          <p>Any agent's reply can <code>@mention</code> a teammate to pull them into the thread — useful for splitting a task across agents scoped to different parts of a project.</p>
+        </div>
+      </div>
+    </div>
+    <div class="mechanism-note">
+      <strong>Under the hood:</strong> each agent is a persistent <code>claude --print --input-format=stream-json --output-format=stream-json</code>
+      process kept alive across turns, not a fresh spawn per message — so MCP servers and other expensive-to-establish state survive
+      between messages instead of reconnecting every time. Prompts are built narrowly per turn (only what an agent doesn't already have
+      in its own session memory), since the CLI already remembers its own conversation.
+    </div>
+  </div>
+</section>
+
+<section id="demo">
+  <div class="wrap">
+    <p class="section-kicker">See it in action</p>
+    <h2>Real sessions, recorded</h2>
+    <p class="section-lede">
+      Each clip below is a real session captured with <a href="https://github.com/rrweb-io/rrweb" target="_blank" rel="noopener">rrweb</a>
+      against a live instance of the app — real agents, real replies — then replayed here. Pick a use case to load it.
+    </p>
+
+    <div class="tabs" id="tabs"></div>
+    <p class="tab-desc" id="tab-desc"></p>
+
+    <div id="player-wrap">
+      <p id="player-status">Pick a use case above to load its recording.</p>
+    </div>
+    <p class="demo-note">GitHub Pages can only serve static files — Clauhort itself needs a live Node/WebSocket server, so this page shows recordings rather than the running app. Run it yourself below to try the real thing.</p>
+  </div>
+</section>
+
+<section id="get-started">
+  <div class="wrap">
+    <p class="section-kicker">Get started</p>
+    <h2>Run it locally in under a minute</h2>
+    <p class="section-lede">No build step, no framework, no native compile toolchain required.</p>
+
+    <table class="req-table">
+      <tr><th>Requirement</th><th>Details</th></tr>
+      <tr><td>Node.js</td><td>22.13+ (needed for <code>node:sqlite</code> without a flag — see <code>.nvmrc</code>)</td></tr>
+      <tr><td>Claude Code CLI</td><td>Installed, authenticated, and on <code>PATH</code> as <code>claude</code></td></tr>
+      <tr><td>OS</td><td>Linux, macOS, or Windows — developed and tested on Linux</td></tr>
+    </table>
+
+    <pre class="code-block"><span class="comment"># clone, install, run</span>
+git clone https://github.com/Bwca/app_clauhort.git
+cd app_clauhort/server
+npm install
+node index.js
+
+<span class="comment"># then open</span>
+http://localhost:3001</pre>
+
+    <p class="get-started-links">
+      See the <a href="https://github.com/Bwca/app_clauhort#readme" target="_blank" rel="noopener">full README</a> for environment
+      variables, E2E tests, and every agent-creation option, or the
+      <a href="https://github.com/Bwca/app_clauhort/blob/master/CHANGELOG.md" target="_blank" rel="noopener">changelog</a> for release history.
+    </p>
+  </div>
+</section>
 
 <footer>
-  Clauhort is a Node.js/Express + WebSocket app — GitHub Pages can only serve static files, so this page shows recorded sessions rather than the running app itself.
+  <div class="wrap">
+    <span>© Clauhort — MIT licensed</span>
+    <div class="links">
+      <a href="https://github.com/Bwca/app_clauhort" target="_blank" rel="noopener">GitHub</a>
+      <a href="https://github.com/Bwca/app_clauhort#readme" target="_blank" rel="noopener">README</a>
+      <a href="https://github.com/Bwca/app_clauhort/blob/master/CHANGELOG.md" target="_blank" rel="noopener">Changelog</a>
+      <a href="https://github.com/Bwca/app_clauhort/blob/master/LICENSE" target="_blank" rel="noopener">License</a>
+    </div>
+  </div>
 </footer>
 
 <script src="https://unpkg.com/rrweb-player@2.1.4/dist/rrweb-player.umd.cjs"></script>
@@ -156,6 +452,23 @@
   }
 
   loadUseCase(USE_CASES[0]);
+
+  // ── Scroll-spy: highlight the nav link for the section in view ──────
+  const navLinks = [...document.querySelectorAll('#nav-links a')];
+  const sections = navLinks
+    .map((a) => document.querySelector(a.getAttribute('href')))
+    .filter(Boolean);
+  const spy = new IntersectionObserver(
+    (entries) => {
+      for (const entry of entries) {
+        if (!entry.isIntersecting) continue;
+        const id = '#' + entry.target.id;
+        for (const a of navLinks) a.classList.toggle('active', a.getAttribute('href') === id);
+      }
+    },
+    { rootMargin: '-40% 0px -55% 0px' }
+  );
+  for (const s of sections) spy.observe(s);
 </script>
 </body>
 </html>
