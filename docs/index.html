@@ -72,8 +72,9 @@
 
   /* ── Hero ────────────────────────────────────────────────────────── */
   .hero { padding: 76px 0 64px; border-bottom: 1px solid var(--border); }
-  .hero .kicker { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 13px; margin-bottom: 18px; }
-  .hero .kicker img { height: 30px; }
+  .hero-logo { display: flex; justify-content: center; margin-bottom: 32px; }
+  .hero-logo img { height: 64px; }
+  .hero .kicker { color: var(--muted); font-size: 13px; margin-bottom: 18px; }
   .hero h1 { font-size: 44px; line-height: 1.12; margin: 0 0 18px; max-width: 760px; }
   .hero h1 .accent { color: var(--blue); }
   .hero p.lede { font-size: 17px; color: var(--muted); max-width: 620px; margin: 0 0 30px; }
@@ -200,7 +201,8 @@
 
 <header id="top" class="hero">
   <div class="wrap">
-    <div class="kicker"><img src="assets/logo-header.png" alt="" /> Multi-agent Claude chat</div>
+    <div class="hero-logo"><img src="assets/logo-header.png" alt="Clauhort" /></div>
+    <div class="kicker">Multi-agent Claude chat</div>
     <h1>A group chat where every participant is a real <span class="accent">Claude Code</span> instance.</h1>
     <p class="lede">
       Create named agents, each running in its own project directory with its own tools, skills, and MCP servers.
