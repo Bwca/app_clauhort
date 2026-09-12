@@ -112,7 +112,17 @@ The running version is shown in the sidebar header, next to the app name; click 
 
 ## Disclaimer
 
-This software is provided "as is," without warranty of any kind, express or implied — see [LICENSE](./LICENSE) for the full text. Agents you create run as real, unrestricted `claude` CLI processes with real tool access (file edits, shell commands, MCP servers, and — if you enable YOLO mode — no permission checks at all); browser access grants an agent real control of your Chrome browser. You are solely responsible for what you authorize an agent to do, for reviewing permission grants and tool calls before approving them, and for anything an agent does as a result. Use at your own risk.
+Clauhort is provided "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, including but not limited to the warranties of merchantability, fitness for a particular purpose, and non-infringement — see [LICENSE](./LICENSE) for the full MIT license text. To the maximum extent permitted by applicable law, the authors and contributors shall not be liable for any claim, damages, or other liability — whether in an action of contract, tort, or otherwise, and whether direct, indirect, incidental, special, exemplary, or consequential (including loss of data, profits, or business interruption) — arising from, out of, or in connection with the software or its use, even if advised of the possibility of such damage.
+
+Without limiting the above:
+
+- **Agents run as real, unrestricted processes.** Each agent is a genuine `claude` CLI process with real file, shell, and network access on your machine — including, if you enable YOLO mode, with all permission checks skipped, and, if you grant browser access, real control of your Chrome browser. You are solely responsible for reviewing every permission grant and tool call before approving it, and for anything an agent does as a result — including but not limited to modifying or deleting files, running commands, incurring costs, or taking actions in your browser.
+- **No guarantee of correctness, security, or availability.** This software may contain bugs, may behave unpredictably, and may stop working without notice. Back up anything you can't afford to lose before pointing an agent at it.
+- **Third-party costs and services are not our responsibility.** Clauhort orchestrates the Anthropic `claude` CLI against your own Anthropic account. Any usage charges, rate limits, outages, or changes to that service are strictly between you and Anthropic.
+- **Not affiliated with Anthropic.** Clauhort is an independent, community project — not affiliated with, endorsed by, or sponsored by Anthropic, PBC. "Claude" and "Claude Code" are trademarks of Anthropic, referenced here solely to describe compatibility.
+- **You use this software entirely at your own risk.** By using it, you agree to indemnify and hold harmless the authors and contributors from any claim, liability, loss, or expense (including legal fees) arising out of or related to your use of it.
+
+This is a plain-language summary for users, not a substitute for legal advice.
 
 ## License
 
