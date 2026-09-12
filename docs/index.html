@@ -150,6 +150,22 @@
   #player-status { color: var(--dim); font-size: 13px; padding: 40px; }
   .demo-note { color: var(--dim); font-size: 12.5px; margin-top: 14px; }
 
+  /* rrweb-player@2.1.4's stylesheet hardcodes a white player/controller
+     background with light-theme accent colors — override with !important
+     since its Svelte-scoped selectors (repeated classes) outrank a plain
+     override on specificity alone. The replayed page content itself is
+     already dark (it's Clauhort's own UI), so this only re-themes the
+     player chrome around it. */
+  .rr-player { background: var(--bg1) !important; box-shadow: none !important; border: 1px solid var(--border); border-radius: 10px !important; }
+  .rr-controller { background: var(--bg2) !important; border-radius: 0 0 9px 9px !important; }
+  .rr-timeline__time { color: var(--muted) !important; }
+  .rr-progress { background: var(--bg3) !important; border-color: var(--bg2) !important; }
+  .rr-progress__step { background: var(--blue) !important; opacity: .45; }
+  .rr-progress__handler { background: var(--blue) !important; }
+  .rr-controller__btns button { color: var(--text) !important; }
+  .rr-controller__btns button:active { background: var(--bg3) !important; }
+  .rr-controller__btns button.active { background: var(--blue) !important; color: #11111b !important; }
+
   /* ── Get started ─────────────────────────────────────────────────── */
   .req-table { width: 100%; border-collapse: collapse; font-size: 13.5px; margin-bottom: 32px; max-width: 640px; }
   .req-table th { text-align: left; color: var(--dim); font-weight: 600; font-size: 11.5px; text-transform: uppercase; letter-spacing: .5px; padding: 0 0 8px; }
