@@ -110,6 +110,10 @@ Run a single suite directly with `node --test e2e/<file>.test.js` — each file 
 
 The running version is shown in the sidebar header, next to the app name; click it to see [CHANGELOG.md](./CHANGELOG.md) for release history.
 
+## Disclaimer
+
+This software is provided "as is," without warranty of any kind, express or implied — see [LICENSE](./LICENSE) for the full text. Agents you create run as real, unrestricted `claude` CLI processes with real tool access (file edits, shell commands, MCP servers, and — if you enable YOLO mode — no permission checks at all); browser access grants an agent real control of your Chrome browser. You are solely responsible for what you authorize an agent to do, for reviewing permission grants and tool calls before approving them, and for anything an agent does as a result. Use at your own risk.
+
 ## License
 
 MIT
