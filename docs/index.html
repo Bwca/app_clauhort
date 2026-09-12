@@ -72,8 +72,9 @@
 
   /* ── Hero ────────────────────────────────────────────────────────── */
   .hero { padding: 76px 0 64px; border-bottom: 1px solid var(--border); }
-  .hero-logo { display: flex; justify-content: center; margin-bottom: 32px; }
-  .hero-logo img { height: 64px; }
+  .hero-body { display: flex; align-items: center; gap: 44px; }
+  .hero-logo { flex-shrink: 0; }
+  .hero-logo img { height: 168px; }
   .hero .kicker { color: var(--muted); font-size: 13px; margin-bottom: 18px; }
   .hero h1 { font-size: 44px; line-height: 1.12; margin: 0 0 18px; max-width: 760px; }
   .hero h1 .accent { color: var(--blue); }
@@ -189,6 +190,8 @@
     section { padding: 52px 0; }
     .hero { padding: 52px 0 44px; }
     .hero h1 { font-size: 32px; }
+    .hero-body { flex-direction: column; align-items: flex-start; gap: 20px; }
+    .hero-logo img { height: 88px; }
     #nav .links { gap: 0; }
     #nav .links a { padding: 8px 8px; font-size: 12.5px; }
   }
@@ -217,24 +220,28 @@
 
 <header id="top" class="hero">
   <div class="wrap">
-    <div class="hero-logo"><img src="assets/logo-header.png" alt="Clauhort" /></div>
-    <div class="kicker">Multi-agent Claude chat</div>
-    <h1>A group chat where every participant is a real <span class="accent">Claude Code</span> instance.</h1>
-    <p class="lede">
-      Create named agents, each running in its own project directory with its own tools, skills, and MCP servers.
-      Chat with one or many at once, watch them work in real time, and let them delegate to each other — like a team
-      channel, except every member can actually get things done.
-    </p>
-    <div class="ctas">
-      <a class="btn btn-primary" href="#get-started">Get started</a>
-      <a class="btn btn-ghost" href="#demo">Watch it in action</a>
-      <a class="btn btn-ghost" href="https://github.com/Bwca/app_clauhort" target="_blank" rel="noopener">View source</a>
-    </div>
-    <div class="badges">
-      <span class="badge">Node.js + Express + WebSocket</span>
-      <span class="badge">No build step, no framework</span>
-      <span class="badge">SQLite, zero native deps</span>
-      <span class="badge">MIT licensed</span>
+    <div class="hero-body">
+      <div class="hero-logo"><img src="assets/logo.png" alt="Clauhort" /></div>
+      <div>
+        <div class="kicker">Multi-agent Claude chat</div>
+        <h1>A group chat where every participant is a real <span class="accent">Claude Code</span> instance.</h1>
+        <p class="lede">
+          Create named agents, each running in its own project directory with its own tools, skills, and MCP servers.
+          Chat with one or many at once, watch them work in real time, and let them delegate to each other — like a team
+          channel, except every member can actually get things done.
+        </p>
+        <div class="ctas">
+          <a class="btn btn-primary" href="#get-started">Get started</a>
+          <a class="btn btn-ghost" href="#demo">Watch it in action</a>
+          <a class="btn btn-ghost" href="https://github.com/Bwca/app_clauhort" target="_blank" rel="noopener">View source</a>
+        </div>
+        <div class="badges">
+          <span class="badge">Node.js + Express + WebSocket</span>
+          <span class="badge">No build step, no framework</span>
+          <span class="badge">SQLite, zero native deps</span>
+          <span class="badge">MIT licensed</span>
+        </div>
+      </div>
     </div>
   </div>
 </header>
