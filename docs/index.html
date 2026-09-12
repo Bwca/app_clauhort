@@ -125,6 +125,8 @@
     border-radius: 8px; padding: 18px 20px; font-size: 13.5px; color: var(--muted); max-width: 760px; line-height: 1.65;
   }
   .mechanism-note strong { color: var(--text); }
+  .note-warn { border-left-color: var(--peach); }
+  .note-warn strong { color: var(--peach); }
 
   /* ── Demo ────────────────────────────────────────────────────────── */
   .tabs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
@@ -365,6 +367,15 @@ http://localhost:3001</pre>
       variables, E2E tests, and every agent-creation option, or the
       <a href="https://github.com/Bwca/app_clauhort/blob/master/CHANGELOG.md" target="_blank" rel="noopener">changelog</a> for release history.
     </p>
+
+    <div class="mechanism-note note-warn">
+      <strong>Disclaimer:</strong> Clauhort is provided "as is," with no warranty of any kind — see the
+      <a href="https://github.com/Bwca/app_clauhort/blob/master/LICENSE" target="_blank" rel="noopener">MIT license</a> for the full text.
+      Agents run as real, unrestricted <code>claude</code> CLI processes with real tool access — file edits, shell commands, MCP servers,
+      and, if you enable YOLO mode, no permission checks at all; browser access grants an agent real control of your Chrome browser.
+      You're solely responsible for what you authorize an agent to do, for reviewing permission grants and tool calls before approving
+      them, and for anything an agent does as a result. Use at your own risk.
+    </div>
   </div>
 </section>
 
@@ -376,6 +387,7 @@ http://localhost:3001</pre>
       <a href="https://github.com/Bwca/app_clauhort#readme" target="_blank" rel="noopener">README</a>
       <a href="https://github.com/Bwca/app_clauhort/blob/master/CHANGELOG.md" target="_blank" rel="noopener">Changelog</a>
       <a href="https://github.com/Bwca/app_clauhort/blob/master/LICENSE" target="_blank" rel="noopener">License</a>
+      <a href="#get-started">Disclaimer</a>
     </div>
   </div>
 </footer>
