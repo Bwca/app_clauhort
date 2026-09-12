@@ -160,7 +160,7 @@ Initial release.
 - Slash-command invocation of an agent's real Claude Code skills (`@Name /command`).
 - Permission flow for tool calls: file-path grants (`Write`/`Edit`/`Read`/`NotebookEdit`) widen the agent's allowed directories, other tool grants (e.g. `Bash`) derive scoped `--allowedTools` patterns; an optional per-agent YOLO mode skips permission checks entirely.
 - Optional per-agent browser access via the Claude in Chrome extension (one agent app-wide at a time).
-- Chat and agent management: create/rename/delete chats, create/edit/delete agents, add/remove agents from chats.
+- Chat and agent management: create/delete chats, create/delete agents, add/remove agents from chats.
 - Markdown rendering of agent replies, file attachments, and directory browsing for picking an agent's working directory.
 - User settings: display name, message color, light/dark theme, and language (English/French, Canada), persisted server-side.
 - Structured logging (pino) with daily file rotation, and an opt-in full transcript log for debugging.
