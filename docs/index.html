@@ -376,7 +376,7 @@ http://localhost:3001</pre>
       <a href="https://github.com/Bwca/app_clauhort/blob/master/LICENSE" target="_blank" rel="noopener">MIT license</a> for the full text.
       The authors and contributors are not liable for any claim, damages, or other liability arising from the software or its use.
       <ul>
-        <li>Agents run as real, unrestricted <code>claude</code> CLI processes with real file, shell, and network access — including, under YOLO mode, with no permission checks at all, and, with browser access granted, real control of your Chrome browser. You're solely responsible for reviewing every grant and tool call, and for anything an agent does as a result.</li>
+        <li>Clauhort itself doesn't read, write, or execute anything on your system. Every agent is the real <code>claude</code> CLI — Anthropic's own tool, installed and authenticated by you, independently of Clauhort — and every file edit, shell command, or browser action is carried out by that CLI process under its own permission model. Clauhort only launches it, relays messages to it, and displays what it reports back, including its own permission prompts, which you still review and approve yourself. You're solely responsible for what you authorize the CLI to do.</li>
         <li>No guarantee of correctness, security, or availability — back up anything you can't afford to lose.</li>
         <li>Any Anthropic API usage charges, rate limits, or outages are between you and Anthropic, not this project.</li>
         <li>Clauhort is an independent project, not affiliated with, endorsed by, or sponsored by Anthropic. "Claude" and "Claude Code" are Anthropic trademarks, referenced only to describe compatibility.</li>
