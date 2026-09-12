@@ -166,6 +166,10 @@
   .rr-controller__btns button { color: var(--text) !important; }
   .rr-controller__btns button:active { background: var(--bg3) !important; }
   .rr-controller__btns button.active { background: var(--blue) !important; color: #11111b !important; }
+  /* the play/pause and fullscreen icons are inline SVGs with no fill set,
+     so they default to SVG's initial black rather than inheriting the
+     button's (correctly re-themed) `color` */
+  .rr-controller__btns button svg, .rr-controller__btns button svg path { fill: currentColor !important; }
 
   /* ── Get started ─────────────────────────────────────────────────── */
   .req-table { width: 100%; border-collapse: collapse; font-size: 13.5px; margin-bottom: 32px; max-width: 640px; }
