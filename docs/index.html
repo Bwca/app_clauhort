@@ -433,6 +433,11 @@ http://localhost:3001</pre>
       label: 'Observer agent',
       desc: "An Observer agent stays silent through broadcast messages, then answers a direct @mention by recalling everything it silently saw.",
     },
+    {
+      slug: 'skill-invocation',
+      label: 'Skill invocation',
+      desc: "Typing \"@Agent /command\" in the composer invokes one of that agent's real Claude Code skills, straight from its own project's .claude/commands.",
+    },
   ];
 
   const tabsEl = document.getElementById('tabs');
