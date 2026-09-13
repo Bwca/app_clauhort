@@ -135,6 +135,7 @@ export default {
   'msg.mentionTitle': 'Répondre à {name}',
   'msg.copyTextTitle': 'Copier le texte',
   'msg.copyImageTitle': 'Copier comme image',
+  'msg.copyCodeTitle': 'Copier le code',
   'msg.toolCallNoOutput': 'Aucune sortie',
   'msg.toolCallErrorLabel': 'Erreur',
   'msg.toolCallsSummary_one': "{count} appel d'outil",
