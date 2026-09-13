@@ -903,6 +903,7 @@ function attachStreamingBubble(entry) {
   entry.elapsedEl = el.querySelector('.msg-elapsed');
 
   entry.body.innerHTML = renderMarkdown(entry.rawText);
+  decorateCodeBlocks(entry.body);
   entry.statusTextEl.textContent = entry.statusText || t('chat.respondingLabel');
   entry.typingEl.hidden = entry.typingHidden;
   if (!entry.typingHidden) {
@@ -968,6 +969,7 @@ function onStreamChunk({ streamId, text }) {
   // arrives and it snaps into formatting. Cosmetic only, self-correcting.
   if (entry.body) {
     entry.body.innerHTML = renderMarkdown(entry.rawText);
+    decorateCodeBlocks(entry.body);
     scrollToBottom();
   }
 }
@@ -1782,6 +1784,7 @@ function buildMessageEl(msg) {
     el.querySelector('.msg-copy-text-btn').addEventListener('click', (e) => copyMessageText(e.currentTarget, msg.content));
     el.querySelector('.msg-copy-image-btn').addEventListener('click', (e) => copyMessageAsImage(e.currentTarget, el));
   }
+  decorateCodeBlocks(el);
   return el;
 }
 
@@ -1815,6 +1818,56 @@ async function copyMessageText(btn, content) {
     flashButtonStatus(btn, '✗');
   }
 }
+
+/**
+ * Drops a copy button into every code block markdown.js wrapped in a
+ * `.md-code-wrap` container that doesn't already have one — called after
+ * every markdown re-render (a first render, or a streaming chunk arriving)
+ * since content is replaced wholesale via innerHTML each time. Click
+ * handling itself is delegated on messageList (see below), not attached
+ * here, so this only ever needs to add the button, never rewire it.
+ * @param {HTMLElement} container
+ */
+function decorateCodeBlocks(container) {
+  for (const wrap of container.querySelectorAll('.md-code-wrap')) {
+    if (wrap.querySelector('.md-code-copy-btn')) continue;
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'md-code-copy-btn';
+    btn.title = t('msg.copyCodeTitle');
+    btn.textContent = '📋';
+    wrap.prepend(btn);
+  }
+}
+
+/**
+ * Copies a single code block's raw text to the clipboard. Reads straight
+ * from the sibling <code> element's textContent rather than from any
+ * attribute on the button — markdown.js deliberately doesn't stash a copy
+ * of the code there (see markdown.js's renderer.code), so this is the only
+ * place that ever needs the text.
+ * @param {HTMLButtonElement} btn
+ */
+async function copyCodeBlock(btn) {
+  const code = btn.parentElement.querySelector('pre code');
+  if (!code) return;
+  try {
+    await navigator.clipboard.writeText(code.textContent);
+    flashButtonStatus(btn, '✓');
+  } catch (err) {
+    console.error('Failed to copy code block:', err);
+    flashButtonStatus(btn, '✗');
+  }
+}
+
+// Delegated on messageList (not per-button) because code blocks are added
+// via innerHTML on every markdown render, including once per streaming
+// chunk — a per-button listener would need constant rewiring, and
+// flashButtonStatus's textContent swap would race a mid-flash re-render.
+messageList.addEventListener('click', (e) => {
+  const btn = e.target.closest('.md-code-copy-btn');
+  if (btn) copyCodeBlock(btn);
+});
 
 /**
  * Traces a rounded-rect path on a canvas context (no native roundRect
