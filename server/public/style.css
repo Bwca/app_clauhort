@@ -224,6 +224,11 @@ html, body { height: 100%; background: var(--bg0); color: var(--text); font-fami
 .msg-content code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .9em; background: rgba(0,0,0,.15); padding: 1px 5px; border-radius: 4px; }
 .msg-content pre { background: rgba(0,0,0,.15); padding: 8px 10px; border-radius: 6px; overflow-x: auto; margin: 0 0 8px; }
 .msg-content pre code { background: none; padding: 0; font-size: .85em; }
+.msg-content .md-code-wrap { position: relative; }
+.msg-content .md-code-wrap:hover .md-code-copy-btn, .msg-content .md-code-copy-btn:focus-visible { opacity: 1; }
+.md-code-copy-btn { position: absolute; top: 6px; right: 6px; background: var(--bg2); border: 1px solid var(--border); color: var(--dim); font-size: 12px; cursor: pointer; line-height: 1; padding: 3px 5px; border-radius: 4px; opacity: 0; transition: opacity .15s; }
+.md-code-copy-btn:hover { background: var(--bg3); color: var(--text); }
+.md-code-copy-btn:disabled { opacity: 1; cursor: default; }
 .msg-content blockquote { margin: 0 0 8px; padding: 2px 12px; border-left: 3px solid var(--faint); color: var(--muted); }
 .msg-content blockquote p:last-child { margin-bottom: 0; }
 .msg-content a { color: var(--blue); text-decoration: none; }
