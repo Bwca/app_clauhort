@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Added
+- Every rendered code block in an agent's reply now gets a copy button (revealed on hover, top-right of the block) — no more manually selecting code to copy it. See `decorateCodeBlocks`/`copyCodeBlock` in `server/public/app.js` and the `.md-code-wrap` container `markdown.js`'s `renderer.code` now wraps each block in.
 - Chats can now be renamed from the sidebar — hover a chat item and click the ✏️ button to edit its name in place (Enter to save, Escape to discard). See `PATCH /api/chats/:id` in `server/routes/chats.js` (now rejects a blank name) and `startRenameChat` in `server/public/app.js`.
 
 ## [1.2.14] - 2026-09-10
