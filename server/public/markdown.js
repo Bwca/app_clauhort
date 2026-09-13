@@ -55,6 +55,17 @@ renderer.image = function image({ href, title, text }) {
   return `<img src="${safe}" alt="${escHtml(text)}"${title ? ` title="${escHtml(title)}"` : ''}>`;
 };
 
+// Wraps every fenced/indented code block in a container that app.js can
+// find and drop a copy button into (this module has no access to the
+// active locale for a translated button title, and no DOM to attach a
+// click listener to anyway — this HTML is only ever dropped in via
+// innerHTML — so button creation and wiring both live in app.js).
+const defaultCode = Renderer.prototype.code;
+renderer.code = function code(token) {
+  const html = defaultCode.call(this, token);
+  return `<div class="md-code-wrap">${html}</div>`;
+};
+
 // Wraps the table in a scrollable container instead of constraining the
 // <table> itself (e.g. via display:block on the table) — that broke the
 // browser's normal auto column-width layout, silently clipping a header
