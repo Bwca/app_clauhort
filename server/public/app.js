@@ -37,6 +37,8 @@ import { APP_VERSION } from './appVersion.js';
  *   own session-limit error auto-schedules a "please continue" message for
  *   one minute after the limit resets — see the #auto-continue-btn toggle
  *   and maybeScheduleAutoContinue in server/ws/handler.js.
+ * @property {string | null} category - Freeform label for grouping this
+ *   chat in the sidebar, or null if uncategorized.
  * @property {string} createdAt
  */
 
@@ -506,6 +508,7 @@ const appTitleEl       = $('#app-title');
 const appVersionEl     = $('#app-version');
 const connDot          = $('#conn-dot');
 const chatList         = $('#chat-list');
+const categoryDatalist = $('#category-datalist');
 const newChatBtn       = $('#new-chat-btn');
 const newChatForm      = $('#new-chat-form');
 const newChatInput     = $('#new-chat-input');
@@ -2253,37 +2256,148 @@ function escHtml(str) {
 
 // ─── Chat list rendering ─────────────────────────────────────────────────────
 
+/** localStorage key for the set of collapsed category names (sidebar-only UI state, not server-persisted). */
+const COLLAPSED_CATEGORIES_STORAGE_KEY = 'collapsedCategories';
+/** Sentinel group key for chats with no category — an empty string can't collide with a real category name, since both the client and server normalize blank input to `null`/uncategorized. */
+const UNCATEGORIZED_KEY = '';
+
+/**
+ * Reads the set of collapsed category names from localStorage. Falls back to
+ * an empty set on missing/corrupt data or a storage access error (private
+ * browsing, disabled storage) — same defensive shape as other localStorage
+ * reads in this app.
+ * @returns {Set<string>}
+ */
+function getCollapsedCategories() {
+  try {
+    const raw = localStorage.getItem(COLLAPSED_CATEGORIES_STORAGE_KEY);
+    return new Set(raw ? JSON.parse(raw) : []);
+  } catch {
+    return new Set();
+  }
+}
+
+/**
+ * @param {Set<string>} collapsed
+ * @returns {void}
+ */
+function setCollapsedCategories(collapsed) {
+  try {
+    localStorage.setItem(COLLAPSED_CATEGORIES_STORAGE_KEY, JSON.stringify([...collapsed]));
+  } catch {
+    // Storage disabled/full — collapse state just won't survive a reload.
+  }
+}
+
+/**
+ * Builds one chat's `<li>` row (name, tag/rename/delete buttons), identical
+ * markup to before category grouping existed except for the added tag
+ * button. Extracted out of renderChatList so it can be called once per chat
+ * per category group instead of once per chat overall.
+ * @param {Chat} chat
+ * @returns {HTMLLIElement}
+ */
+function buildChatItem(chat) {
+  const li = document.createElement('li');
+  const unread = unreadChatIds.has(chat.id);
+  li.className = 'chat-item' + (chat.id === activeChatId ? ' active' : '') + (unread ? ' has-unread' : '');
+  li.dataset.chatId = chat.id;
+  li.dataset.testid = 'chat-item';
+  li.innerHTML = `
+    ${unread ? `<span class="chat-unread-dot" data-testid="chat-unread-dot" title="${t('chat.unreadTitle')}"></span>` : ''}
+    <span class="chat-item-name" data-testid="chat-item-name" title="${escHtml(chat.name)}">${t('chat.channelName', { name: escHtml(chat.name) })}</span>
+    <button class="chat-tag-btn" data-testid="chat-tag-btn" data-tag-chat="${chat.id}" title="${t('category.assignTitle')}">🏷️</button>
+    <button class="chat-rename-btn" data-testid="chat-rename-btn" data-rename-chat="${chat.id}" title="${t('chat.renameTitle')}">✏️</button>
+    <button class="chat-del-btn" data-testid="chat-del-btn" data-del-chat="${chat.id}" title="${t('chat.deleteTitle')}">×</button>`;
+  li.addEventListener('click', (e) => {
+    if (e.target.closest('[data-del-chat], [data-rename-chat], [data-tag-chat]')) return;
+    selectChat(chat.id);
+  });
+  li.querySelector('[data-tag-chat]').addEventListener('click', (e) => {
+    e.stopPropagation();
+    startCategoryEdit(chat, li);
+  });
+  li.querySelector('[data-rename-chat]').addEventListener('click', (e) => {
+    e.stopPropagation();
+    startRenameChat(chat, li);
+  });
+  li.querySelector('[data-del-chat]').addEventListener('click', async (e) => {
+    e.stopPropagation();
+    const memberCount = chat.memberAgentIds.length;
+    const opts = memberCount > 0
+      ? { checkboxLabel: t('confirm.deleteChatAgentsCheckbox', { count: memberCount }) }
+      : {};
+    const { confirmed, checked } = await confirmDialog(t('confirm.deleteChat', { name: chat.name }), opts);
+    if (confirmed) deleteChat(chat.id, checked);
+  });
+  return li;
+}
+
+/**
+ * Groups `chats` by category into collapsible `<details>` sections
+ * (Uncategorized first, then named categories alphabetically), each holding
+ * its chats' `<li>` rows built by buildChatItem. Collapse state persists to
+ * localStorage per category name. A category's rename/delete controls live
+ * in its `<summary>` (Uncategorized gets neither, since it isn't a real
+ * category to rename or delete).
+ */
 function renderChatList() {
   chatList.innerHTML = '';
+
+  const groups = new Map();
   for (const chat of chats) {
-    const li = document.createElement('li');
-    const unread = unreadChatIds.has(chat.id);
-    li.className = 'chat-item' + (chat.id === activeChatId ? ' active' : '') + (unread ? ' has-unread' : '');
-    li.dataset.chatId = chat.id;
-    li.dataset.testid = 'chat-item';
-    li.innerHTML = `
-      ${unread ? `<span class="chat-unread-dot" data-testid="chat-unread-dot" title="${t('chat.unreadTitle')}"></span>` : ''}
-      <span class="chat-item-name" data-testid="chat-item-name" title="${escHtml(chat.name)}">${t('chat.channelName', { name: escHtml(chat.name) })}</span>
-      <button class="chat-rename-btn" data-testid="chat-rename-btn" data-rename-chat="${chat.id}" title="${t('chat.renameTitle')}">✏️</button>
-      <button class="chat-del-btn" data-testid="chat-del-btn" data-del-chat="${chat.id}" title="${t('chat.deleteTitle')}">×</button>`;
-    li.addEventListener('click', (e) => {
-      if (e.target.closest('[data-del-chat], [data-rename-chat]')) return;
-      selectChat(chat.id);
+    const key = chat.category || UNCATEGORIZED_KEY;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(chat);
+  }
+
+  const namedKeys = [...groups.keys()].filter((k) => k !== UNCATEGORIZED_KEY).sort((a, b) => a.localeCompare(b));
+  const orderedKeys = groups.has(UNCATEGORIZED_KEY) ? [UNCATEGORIZED_KEY, ...namedKeys] : namedKeys;
+  const collapsed = getCollapsedCategories();
+
+  categoryDatalist.innerHTML = namedKeys.map((k) => `<option value="${escHtml(k)}"></option>`).join('');
+
+  for (const key of orderedKeys) {
+    const groupChats = groups.get(key);
+    const isUncategorized = key === UNCATEGORIZED_KEY;
+
+    const details = document.createElement('details');
+    details.className = 'chat-category';
+    details.dataset.testid = 'chat-category';
+    details.open = !collapsed.has(key);
+    details.addEventListener('toggle', () => {
+      const next = getCollapsedCategories();
+      if (details.open) next.delete(key); else next.add(key);
+      setCollapsedCategories(next);
     });
-    li.querySelector('[data-rename-chat]').addEventListener('click', (e) => {
-      e.stopPropagation();
-      startRenameChat(chat, li);
-    });
-    li.querySelector('[data-del-chat]').addEventListener('click', async (e) => {
-      e.stopPropagation();
-      const memberCount = chat.memberAgentIds.length;
-      const opts = memberCount > 0
-        ? { checkboxLabel: t('confirm.deleteChatAgentsCheckbox', { count: memberCount }) }
-        : {};
-      const { confirmed, checked } = await confirmDialog(t('confirm.deleteChat', { name: chat.name }), opts);
-      if (confirmed) deleteChat(chat.id, checked);
-    });
-    chatList.appendChild(li);
+
+    const summary = document.createElement('summary');
+    summary.innerHTML = `
+      <span class="chat-category-name" data-testid="chat-category-name">${isUncategorized ? t('category.uncategorizedLabel') : escHtml(key)}</span>
+      <span class="chat-category-count">${groupChats.length}</span>
+      ${isUncategorized ? '' : `
+        <button class="chat-category-rename-btn" data-testid="chat-category-rename-btn" title="${t('category.renameTitle')}">✏️</button>
+        <button class="chat-category-del-btn" data-testid="chat-category-del-btn" title="${t('category.deleteTitle')}">×</button>`}`;
+    if (!isUncategorized) {
+      summary.querySelector('.chat-category-rename-btn').addEventListener('click', (e) => {
+        e.preventDefault(); // don't also toggle the <details> open state
+        e.stopPropagation();
+        renameCategory(key);
+      });
+      summary.querySelector('.chat-category-del-btn').addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        deleteCategory(key, groupChats.length);
+      });
+    }
+    details.appendChild(summary);
+
+    const ul = document.createElement('ul');
+    ul.className = 'chat-category-list';
+    for (const chat of groupChats) ul.appendChild(buildChatItem(chat));
+    details.appendChild(ul);
+
+    chatList.appendChild(details);
   }
 }
 
@@ -2338,6 +2452,104 @@ function startRenameChat(chat, li) {
     else if (e.key === 'Escape') { e.preventDefault(); finish(false); }
   });
   input.addEventListener('blur', () => finish(true));
+}
+
+/**
+ * Swaps a sidebar chat item's name span for a text input (autocompleted
+ * against #category-datalist, populated with every category currently in
+ * use) so the chat's category can be set/cleared in place. Same
+ * commit-on-Enter/blur, cancel-on-Escape shape as startRenameChat, but
+ * PATCHes `category` instead of `name`, and a blank value is a valid commit
+ * (clears the category — the chat falls back to Uncategorized) rather than
+ * being ignored.
+ * @param {Chat} chat
+ * @param {HTMLElement} li
+ */
+function startCategoryEdit(chat, li) {
+  const nameSpan = li.querySelector('[data-testid="chat-item-name"]');
+  if (!nameSpan || li.querySelector('.chat-rename-input')) return;
+
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'chat-rename-input';
+  input.dataset.testid = 'chat-category-input';
+  input.placeholder = t('category.assignPlaceholder');
+  input.setAttribute('list', 'category-datalist');
+  input.value = chat.category ?? '';
+  nameSpan.replaceWith(input);
+  input.focus();
+  input.select();
+
+  let settled = false;
+  const finish = async (commit) => {
+    if (settled) return;
+    settled = true;
+    const newCategory = input.value.trim() || null;
+    if (commit && newCategory !== (chat.category ?? null)) {
+      const res = await fetch(`/api/chats/${chat.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ category: newCategory }),
+      });
+      if (res.ok) {
+        const updated = /** @type {Chat} */ (await res.json());
+        const idx = chats.findIndex((c) => c.id === updated.id);
+        if (idx !== -1) chats[idx] = updated;
+      }
+    }
+    renderChatList();
+  };
+
+  input.addEventListener('click', (e) => e.stopPropagation());
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); finish(true); }
+    else if (e.key === 'Escape') { e.preventDefault(); finish(false); }
+  });
+  input.addEventListener('blur', () => finish(true));
+}
+
+/**
+ * Prompts for a new name for `oldName` and, if confirmed with a real change,
+ * bulk-renames it across every chat that has it via PATCH /api/chats/category,
+ * then does a full resync of `chats` (same fallback pattern addMember uses)
+ * since the bulk endpoint doesn't return the affected chats individually.
+ * @param {string} oldName
+ * @returns {Promise<void>}
+ */
+async function renameCategory(oldName) {
+  const { confirmed, value } = await confirmDialog(
+    t('confirm.renameCategory', { name: oldName }),
+    { textInput: { value: oldName }, okLabel: t('confirm.renameBtn') },
+  );
+  const newName = value.trim();
+  if (!confirmed || !newName || newName === oldName) return;
+  await fetch('/api/chats/category', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ from: oldName, to: newName }),
+  });
+  chats = await (await fetch('/api/chats')).json();
+  renderChatList();
+}
+
+/**
+ * Confirms then clears `name` from every chat that has it (they fall back to
+ * Uncategorized) via PATCH /api/chats/category with `to: null`, same
+ * full-resync-after pattern as renameCategory.
+ * @param {string} name
+ * @param {number} count - Chats currently in this category, shown in the confirm prompt.
+ * @returns {Promise<void>}
+ */
+async function deleteCategory(name, count) {
+  const { confirmed } = await confirmDialog(t('confirm.deleteCategory', { name, count }));
+  if (!confirmed) return;
+  await fetch('/api/chats/category', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ from: name, to: null }),
+  });
+  chats = await (await fetch('/api/chats')).json();
+  renderChatList();
 }
 
 // ─── Agent panel rendering ───────────────────────────────────────────────────

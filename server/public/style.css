@@ -85,7 +85,19 @@ html, body { height: 100%; background: var(--bg0); color: var(--text); font-fami
 #new-chat-input { width: 100%; background: var(--bg2); border: 1px solid var(--faint); border-radius: 6px; padding: 6px 10px; color: var(--text); font-size: 13px; outline: none; }
 #new-chat-input:focus { border-color: var(--blue); }
 
-#chat-list { list-style: none; padding: 4px 8px; flex: 1; overflow-y: auto; }
+#chat-list { padding: 4px 8px; flex: 1; overflow-y: auto; }
+
+.chat-category { margin-bottom: 2px; }
+.chat-category > summary { display: flex; align-items: center; gap: 4px; padding: 6px 9px; border-radius: 6px; cursor: pointer; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .03em; list-style: none; }
+.chat-category > summary::-webkit-details-marker { display: none; }
+.chat-category > summary:hover { background: var(--bg2); }
+.chat-category-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat-category-count { color: var(--dim); font-size: 10px; }
+.chat-category-list { list-style: none; padding: 0; margin: 0; }
+.chat-category-rename-btn, .chat-category-del-btn { background: none; border: none; color: transparent; font-size: 12px; cursor: pointer; flex-shrink: 0; line-height: 1; opacity: .7; transition: color .15s; }
+.chat-category > summary:hover .chat-category-rename-btn, .chat-category > summary:hover .chat-category-del-btn { color: var(--dim); }
+.chat-category-rename-btn:hover { color: var(--blue) !important; }
+.chat-category-del-btn:hover { color: var(--red) !important; }
 
 .chat-item { display: flex; align-items: center; justify-content: space-between; padding: 7px 9px; border-radius: 6px; cursor: pointer; color: var(--muted); font-size: 13px; transition: background .1s; gap: 4px; }
 .chat-item:hover { background: var(--bg2); color: var(--text); }
@@ -96,9 +108,9 @@ html, body { height: 100%; background: var(--bg0); color: var(--text); font-fami
 .chat-del-btn { background: none; border: none; color: transparent; font-size: 15px; cursor: pointer; flex-shrink: 0; line-height: 1; transition: color .15s; }
 .chat-item:hover .chat-del-btn { color: var(--dim); }
 .chat-del-btn:hover { color: var(--red) !important; }
-.chat-rename-btn { background: none; border: none; color: transparent; font-size: 12px; cursor: pointer; flex-shrink: 0; line-height: 1; opacity: .7; transition: color .15s; }
-.chat-item:hover .chat-rename-btn { color: var(--dim); }
-.chat-rename-btn:hover { color: var(--blue) !important; }
+.chat-rename-btn, .chat-tag-btn { background: none; border: none; color: transparent; font-size: 12px; cursor: pointer; flex-shrink: 0; line-height: 1; opacity: .7; transition: color .15s; }
+.chat-item:hover .chat-rename-btn, .chat-item:hover .chat-tag-btn { color: var(--dim); }
+.chat-rename-btn:hover, .chat-tag-btn:hover { color: var(--blue) !important; }
 .chat-rename-input { flex: 1; min-width: 0; background: var(--bg1); color: var(--text); border: 1px solid var(--blue); border-radius: 4px; padding: 2px 6px; font-size: 13px; font-family: inherit; }
 
 /* ── Chat Area ─────────────────────────────────────────────────────── */
