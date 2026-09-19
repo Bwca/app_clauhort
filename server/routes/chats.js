@@ -60,6 +60,20 @@ export default function createChatsRouter(wss) {
   }
 
   /**
+   * Normalizes a category value from a request body: undefined stays
+   * undefined (meaning "not provided, leave as-is"); null or a
+   * blank/whitespace-only string both become null (meaning "uncategorized").
+   * @param {unknown} category
+   * @returns {string | null | undefined}
+   */
+  function normalizeCategory(category) {
+    if (category === undefined) return undefined;
+    if (category === null) return null;
+    const trimmed = String(category).trim();
+    return trimmed || null;
+  }
+
+  /**
    * GET /api/chats
    * Returns all chats.
    */
@@ -118,6 +132,8 @@ export default function createChatsRouter(wss) {
    *   error auto-arms a scheduled "please continue" nudge for the affected
    *   agent (see updateChat's docs in db.js and runAgentsParallel's catch
    *   block in ws/handler.js).
+   * @param {string | null} [req.body.category] - New sidebar-grouping
+   *   category; blank/empty string clears it (chat becomes uncategorized).
    */
   router.patch('/:id', async (req, res) => {
     const { name, freeRelay, autoContinue } = req.body;
@@ -127,7 +143,8 @@ export default function createChatsRouter(wss) {
     if (name !== undefined && !name.trim()) {
       return res.status(400).json({ error: t('errors.chatNameRequired') });
     }
-    const chat = await updateChat(req.params.id, { name, freeRelay, autoContinue });
+    const category = normalizeCategory(req.body.category);
+    const chat = await updateChat(req.params.id, { name, freeRelay, autoContinue, category });
     if (!chat) return res.status(404).json({ error: t('errors.chatNotFound') });
     res.json(chat);
   });
