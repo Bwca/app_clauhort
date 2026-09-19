@@ -497,11 +497,16 @@ html, body { height: 100%; background: var(--bg0); color: var(--text); font-fami
 #confirm-message { margin: 0 0 16px; font-size: 14px; color: var(--text); line-height: 1.5; }
 #confirm-checkbox-row { display: flex; align-items: flex-start; gap: 8px; margin: -6px 0 16px; font-size: 13px; color: var(--muted); line-height: 1.4; cursor: pointer; }
 #confirm-checkbox-row input { margin-top: 2px; flex-shrink: 0; }
+#confirm-text-row { margin: -6px 0 16px; }
+#confirm-text-input { width: 100%; background: var(--bg2); border: 1px solid var(--faint); border-radius: 6px; padding: 6px 10px; color: var(--text); font-size: 13px; outline: none; box-sizing: border-box; }
+#confirm-text-input:focus { border-color: var(--blue); }
 #confirm-footer { display: flex; gap: 8px; justify-content: flex-end; }
 #confirm-cancel { padding: 7px 14px; border-radius: 7px; border: 1px solid var(--faint); background: transparent; color: var(--muted); font-size: 14px; cursor: pointer; transition: background .15s; }
 #confirm-cancel:hover { background: var(--bg2); }
 #confirm-ok { padding: 7px 18px; border-radius: 7px; border: none; background: var(--red); color: var(--bg0); font-size: 14px; font-weight: 600; cursor: pointer; transition: background .15s; }
 #confirm-ok:hover { background: var(--red-hover); }
+#confirm-ok.neutral { background: var(--blue); }
+#confirm-ok.neutral:hover { background: var(--blue-hover); }
 
 /* ── Image lightbox ───────────────────────────────────────────────── */
 #image-lightbox-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.85); display: flex; align-items: center; justify-content: center; z-index: 400; cursor: zoom-out; }

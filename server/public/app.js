@@ -600,6 +600,8 @@ const confirmMessage   = $('#confirm-message');
 const confirmCheckboxRow   = $('#confirm-checkbox-row');
 const confirmCheckbox      = $('#confirm-checkbox');
 const confirmCheckboxLabel = $('#confirm-checkbox-label');
+const confirmTextRow       = $('#confirm-text-row');
+const confirmTextInput     = $('#confirm-text-input');
 const confirmCancel    = $('#confirm-cancel');
 const confirmOk        = $('#confirm-ok');
 const imageLightboxOverlay = $('#image-lightbox-overlay');
@@ -719,10 +721,14 @@ let pendingConfirmResolve = null;
  * `checkboxLabel` is given, an extra opt-in checkbox is shown beneath the
  * message (e.g. "also delete its agents") and its final state is returned
  * alongside the confirm/cancel choice; otherwise the row stays hidden and
- * `checked` is always false.
+ * `checked` is always false. When `textInput` is given, an extra text field
+ * (pre-filled with `textInput.value`) is shown instead — used for renaming a
+ * category, where the confirm action needs a new name, not just a yes/no.
+ * `okLabel` overrides the confirm button's text (defaults to the "Delete"
+ * label baked into its markup, right for every other current caller).
  * @param {string} message
- * @param {{ checkboxLabel?: string }} [opts]
- * @returns {Promise<{ confirmed: boolean, checked: boolean }>}
+ * @param {{ checkboxLabel?: string, textInput?: { value?: string }, okLabel?: string }} [opts]
+ * @returns {Promise<{ confirmed: boolean, checked: boolean, value: string }>}
  */
 function confirmDialog(message, opts = {}) {
   confirmMessage.textContent = message;
@@ -731,7 +737,17 @@ function confirmDialog(message, opts = {}) {
     confirmCheckboxLabel.textContent = opts.checkboxLabel;
     confirmCheckbox.checked = false;
   }
+  confirmTextRow.hidden = !opts.textInput;
+  if (opts.textInput) {
+    confirmTextInput.value = opts.textInput.value ?? '';
+  }
+  confirmOk.textContent = opts.okLabel ?? t('confirm.deleteBtn');
+  confirmOk.classList.toggle('neutral', Boolean(opts.textInput));
   confirmOverlay.hidden = false;
+  if (opts.textInput) {
+    confirmTextInput.focus();
+    confirmTextInput.select();
+  }
   return new Promise((resolve) => { pendingConfirmResolve = resolve; });
 }
 
@@ -741,12 +757,19 @@ function confirmDialog(message, opts = {}) {
  */
 function resolveConfirm(confirmed) {
   confirmOverlay.hidden = true;
-  pendingConfirmResolve?.({ confirmed, checked: !confirmCheckboxRow.hidden && confirmCheckbox.checked });
+  pendingConfirmResolve?.({
+    confirmed,
+    checked: !confirmCheckboxRow.hidden && confirmCheckbox.checked,
+    value: confirmTextInput.value,
+  });
   pendingConfirmResolve = null;
 }
 
 confirmCancel.addEventListener('click', () => resolveConfirm(false));
 confirmOk.addEventListener('click', () => resolveConfirm(true));
+confirmTextInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); resolveConfirm(true); }
+});
 
 // ─── WebSocket ──────────────────────────────────────────────────────────────
 
