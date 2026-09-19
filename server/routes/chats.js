@@ -12,6 +12,7 @@ import {
   getChat,
   createChat,
   updateChat,
+  renameChatCategory,
   deleteChat,
   deleteAgent,
   addChatMember,
@@ -79,6 +80,23 @@ export default function createChatsRouter(wss) {
    */
   router.get('/', (_req, res) => {
     res.json(getChats());
+  });
+
+  /**
+   * PATCH /api/chats/category
+   * Bulk-renames (or clears, when `to` is blank/omitted) a category across
+   * every chat that currently has it. Registered ahead of PATCH /:id so
+   * "category" here is never swallowed by that route's :id param matcher.
+   * @param {Object} req.body
+   * @param {string} req.body.from - Current category value to match
+   * @param {string} [req.body.to] - New value; blank/omitted clears it
+   */
+  router.patch('/category', (req, res) => {
+    const from = normalizeCategory(req.body.from);
+    if (!from) return res.status(400).json({ error: t('errors.categoryFromRequired') });
+    const to = normalizeCategory(req.body.to);
+    const updated = renameChatCategory(from, to ?? null);
+    res.json({ updated });
   });
 
   /**
