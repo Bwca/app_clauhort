@@ -471,7 +471,7 @@ function rowToChat(row) {
     .prepare('SELECT agent_id FROM chat_members WHERE chat_id = ? ORDER BY rowid')
     .all(row.id)
     .map((r) => r.agent_id);
-  return { id: row.id, name: row.name, memberAgentIds, rosterChangedAt: row.roster_changed_at ?? null, freeRelay: Boolean(row.free_relay), autoContinue: Boolean(row.auto_continue), createdAt: row.created_at };
+  return { id: row.id, name: row.name, memberAgentIds, rosterChangedAt: row.roster_changed_at ?? null, freeRelay: Boolean(row.free_relay), autoContinue: Boolean(row.auto_continue), category: row.category ?? null, createdAt: row.created_at };
 }
 
 /**
@@ -779,11 +779,11 @@ export async function createChat(data) {
 }
 
 /**
- * Updates a chat's mutable settings (currently name, freeRelay, and
- * autoContinue). Unlike agent flag updates, none of these is baked into any
- * spawn args, so there's no process to evict here.
+ * Updates a chat's mutable settings (currently name, freeRelay,
+ * autoContinue, and category). Unlike agent flag updates, none of these is
+ * baked into any spawn args, so there's no process to evict here.
  * @param {string} id
- * @param {{ name?: string, freeRelay?: boolean, autoContinue?: boolean }} updates
+ * @param {{ name?: string, freeRelay?: boolean, autoContinue?: boolean, category?: string | null }} updates
  * @returns {Promise<Chat | null>} the updated chat, or null if not found
  */
 export async function updateChat(id, updates) {
@@ -795,6 +795,9 @@ export async function updateChat(id, updates) {
     // free relay back off) is a meaningful, common value, not "absent".
     free_relay: updates.freeRelay !== undefined ? (updates.freeRelay ? 1 : 0) : undefined,
     auto_continue: updates.autoContinue !== undefined ? (updates.autoContinue ? 1 : 0) : undefined,
+    // Nullable string, so explicitly checked against undefined too — `null`
+    // (clearing the category) is a meaningful value, not "absent".
+    category: updates.category !== undefined ? updates.category : undefined,
   };
   const entries = Object.entries(columns).filter(([, v]) => v !== undefined);
   if (entries.length === 0) return getChat(id);
@@ -803,6 +806,21 @@ export async function updateChat(id, updates) {
   const values = entries.map(([, v]) => v);
   db.prepare(`UPDATE chats SET ${setClause} WHERE id = ?`).run(...values, id);
   return getChat(id);
+}
+
+/**
+ * Bulk-renames (or clears, when `to` is null) a category across every chat
+ * that currently has it. Backs both the sidebar's "rename category" and
+ * "delete category" actions — since a category is just a string value
+ * duplicated across chats rather than its own row, there's no single record
+ * to rename/delete, only this batch update.
+ * @param {string} from - Current category value to match
+ * @param {string | null} to - New value, or null to clear the category
+ * @returns {number} how many chats were affected
+ */
+export function renameChatCategory(from, to) {
+  const result = db.prepare('UPDATE chats SET category = ? WHERE category = ?').run(to, from);
+  return result.changes;
 }
 
 /**
