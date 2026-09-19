@@ -120,6 +120,9 @@ function transaction(fn) {
  *   one minute after that reset time, nudging just that agent to continue
  *   without the user having to notice the limit cleared and say so
  *   themselves. Defaults to false for every other chat.
+ * @property {string | null} category - Freeform label for grouping chats in
+ *   the sidebar (e.g. "Work", "Personal"), or null if uncategorized. Purely
+ *   organizational — never sent to agents or referenced in ws/handler.js.
  * @property {string} createdAt - ISO 8601 timestamp
  */
 
@@ -184,6 +187,7 @@ CREATE TABLE IF NOT EXISTS chats (
   roster_changed_at TEXT,
   free_relay INTEGER NOT NULL DEFAULT 0,
   auto_continue INTEGER NOT NULL DEFAULT 0,
+  category TEXT,
   created_at TEXT NOT NULL
 );
 
@@ -421,6 +425,18 @@ function migrateChatsAutoContinue() {
 }
 
 /**
+ * Adds the `category` column to `chats` if it's missing, same reasoning as
+ * migrateChatsRosterChangedAt above.
+ * @returns {void}
+ */
+function migrateChatsCategory() {
+  const hasColumn = db.prepare("PRAGMA table_info(chats)").all()
+    .some((col) => col.name === 'category');
+  if (hasColumn) return;
+  db.exec('ALTER TABLE chats ADD COLUMN category TEXT');
+}
+
+/**
  * Maps a raw `agents` row to the public Agent shape.
  * @param {Record<string, unknown>} row
  * @returns {Agent}
@@ -580,6 +596,7 @@ export async function loadDb() {
   migrateChatsRosterChangedAt();
   migrateChatsFreeRelay();
   migrateChatsAutoContinue();
+  migrateChatsCategory();
 
   if (!isMemory && isNewDatabase && existsSync(JSON_DATA_FILE)) {
     importLegacyJson();
