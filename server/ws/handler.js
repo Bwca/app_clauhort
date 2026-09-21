@@ -775,7 +775,7 @@ async function runAgentsParallel(agents, allMembers, chat, userMessage, wss, pri
     log.info({ agentId: agent.id, chatId: chat.id, streamId }, 'turn started');
 
     try {
-      const { text: fullText, permissionDenials, sessionId, stopped, toolCalls, wasLocalCommand } = await runAgentStream({
+      const { text: fullText, permissionDenials, sessionId, stopped, toolCalls, wasLocalCommand, usage, totalCostUsd, durationMs } = await runAgentStream({
         agent,
         chatId: chat.id,
         content,
@@ -847,7 +847,27 @@ async function runAgentsParallel(agents, allMembers, chat, userMessage, wss, pri
         stopped,
       });
       log.info(
-        { agentId: agent.id, chatId: chat.id, streamId, stopped, permissionDenials: dedupedDenials.map((d) => d.tool_name) },
+        {
+          agentId: agent.id,
+          chatId: chat.id,
+          streamId,
+          stopped,
+          permissionDenials: dedupedDenials.map((d) => d.tool_name),
+          // Token accounting straight from the CLI's own `result` event —
+          // see agentProcessManager.js's createTurnAccumulator. This (plus
+          // the mirrored fields on 'turn errored' below) is what makes a
+          // token-burn incident (e.g. a shared account's session limit
+          // getting exhausted by concurrent agent turns) debuggable from
+          // the log after the fact, per agent/chat/turn, instead of guesswork.
+          ...(usage ? {
+            inputTokens: usage.inputTokens,
+            outputTokens: usage.outputTokens,
+            cacheCreationInputTokens: usage.cacheCreationInputTokens,
+            cacheReadInputTokens: usage.cacheReadInputTokens,
+          } : {}),
+          totalCostUsd,
+          durationMs,
+        },
         'turn ended'
       );
     } catch (err) {
@@ -859,7 +879,28 @@ async function runAgentsParallel(agents, allMembers, chat, userMessage, wss, pri
         agentId: agent.id,
         error: err.message,
       });
-      log.error({ agentId: agent.id, chatId: chat.id, streamId, err }, 'turn errored');
+      log.error(
+        {
+          agentId: agent.id,
+          chatId: chat.id,
+          streamId,
+          err,
+          // Same reasoning as 'turn ended' above — an errored turn (e.g. a
+          // session-limit failure) still spent real tokens before it hit
+          // the wall, and agentProcessManager.js's runOneTurn attaches
+          // whatever the CLI's `result` event reported onto the Error
+          // itself for exactly this.
+          ...(err.usage ? {
+            inputTokens: err.usage.inputTokens,
+            outputTokens: err.usage.outputTokens,
+            cacheCreationInputTokens: err.usage.cacheCreationInputTokens,
+            cacheReadInputTokens: err.usage.cacheReadInputTokens,
+          } : {}),
+          totalCostUsd: err.totalCostUsd ?? null,
+          durationMs: err.durationMs ?? null,
+        },
+        'turn errored'
+      );
       await maybeScheduleAutoContinue(chat, agent, err.message, wss);
     } finally {
       activeStreams.delete(streamId);

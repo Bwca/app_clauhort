@@ -140,6 +140,10 @@ export function dedupePermissionDenials(denials) {
  *   intercepted this turn before the model saw it — see
  *   agentProcessManager.js's createTurnAccumulator and
  *   db.js's Message.isLocalCommandOnly for why callers need this.
+ * @property {import('./agentProcessManager.js').TurnUsage | null} usage - Token
+ *   accounting for this turn straight from the CLI's own `result` event.
+ * @property {number | null} totalCostUsd - The CLI's own cost estimate for this turn.
+ * @property {number | null} durationMs - Wall-clock turn duration per the CLI.
  */
 
 /**

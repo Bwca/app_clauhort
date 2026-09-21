@@ -281,6 +281,14 @@ function describeToolUse({ name, input }) {
 }
 
 /**
+ * @typedef {Object} TurnUsage
+ * @property {number} inputTokens
+ * @property {number} outputTokens
+ * @property {number} cacheCreationInputTokens
+ * @property {number} cacheReadInputTokens
+ */
+
+/**
  * @typedef {Object} TurnAccumulator
  * @property {string} fullText
  * @property {string} resultText
@@ -294,6 +302,17 @@ function describeToolUse({ name, input }) {
  * @property {string | null} errorMessage - Set once a `result` event with
  *   `is_error: true` has been fed in — see handleEvent's docs. Null for a
  *   normal, successful turn.
+ * @property {TurnUsage | null} usage - Token accounting from the `result`
+ *   event's own `usage` block. Set even when the turn ends in error (e.g. a
+ *   session-limit failure still reports what was actually spent before it
+ *   hit the wall) — null only when no `result` event ever arrived at all
+ *   (a process crash mid-turn). This is what onward logging (ws/handler.js's
+ *   'turn ended'/'turn errored') uses to make token burn per agent/turn
+ *   debuggable after the fact, instead of having to guess from timestamps.
+ * @property {number | null} totalCostUsd - The CLI's own cost estimate for
+ *   this turn, same caveats as `usage`.
+ * @property {number | null} durationMs - Wall-clock turn duration per the
+ *   CLI's own `result` event.
  * @property {(event: object) => void} handleEvent
  */
 
@@ -318,6 +337,9 @@ export function createTurnAccumulator({ onChunk, onStatus } = {}) {
     done: false,
     wasLocalCommand: false,
     errorMessage: null,
+    usage: null,
+    totalCostUsd: null,
+    durationMs: null,
     handleEvent(event) {
       if (typeof event.session_id === 'string') turn.sessionId = event.session_id;
 
@@ -370,6 +392,16 @@ export function createTurnAccumulator({ onChunk, onStatus } = {}) {
         if (Array.isArray(event.permission_denials) && event.permission_denials.length) {
           turn.permissionDenials = event.permission_denials;
         }
+        if (event.usage) {
+          turn.usage = {
+            inputTokens: event.usage.input_tokens ?? 0,
+            outputTokens: event.usage.output_tokens ?? 0,
+            cacheCreationInputTokens: event.usage.cache_creation_input_tokens ?? 0,
+            cacheReadInputTokens: event.usage.cache_read_input_tokens ?? 0,
+          };
+        }
+        if (typeof event.total_cost_usd === 'number') turn.totalCostUsd = event.total_cost_usd;
+        if (typeof event.duration_ms === 'number') turn.durationMs = event.duration_ms;
         // A `result` event isn't always a successful completion — confirmed
         // live: an unusable CLI flag (e.g. an agent created with a bogus
         // resumeId, so --resume is invalid) still produces a well-formed
@@ -585,7 +617,7 @@ export function spawnForAgent(agent) {
  * @param {import('../store/db.js').Agent} agent
  * @param {import('./agentRunner.js').ContentBlock[]} content
  * @param {{ onChunk: (text: string) => void, onStatus?: (status: string) => void, signal?: AbortSignal }} options
- * @returns {Promise<{ text: string, permissionDenials: import('./agentRunner.js').PermissionDenial[], sessionId: string | null, stopped: boolean, toolCalls: ToolCall[], wasLocalCommand: boolean }>}
+ * @returns {Promise<{ text: string, permissionDenials: import('./agentRunner.js').PermissionDenial[], sessionId: string | null, stopped: boolean, toolCalls: ToolCall[], wasLocalCommand: boolean, usage: TurnUsage | null, totalCostUsd: number | null, durationMs: number | null }>}
  */
 export function runTurn(agent, content, { onChunk, onStatus, signal }) {
   if (!existsSync(agent.workingDir)) {
@@ -608,7 +640,7 @@ export function runTurn(agent, content, { onChunk, onStatus, signal }) {
  * @param {ManagedProcess} proc
  * @param {import('./agentRunner.js').ContentBlock[]} content
  * @param {{ onChunk: (text: string) => void, onStatus?: (status: string) => void, signal?: AbortSignal }} options
- * @returns {Promise<{ text: string, permissionDenials: import('./agentRunner.js').PermissionDenial[], sessionId: string | null, stopped: boolean, toolCalls: ToolCall[], wasLocalCommand: boolean }>}
+ * @returns {Promise<{ text: string, permissionDenials: import('./agentRunner.js').PermissionDenial[], sessionId: string | null, stopped: boolean, toolCalls: ToolCall[], wasLocalCommand: boolean, usage: TurnUsage | null, totalCostUsd: number | null, durationMs: number | null }>}
  */
 function runOneTurn(proc, content, { onChunk, onStatus, signal }) {
   return new Promise((resolve, reject) => {
@@ -637,15 +669,30 @@ function runOneTurn(proc, content, { onChunk, onStatus, signal }) {
         stopped,
         toolCalls: [...turn.toolCalls.values()],
         wasLocalCommand: turn.wasLocalCommand,
+        usage: turn.usage,
+        totalCostUsd: turn.totalCostUsd,
+        durationMs: turn.durationMs,
       });
     };
 
+    // Usage/cost are attached to the rejected Error itself (not just
+    // resolved turns) — an errored `result` event (e.g. a session-limit
+    // failure) still reports what was actually spent before it hit the
+    // wall, via turn.handleEvent already having run on that same event
+    // before this is called. See maybeScheduleAutoContinue's caller in
+    // ws/handler.js, which logs this on the 'turn errored' line — that's
+    // what makes a token-burn incident like a shared account limit getting
+    // exhausted mid-turn debuggable after the fact instead of guesswork.
     const fail = (message) => {
       if (settled) return;
       settled = true;
       proc.currentTurn = null;
       if (signal) signal.removeEventListener('abort', killForStop);
-      reject(new Error(message));
+      const err = new Error(message);
+      err.usage = turn.usage;
+      err.totalCostUsd = turn.totalCostUsd;
+      err.durationMs = turn.durationMs;
+      reject(err);
     };
 
     proc.currentTurn = {
