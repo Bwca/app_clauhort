@@ -6,7 +6,7 @@
 import { WebSocket, WebSocketServer } from 'ws';
 import { v4 as uuidv4 } from 'uuid';
 import { dirname } from 'path';
-import { getChat, getAgent, getAgentChatId, getMessages, addMessage, grantAgentPath, grantAgentToolPattern, setAgentResumeIdIfUnset, getUserDisplayName, createScheduledMessage } from '../store/db.js';
+import { getChat, getAgent, getAgentChatId, getMessages, addMessage, grantAgentPath, grantAgentToolPattern, setAgentResumeIdIfUnset, getUserDisplayName, createScheduledMessage, getScheduledMessages } from '../store/db.js';
 import { parseResponders, extractMentionedAgents, parseSkillInvocation } from '../services/messageRouter.js';
 import { runAgentStream, FILE_PATH_TOOLS, deriveToolPatterns, dedupePermissionDenials } from '../services/agentRunner.js';
 import { killAgent, onBackgroundTurn } from '../services/agentProcessManager.js';
@@ -704,6 +704,15 @@ async function maybeScheduleAutoContinue(chat, agent, errorMessage, wss) {
   if (!chat.autoContinue) return;
   const resetAt = parseSessionLimitReset(errorMessage);
   if (!resetAt) return;
+  const content = buildAutoContinueMessage(agent);
+  // A freeRelay chat can retry the same agent across several relay rounds
+  // within one cascade — if it's still over its (account-wide) limit on
+  // every retry, each retry lands here again. Without this guard that piles
+  // up duplicate pending continuations for the same agent, all firing at
+  // once the moment the limit resets and re-triggering the very cascade
+  // that caused this in the first place.
+  const alreadyPending = getScheduledMessages(chat.id).some((m) => m.content === content);
+  if (alreadyPending) return;
   const sendAt = new Date(resetAt.getTime() + 60_000);
   const row = await createScheduledMessage({
     id: uuidv4(),
