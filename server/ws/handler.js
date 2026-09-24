@@ -6,7 +6,7 @@
 import { WebSocket, WebSocketServer } from 'ws';
 import { v4 as uuidv4 } from 'uuid';
 import { dirname } from 'path';
-import { getChat, getAgent, getAgentChatId, getMessages, addMessage, grantAgentPath, grantAgentToolPattern, setAgentResumeIdIfUnset, getUserDisplayName, createScheduledMessage, getScheduledMessages } from '../store/db.js';
+import { getChat, getAgent, getAgentChatId, getMessages, addMessage, grantAgentPath, grantAgentToolPattern, setAgentResumeIdIfUnset, setAgentModel, getUserDisplayName, createScheduledMessage, getScheduledMessages } from '../store/db.js';
 import { parseResponders, extractMentionedAgents, parseSkillInvocation } from '../services/messageRouter.js';
 import { runAgentStream, FILE_PATH_TOOLS, deriveToolPatterns, dedupePermissionDenials } from '../services/agentRunner.js';
 import { killAgent, onBackgroundTurn } from '../services/agentProcessManager.js';
@@ -630,16 +630,21 @@ export async function handleUserMessage(event, wss) {
  * over.
  * @param {string} agentId
  * @param {WebSocketServer} wss
- * @returns {(turn: { text: string, toolCalls: import('../services/agentProcessManager.js').ToolCall[], sessionId: string | null, permissionDenials: import('../services/agentRunner.js').PermissionDenial[] }) => Promise<void>}
+ * @returns {(turn: { text: string, toolCalls: import('../services/agentProcessManager.js').ToolCall[], sessionId: string | null, permissionDenials: import('../services/agentRunner.js').PermissionDenial[], model: string | null }) => Promise<void>}
  */
 function makeBackgroundTurnHandler(agentId, wss) {
-  return async ({ text, toolCalls, permissionDenials }) => {
+  return async ({ text, toolCalls, permissionDenials, model }) => {
     const agent = getAgent(agentId);
     const chatId = getAgentChatId(agentId);
     // Agent was deleted, or removed from every chat, between whenever this
     // background task was kicked off and it actually finishing — nowhere
     // left to report into.
     if (!agent || !chatId) return;
+
+    if (model) {
+      const updated = await setAgentModel(agentId, model);
+      if (updated) broadcast(wss, { type: 'AGENT_UPDATED', agent: updated });
+    }
 
     /** @type {import('../store/db.js').Message} */
     const agentMessage = {
@@ -784,7 +789,7 @@ async function runAgentsParallel(agents, allMembers, chat, userMessage, wss, pri
     log.info({ agentId: agent.id, chatId: chat.id, streamId }, 'turn started');
 
     try {
-      const { text: fullText, permissionDenials, sessionId, stopped, toolCalls, wasLocalCommand, usage, totalCostUsd, durationMs } = await runAgentStream({
+      const { text: fullText, permissionDenials, sessionId, stopped, toolCalls, wasLocalCommand, usage, totalCostUsd, durationMs, model } = await runAgentStream({
         agent,
         chatId: chat.id,
         content,
@@ -815,6 +820,13 @@ async function runAgentsParallel(agents, allMembers, chat, userMessage, wss, pri
 
       if (sessionId && !agent.resumeId) {
         const updated = await setAgentResumeIdIfUnset(agent.id, sessionId);
+        if (updated) broadcast(wss, { type: 'AGENT_UPDATED', agent: updated });
+      }
+      // wasLocalCommand turns never touched the real model (see
+      // createTurnAccumulator's docs), so `model` is already null for
+      // those — nothing to persist, same as a crash-before-output turn.
+      if (model) {
+        const updated = await setAgentModel(agent.id, model);
         if (updated) broadcast(wss, { type: 'AGENT_UPDATED', agent: updated });
       }
 
