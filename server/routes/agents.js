@@ -58,9 +58,12 @@ router.get('/:id', (req, res) => {
  *   `--chrome` sessions don't steal each other's pairing.
  * @param {string} [req.body.note] - Freeform note for the user's own
  *   reference (why this agent exists) — never sent to the CLI.
+ * @param {string} [req.body.modelOverride] - Model to pass as `--model`
+ *   (an alias like "opus"/"sonnet"/"fable", or a full model ID) — the CLI
+ *   decides on its own when unset.
  */
 router.post('/', async (req, res) => {
-  const { name, color, workingDir, resumeId, dangerouslySkipPermissions, isObserver, chromeAccess, note } = req.body;
+  const { name, color, workingDir, resumeId, dangerouslySkipPermissions, isObserver, chromeAccess, note, modelOverride } = req.body;
   if (!name || !color || !workingDir) {
     return res.status(400).json({ error: t('errors.agentFieldsRequired') });
   }
@@ -77,6 +80,7 @@ router.post('/', async (req, res) => {
   if (isObserver) data.isObserver = true;
   if (chromeAccess) data.chromeAccess = true;
   if (note) data.note = note.trim();
+  if (modelOverride) data.modelOverride = modelOverride.trim();
   const agent = await createAgent(data);
   res.status(201).json(agent);
 });
@@ -102,9 +106,16 @@ router.post('/', async (req, res) => {
  * @param {string} [req.body.note] - Freeform note for the user's own
  *   reference. IS exposed in the UI for editing — purely metadata, never
  *   baked into spawn args, so changing it never evicts the running process.
+ * @param {string} [req.body.modelOverride] - IS exposed in the UI for
+ *   editing (the "switch model" agent-menu action) — an empty string clears
+ *   it back to "let the CLI decide". Baked into spawn args (--model), so
+ *   changing it evicts the running process like workingDir/resumeId/
+ *   chromeAccess — confirmed empirically that --model paired with --resume
+ *   switches an existing session's model without losing its history, so
+ *   this is a genuine live switch, not a fresh conversation.
  */
 router.patch('/:id', async (req, res) => {
-  const { name, color, workingDir, resumeId, dangerouslySkipPermissions, isObserver, chromeAccess, note } = req.body;
+  const { name, color, workingDir, resumeId, dangerouslySkipPermissions, isObserver, chromeAccess, note, modelOverride } = req.body;
   const existing = getAgent(req.params.id);
   if (!existing) return res.status(404).json({ error: t('errors.agentNotFound') });
 
@@ -120,18 +131,25 @@ router.patch('/:id', async (req, res) => {
       return res.status(400).json({ error: t('errors.agentVerifyFailed', { message: verified.error }) });
     }
   }
-  const agent = await updateAgent(req.params.id, { name, color, workingDir, resumeId, dangerouslySkipPermissions, isObserver, chromeAccess, note: note !== undefined ? note.trim() : undefined });
+  // Trimmed once, reused for both the write below and the flagsChanged
+  // comparison — an empty string is a deliberate "clear the override", same
+  // convention as note.
+  const trimmedModelOverride = modelOverride !== undefined ? modelOverride.trim() : undefined;
+  const agent = await updateAgent(req.params.id, { name, color, workingDir, resumeId, dangerouslySkipPermissions, isObserver, chromeAccess, note: note !== undefined ? note.trim() : undefined, modelOverride: trimmedModelOverride });
   if (!agent) return res.status(404).json({ error: t('errors.agentNotFound') });
-  // workingDir/dangerouslySkipPermissions/resumeId/chromeAccess are all
-  // baked into the agent's persistent process at spawn time (--add-dir,
-  // --dangerously-skip-permissions, --resume, --chrome) — a running process
-  // has no way to pick up a change to any of them, so evict it; the next
-  // turn respawns fresh. Not currently reachable from the UI, but this is
-  // live API surface.
+  // workingDir/dangerouslySkipPermissions/resumeId/chromeAccess/modelOverride
+  // are all baked into the agent's persistent process at spawn time
+  // (--add-dir, --dangerously-skip-permissions, --resume, --chrome,
+  // --model) — a running process has no way to pick up a change to any of
+  // them, so evict it; the next turn respawns fresh. workingDir/
+  // dangerouslySkipPermissions/resumeId/chromeAccess aren't reachable from
+  // the UI yet (though this is live API surface) — modelOverride is, via
+  // the "switch model" agent-menu action.
   const flagsChanged = (workingDir !== undefined && workingDir !== existing.workingDir)
     || (dangerouslySkipPermissions !== undefined && dangerouslySkipPermissions !== existing.dangerouslySkipPermissions)
     || (resumeId !== undefined && resumeId !== existing.resumeId)
-    || (chromeAccess !== undefined && chromeAccess !== existing.chromeAccess);
+    || (chromeAccess !== undefined && chromeAccess !== existing.chromeAccess)
+    || (trimmedModelOverride !== undefined && trimmedModelOverride !== (existing.modelOverride ?? ''));
   if (flagsChanged) await killAgent(req.params.id);
   res.json(agent);
 });
