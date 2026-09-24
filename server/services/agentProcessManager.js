@@ -154,6 +154,16 @@ function buildArgs(agent) {
   if (agent.chromeAccess) {
     args.push('--chrome');
   }
+  // Confirmed empirically (real CLI, not assumed): pairing --model with
+  // --resume on an existing session genuinely switches which model handles
+  // the NEXT turn, without losing conversation context — same session_id,
+  // same history. The CLI does report a cache_miss_reason: "model_changed"
+  // diagnostic on that turn (prompt caching is model-specific, so a switch
+  // costs one full cache rebuild), but it's a real mid-conversation switch,
+  // not a fresh session. See modelOverride's docs in store/db.js.
+  if (agent.modelOverride) {
+    args.push('--model', agent.modelOverride);
+  }
   return args;
 }
 
