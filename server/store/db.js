@@ -186,6 +186,17 @@ function transaction(fn) {
  * @property {string} createdAt - ISO 8601 timestamp of when this was scheduled
  */
 
+/**
+ * @typedef {Object} QuickMessage
+ * @property {string} id - UUID v4
+ * @property {string} text - The saved message text, inserted into the
+ *   composer (not auto-sent) when picked — a canned reply for something
+ *   typed often (e.g. "Please continue", a standing instruction), global
+ *   across every chat rather than per-chat, since the whole point is not
+ *   having to re-type it regardless of which chat you're in.
+ * @property {string} createdAt - ISO 8601 timestamp
+ */
+
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS agents (
   id TEXT PRIMARY KEY,
@@ -248,6 +259,12 @@ CREATE TABLE IF NOT EXISTS scheduled_messages (
   created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_scheduled_messages_send_at ON scheduled_messages(send_at);
+
+CREATE TABLE IF NOT EXISTS quick_messages (
+  id TEXT PRIMARY KEY,
+  text TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
 `;
 
 /**
@@ -564,6 +581,15 @@ function rowToScheduledMessage(row) {
     sendAt: row.send_at,
     createdAt: row.created_at,
   };
+}
+
+/**
+ * Maps a raw `quick_messages` row to the public QuickMessage shape.
+ * @param {Record<string, unknown>} row
+ * @returns {QuickMessage}
+ */
+function rowToQuickMessage(row) {
+  return { id: row.id, text: row.text, createdAt: row.created_at };
 }
 
 /**
@@ -1326,6 +1352,52 @@ export async function deleteScheduledMessageIfExists(id) {
   return rowToScheduledMessage(row);
 }
 
+// ─── Quick Messages ─────────────────────────────────────────────────────────
+
+/**
+ * Returns every saved quick message, oldest first (insertion order — the
+ * order they were added in, matching how the panel that lists them reads
+ * top to bottom).
+ * @returns {QuickMessage[]}
+ */
+export function getQuickMessages() {
+  return db.prepare('SELECT * FROM quick_messages ORDER BY created_at ASC').all().map(rowToQuickMessage);
+}
+
+/**
+ * Creates and persists a new quick message.
+ * @param {{ id: string, text: string }} data
+ * @returns {Promise<QuickMessage>}
+ */
+export async function createQuickMessage(data) {
+  const createdAt = new Date().toISOString();
+  db.prepare('INSERT INTO quick_messages (id, text, created_at) VALUES (?, ?, ?)').run(data.id, data.text, createdAt);
+  return rowToQuickMessage(db.prepare('SELECT * FROM quick_messages WHERE id = ?').get(data.id));
+}
+
+/**
+ * Updates a quick message's text in place, preserving its position (still
+ * ordered by its original created_at). Returns null if it no longer exists.
+ * @param {string} id
+ * @param {string} text
+ * @returns {Promise<QuickMessage | null>}
+ */
+export async function updateQuickMessage(id, text) {
+  const result = db.prepare('UPDATE quick_messages SET text = ? WHERE id = ?').run(text, id);
+  if (result.changes === 0) return null;
+  return rowToQuickMessage(db.prepare('SELECT * FROM quick_messages WHERE id = ?').get(id));
+}
+
+/**
+ * Deletes a quick message.
+ * @param {string} id
+ * @returns {Promise<boolean>} true if deleted, false if not found
+ */
+export async function deleteQuickMessage(id) {
+  const result = db.prepare('DELETE FROM quick_messages WHERE id = ?').run(id);
+  return result.changes > 0;
+}
+
 // ─── Maintenance ───────────────────────────────────────────────────────────
 
 /**
@@ -1335,6 +1407,7 @@ export async function deleteScheduledMessageIfExists(id) {
 export async function resetAll() {
   const txn = transaction(() => {
     db.prepare('DELETE FROM scheduled_messages').run();
+    db.prepare('DELETE FROM quick_messages').run();
     db.prepare('DELETE FROM messages').run();
     db.prepare('DELETE FROM chat_members').run();
     db.prepare('DELETE FROM chats').run();
