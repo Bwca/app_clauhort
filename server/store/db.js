@@ -94,11 +94,24 @@ function transaction(fn) {
  * @property {string} [model] - The real model ID the CLI reported actually
  *   running this agent's most recent turn (e.g. "claude-sonnet-5"), captured
  *   from that turn's own stream-json `assistant` events — see
- *   agentProcessManager.js's createTurnAccumulator. Nothing in this app ever
- *   picks or requests a model (no `--model` spawn flag — see buildArgs), so
- *   this is purely observational: whatever the `claude` CLI itself resolved
- *   from its own config/session for that turn. Undefined until the agent has
- *   completed at least one real (non-local-command, non-synthetic) turn.
+ *   agentProcessManager.js's createTurnAccumulator. Purely observational —
+ *   read-only from this app's own perspective, never written by a user
+ *   action — reflecting whatever the CLI actually ran on, whether that's its
+ *   own default resolution or `modelOverride` below. Undefined until the
+ *   agent has completed at least one real (non-local-command, non-synthetic)
+ *   turn.
+ * @property {string} [modelOverride] - User-requested model for this agent's
+ *   session, passed to the CLI as `--model <modelOverride>` (an alias like
+ *   "opus"/"sonnet"/"fable", or a full model ID — same values the CLI's own
+ *   `--model` flag accepts). Undefined means "let the CLI decide on its
+ *   own", the default for every agent. Baked into spawn args like
+ *   workingDir/resumeId/chromeAccess — confirmed empirically that pairing it
+ *   with `--resume` genuinely switches the model an existing session runs on
+ *   without losing conversation context (the CLI reports a
+ *   `cache_miss_reason: "model_changed"` on that turn — prompt caching is
+ *   model-specific, so a switch costs a one-time full cache rebuild, not a
+ *   fresh conversation) — so changing it must evict the running process the
+ *   same way those do (see PATCH /api/agents/:id's flagsChanged).
  * @property {string} createdAt - ISO 8601 timestamp
  */
 
@@ -187,6 +200,7 @@ CREATE TABLE IF NOT EXISTS agents (
   chrome_access INTEGER NOT NULL DEFAULT 0,
   note TEXT,
   last_known_model TEXT,
+  model_override TEXT,
   created_at TEXT NOT NULL
 );
 
@@ -349,6 +363,18 @@ function migrateAgentsLastKnownModel() {
 }
 
 /**
+ * Adds the `model_override` column to `agents` if it's missing, same
+ * reasoning as migrateAgentsAllowedToolPatterns above.
+ * @returns {void}
+ */
+function migrateAgentsModelOverride() {
+  const hasColumn = db.prepare("PRAGMA table_info(agents)").all()
+    .some((col) => col.name === 'model_override');
+  if (hasColumn) return;
+  db.exec('ALTER TABLE agents ADD COLUMN model_override TEXT');
+}
+
+/**
  * Adds the `tool_calls` column to `messages` if it's missing — needed for
  * any database created before this column existed, since `CREATE TABLE IF
  * NOT EXISTS` in SCHEMA only applies to brand-new databases. A no-op (one
@@ -480,6 +506,7 @@ function rowToAgent(row) {
   if (row.chrome_access) agent.chromeAccess = true;
   if (row.note) agent.note = row.note;
   if (row.last_known_model) agent.model = row.last_known_model;
+  if (row.model_override) agent.modelOverride = row.model_override;
   return agent;
 }
 
@@ -615,6 +642,7 @@ export async function loadDb() {
   migrateAgentsChromeAccess();
   migrateAgentsNote();
   migrateAgentsLastKnownModel();
+  migrateAgentsModelOverride();
   migrateChatMembersUniqueAgent();
   migrateChatsRosterChangedAt();
   migrateChatsFreeRelay();
@@ -654,13 +682,13 @@ export function getAgent(id) {
 export async function createAgent(data) {
   const createdAt = new Date().toISOString();
   db.prepare(`
-    INSERT INTO agents (id, name, color, working_dir, resume_id, extra_allowed_paths, allowed_tool_patterns, dangerously_skip_permissions, is_observer, chrome_access, note, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO agents (id, name, color, working_dir, resume_id, extra_allowed_paths, allowed_tool_patterns, dangerously_skip_permissions, is_observer, chrome_access, note, model_override, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     data.id, data.name, data.color, data.workingDir,
     data.resumeId ?? null, JSON.stringify(data.extraAllowedPaths ?? []),
     JSON.stringify(data.allowedToolPatterns ?? []), data.dangerouslySkipPermissions ? 1 : 0,
-    data.isObserver ? 1 : 0, data.chromeAccess ? 1 : 0, data.note ?? null, createdAt
+    data.isObserver ? 1 : 0, data.chromeAccess ? 1 : 0, data.note ?? null, data.modelOverride ?? null, createdAt
   );
   return getAgent(data.id);
 }
@@ -670,7 +698,7 @@ export async function createAgent(data) {
  * Only the fields present (and not undefined) in `updates` are written —
  * a partial PATCH never clobbers untouched columns.
  * @param {string} id
- * @param {Partial<Pick<Agent, 'name' | 'color' | 'workingDir' | 'resumeId' | 'extraAllowedPaths' | 'allowedToolPatterns' | 'dangerouslySkipPermissions' | 'isObserver' | 'chromeAccess' | 'note'>>} updates
+ * @param {Partial<Pick<Agent, 'name' | 'color' | 'workingDir' | 'resumeId' | 'extraAllowedPaths' | 'allowedToolPatterns' | 'dangerouslySkipPermissions' | 'isObserver' | 'chromeAccess' | 'note' | 'modelOverride'>>} updates
  * @returns {Promise<Agent | null>}
  */
 export async function updateAgent(id, updates) {
@@ -694,6 +722,7 @@ export async function updateAgent(id, updates) {
     // Same explicit-undefined-check reasoning as dangerously_skip_permissions above.
     chrome_access: updates.chromeAccess !== undefined ? (updates.chromeAccess ? 1 : 0) : undefined,
     note: updates.note,
+    model_override: updates.modelOverride,
   };
   const entries = Object.entries(columns).filter(([, v]) => v !== undefined);
   if (entries.length === 0) return getAgent(id);
