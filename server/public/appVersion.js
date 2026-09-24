@@ -5,4 +5,4 @@
  * server/package.json's "version" and add a matching CHANGELOG.md entry
  * whenever a release goes out.
  */
-export const APP_VERSION = '1.2.18';
+export const APP_VERSION = '1.2.19';
