@@ -21,6 +21,9 @@ import { APP_VERSION } from './appVersion.js';
  * @property {boolean} [isObserver] - Never responds to broadcast messages,
  *   only @mentions — sees the full chat history instead of the recent window
  * @property {string} [note] - Freeform reminder for the user, why this agent exists
+ * @property {string} [model] - Real model ID the CLI reported running on this
+ *   agent's most recent turn (e.g. "claude-sonnet-5") — purely observational,
+ *   this app never picks a model itself. Absent until the agent's first turn.
  * @property {string} createdAt
  */
 
@@ -632,6 +635,25 @@ const settingsSave     = $('#settings-save');
 function shortDir(dir) {
   const parts = dir.replace(/\\/g, '/').split('/').filter(Boolean);
   return parts.length > 1 ? `…/${parts.slice(-2).join('/')}` : dir;
+}
+
+/**
+ * Turns a raw model ID the CLI reported (e.g. "claude-sonnet-5",
+ * "claude-opus-4-1-20250805", or an older "claude-3-5-sonnet-20241022")
+ * into a short display label ("Sonnet 5", "Opus 4.1", "Sonnet 3.5"). No
+ * hardcoded model list — this app never picks a model itself, so a lookup
+ * table would just go stale every time a new one ships. Falls back to the
+ * raw ID verbatim if it doesn't match the family-name-plus-numbers shape.
+ * @param {string} model
+ * @returns {string}
+ */
+function formatModelLabel(model) {
+  const familyMatch = model.match(/opus|sonnet|haiku|fable/i);
+  if (!familyMatch) return model;
+  const family = familyMatch[0][0].toUpperCase() + familyMatch[0].slice(1).toLowerCase();
+  const withoutDate = model.replace(/-\d{8}$/, '');
+  const version = withoutDate.split('-').filter((p) => /^\d+$/.test(p)).join('.');
+  return version ? `${family} ${version}` : family;
 }
 
 /**
@@ -2588,6 +2610,7 @@ function renderAgentPanel() {
       <div class="agent-info">
         <span class="agent-name" data-testid="agent-name">${escHtml(agent.name)}${hasUnseen ? ` <span class="agent-unseen-dot" data-testid="agent-unseen-dot" title="${t('agent.unseenOutsideFocusTitle', { name: agent.name })}"></span>` : ''}${agent.dangerouslySkipPermissions ? ` <span class="agent-yolo-badge" data-testid="agent-yolo-badge" title="${t('agent.yoloBadgeTitle')}">🔥</span>` : ''}${agent.isObserver ? ` <span class="agent-observer-badge" data-testid="agent-observer-badge" title="${t('agent.observerBadgeTitle')}">👁</span>` : ''}${agent.chromeAccess ? ` <span class="agent-chrome-badge" data-testid="agent-chrome-badge" title="${t('agent.chromeBadgeTitle')}">🌐</span>` : ''}</span>
         <span class="agent-dir" title="${escHtml(agent.workingDir)}">${escHtml(shortDir(agent.workingDir))}</span>
+        ${agent.model ? `<span class="agent-model" data-testid="agent-model" title="${t('agent.modelTitle', { model: escHtml(agent.model) })}">🧠 ${escHtml(formatModelLabel(agent.model))}</span>` : ''}
         ${agent.note ? `<span class="agent-note" data-testid="agent-note" title="${escHtml(agent.note)}">📝 ${escHtml(agent.note)}</span>` : ''}
         ${agent.resumeId ? `<button class="agent-session-btn" data-testid="agent-session-btn" title="${t('agent.copySessionTitle', { resumeId: escHtml(agent.resumeId) })}">⧉ ${agent.resumeId.slice(0, 8)}…</button>` : ''}
       </div>

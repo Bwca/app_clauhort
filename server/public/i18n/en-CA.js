@@ -128,6 +128,7 @@ export default {
   'agent.yoloBadgeTitle': 'YOLO mode — this agent bypasses all permission checks (--dangerously-skip-permissions)',
   'agent.observerBadgeTitle': 'Observer — only responds when @mentioned, never to broadcast messages; sees the full chat history',
   'agent.chromeBadgeTitle': 'Browser access — this agent can drive your Chrome browser via the Claude in Chrome extension',
+  'agent.modelTitle': 'Model last used by this agent: {model}',
   'agent.addNoteTitle': 'Add a note',
   'agent.editNoteTitle': 'Edit note',
   'agent.notePlaceholder': 'e.g. Refactoring the payments module',

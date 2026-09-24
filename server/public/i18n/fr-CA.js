@@ -128,6 +128,7 @@ export default {
   'agent.yoloBadgeTitle': 'Mode YOLO — cet agent ignore toutes les vérifications de permission (--dangerously-skip-permissions)',
   'agent.observerBadgeTitle': "Observateur — ne répond que lorsqu'il est @mentionné, jamais aux messages diffusés; voit l'historique complet de la discussion",
   'agent.chromeBadgeTitle': "Accès au navigateur — cet agent peut contrôler votre navigateur Chrome via l'extension Claude in Chrome",
+  'agent.modelTitle': 'Dernier modèle utilisé par cet agent : {model}',
   'agent.addNoteTitle': 'Ajouter une note',
   'agent.editNoteTitle': 'Modifier la note',
   'agent.notePlaceholder': 'p. ex. Refonte du module de paiement',

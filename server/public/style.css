@@ -358,6 +358,7 @@ html, body { height: 100%; background: var(--bg0); color: var(--text); font-fami
 .agent-observer-badge { font-size: 11px; cursor: help; }
 .agent-chrome-badge { font-size: 11px; cursor: help; }
 .agent-dir { font-size: 11px; color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.agent-model { font-size: 11px; color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: help; }
 .agent-note { font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .agent-session-btn { align-self: flex-start; background: none; border: none; padding: 0; margin-top: 1px; font-size: 10px; font-family: monospace; color: var(--dim); cursor: pointer; }
 .agent-session-btn:hover { color: var(--blue); }
