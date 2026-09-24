@@ -91,6 +91,14 @@ function transaction(fn) {
  *   agent itself. Editable any time (unlike isObserver/chromeAccess) since it
  *   carries no spawn-arg implications, so changing it never evicts the running
  *   process.
+ * @property {string} [model] - The real model ID the CLI reported actually
+ *   running this agent's most recent turn (e.g. "claude-sonnet-5"), captured
+ *   from that turn's own stream-json `assistant` events — see
+ *   agentProcessManager.js's createTurnAccumulator. Nothing in this app ever
+ *   picks or requests a model (no `--model` spawn flag — see buildArgs), so
+ *   this is purely observational: whatever the `claude` CLI itself resolved
+ *   from its own config/session for that turn. Undefined until the agent has
+ *   completed at least one real (non-local-command, non-synthetic) turn.
  * @property {string} createdAt - ISO 8601 timestamp
  */
 
@@ -178,6 +186,7 @@ CREATE TABLE IF NOT EXISTS agents (
   is_observer INTEGER NOT NULL DEFAULT 0,
   chrome_access INTEGER NOT NULL DEFAULT 0,
   note TEXT,
+  last_known_model TEXT,
   created_at TEXT NOT NULL
 );
 
@@ -328,6 +337,18 @@ function migrateAgentsNote() {
 }
 
 /**
+ * Adds the `last_known_model` column to `agents` if it's missing, same
+ * reasoning as migrateAgentsAllowedToolPatterns above.
+ * @returns {void}
+ */
+function migrateAgentsLastKnownModel() {
+  const hasColumn = db.prepare("PRAGMA table_info(agents)").all()
+    .some((col) => col.name === 'last_known_model');
+  if (hasColumn) return;
+  db.exec('ALTER TABLE agents ADD COLUMN last_known_model TEXT');
+}
+
+/**
  * Adds the `tool_calls` column to `messages` if it's missing — needed for
  * any database created before this column existed, since `CREATE TABLE IF
  * NOT EXISTS` in SCHEMA only applies to brand-new databases. A no-op (one
@@ -458,6 +479,7 @@ function rowToAgent(row) {
   if (row.is_observer) agent.isObserver = true;
   if (row.chrome_access) agent.chromeAccess = true;
   if (row.note) agent.note = row.note;
+  if (row.last_known_model) agent.model = row.last_known_model;
   return agent;
 }
 
@@ -592,6 +614,7 @@ export async function loadDb() {
   migrateAgentsObserverMode();
   migrateAgentsChromeAccess();
   migrateAgentsNote();
+  migrateAgentsLastKnownModel();
   migrateChatMembersUniqueAgent();
   migrateChatsRosterChangedAt();
   migrateChatsFreeRelay();
@@ -690,6 +713,24 @@ export async function updateAgent(id, updates) {
  */
 export async function setAgentResumeIdIfUnset(id, resumeId) {
   const result = db.prepare('UPDATE agents SET resume_id = ? WHERE id = ? AND resume_id IS NULL').run(resumeId, id);
+  return result.changes > 0 ? getAgent(id) : null;
+}
+
+/**
+ * Records the real model ID a turn actually ran on, overwriting whatever
+ * was stored before — unlike resumeId (captured once and then fixed for
+ * the life of the session), the model isn't pinned by this app (no
+ * `--model` spawn flag) and can genuinely change between turns (a CLI
+ * config edit, an account-side fallback), so every turn's report should
+ * win over the last one rather than only being captured the first time.
+ * @param {string} id
+ * @param {string} model
+ * @returns {Promise<Agent | null>} the updated agent, or null if the model
+ *   was already exactly this (no-op, no AGENT_UPDATED needed) or the agent
+ *   wasn't found
+ */
+export async function setAgentModel(id, model) {
+  const result = db.prepare('UPDATE agents SET last_known_model = ? WHERE id = ? AND last_known_model IS NOT ?').run(model, id, model);
   return result.changes > 0 ? getAgent(id) : null;
 }
 
