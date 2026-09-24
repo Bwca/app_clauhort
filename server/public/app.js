@@ -23,7 +23,10 @@ import { APP_VERSION } from './appVersion.js';
  * @property {string} [note] - Freeform reminder for the user, why this agent exists
  * @property {string} [model] - Real model ID the CLI reported running on this
  *   agent's most recent turn (e.g. "claude-sonnet-5") — purely observational,
- *   this app never picks a model itself. Absent until the agent's first turn.
+ *   reflects whatever the CLI actually ran on. Absent until the agent's first turn.
+ * @property {string} [modelOverride] - User-requested model ("opus", "sonnet",
+ *   a full model ID, …), passed to the CLI as `--model`. Absent means the CLI
+ *   decides on its own.
  * @property {string} createdAt
  */
 
@@ -578,6 +581,7 @@ const agentDirBrowseBtn = $('#agent-dir-browse');
 const agentDirRecent   = $('#agent-dir-recent');
 const agentDirRecentWrap = $('#agent-dir-recent-wrap');
 const agentResumeInput = $('#agent-resume');
+const agentModelInput  = $('#agent-model');
 const agentNoteInput   = $('#agent-note');
 const colorGrid        = $('#color-grid');
 const yoloModeCheck    = $('#yolo-mode-check');
@@ -752,7 +756,7 @@ let pendingConfirmResolve = null;
  * `okLabel` overrides the confirm button's text (defaults to the "Delete"
  * label baked into its markup, right for every other current caller).
  * @param {string} message
- * @param {{ checkboxLabel?: string, textInput?: { value?: string }, okLabel?: string }} [opts]
+ * @param {{ checkboxLabel?: string, textInput?: { value?: string, placeholder?: string }, okLabel?: string }} [opts]
  * @returns {Promise<{ confirmed: boolean, checked: boolean, value: string }>}
  */
 function confirmDialog(message, opts = {}) {
@@ -765,6 +769,7 @@ function confirmDialog(message, opts = {}) {
   confirmTextRow.hidden = !opts.textInput;
   if (opts.textInput) {
     confirmTextInput.value = opts.textInput.value ?? '';
+    confirmTextInput.placeholder = opts.textInput.placeholder ?? '';
   }
   confirmOk.textContent = opts.okLabel ?? t('confirm.deleteBtn');
   confirmOk.classList.toggle('neutral', Boolean(opts.textInput));
@@ -2619,6 +2624,7 @@ function renderAgentPanel() {
         <button class="agent-menu-btn" data-testid="agent-menu-btn" title="${t('agent.moreActionsTitle')}">⋮</button>
         <ul class="agent-menu" data-testid="agent-menu" hidden>
           <li><button class="agent-note-btn" data-testid="agent-note-btn">🗒 ${agent.note ? t('agent.editNoteTitle') : t('agent.addNoteTitle')}</button></li>
+          <li><button class="agent-model-btn" data-testid="agent-model-btn">🧠 ${t('agent.switchModelTitle')}</button></li>
           <li><button class="agent-open-folder-btn" data-testid="agent-open-folder-btn">📂 ${t('agent.openFolderTitle')}</button></li>
           <li><button class="agent-restart-btn" data-testid="agent-restart-btn" title="${t('agent.restartHint')}">🔄 ${t('agent.restartTitle')}</button></li>
           <li><button class="agent-remove-btn" data-testid="agent-remove-btn">× ${t('agent.removeFromChatTitle')}</button></li>
@@ -2635,6 +2641,7 @@ function renderAgentPanel() {
       agentMenu.hidden = !wasHidden;
     });
     li.querySelector('.agent-note-btn').addEventListener('click', () => { closeAgentMenu(); openNoteModal(agent); });
+    li.querySelector('.agent-model-btn').addEventListener('click', () => { closeAgentMenu(); changeAgentModel(agent); });
     li.querySelector('.agent-open-folder-btn').addEventListener('click', () => { closeAgentMenu(); openAgentFolder(agent); });
     li.querySelector('.agent-restart-btn').addEventListener('click', () => { closeAgentMenu(); restartAgent(agent); });
     li.querySelector('.agent-remove-btn').addEventListener('click', () => { closeAgentMenu(); removeMember(agent.id); });
@@ -2717,6 +2724,41 @@ async function handleNoteFormSubmit(e) {
   if (res.ok) {
     const updated = /** @type {Agent} */ (await res.json());
     const idx = agents.findIndex((a) => a.id === agentId);
+    if (idx !== -1) agents[idx] = updated;
+  }
+  renderAgentPanel();
+}
+
+/**
+ * Prompts for a model override (an alias like "opus"/"sonnet"/"fable", or a
+ * full model ID — same values the CLI's own --model flag accepts; blank
+ * clears it back to "let the CLI decide") and, if confirmed with a real
+ * change, PATCHes it. The PATCH route evicts the agent's running process
+ * when this actually changes (baked into spawn args like workingDir/
+ * resumeId) so the NEXT message respawns with --model plus --resume — a
+ * genuine mid-conversation switch, not a fresh session (confirmed against
+ * the real CLI: same session_id, same history, just a one-time prompt-cache
+ * rebuild on that turn). See modelOverride's docs in server/store/db.js.
+ * @param {Agent} agent
+ * @returns {Promise<void>}
+ */
+async function changeAgentModel(agent) {
+  const { confirmed, value } = await confirmDialog(
+    t('confirm.switchModel', { name: agent.name }),
+    { textInput: { value: agent.modelOverride ?? '', placeholder: t('confirm.switchModelPlaceholder') }, okLabel: t('confirm.switchModelBtn') },
+  );
+  if (!confirmed) return;
+  const modelOverride = value.trim();
+  if (modelOverride === (agent.modelOverride ?? '')) return;
+
+  const res = await fetch(`/api/agents/${agent.id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ modelOverride }),
+  });
+  if (res.ok) {
+    const updated = /** @type {Agent} */ (await res.json());
+    const idx = agents.findIndex((a) => a.id === agent.id);
     if (idx !== -1) agents[idx] = updated;
   }
   renderAgentPanel();
@@ -3155,6 +3197,7 @@ function openModal() {
   agentNameInput.value = '';
   agentDirInput.value = '';
   agentResumeInput.value = '';
+  agentModelInput.value = '';
   agentNoteInput.value = '';
   yoloModeCheck.checked = false;
   observerModeCheck.checked = false;
@@ -3452,6 +3495,7 @@ async function handleAgentFormSubmit(e) {
   if (!name || !workingDir) return;
 
   const resumeId = agentResumeInput.value.trim() || undefined;
+  const modelOverride = agentModelInput.value.trim() || undefined;
   const note = agentNoteInput.value.trim() || undefined;
   const dangerouslySkipPermissions = yoloModeCheck.checked;
   const isObserver = observerModeCheck.checked;
@@ -3464,7 +3508,7 @@ async function handleAgentFormSubmit(e) {
     const res = await fetch('/api/agents', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, color: selectedColor, workingDir, resumeId, dangerouslySkipPermissions, isObserver, chromeAccess, note }),
+      body: JSON.stringify({ name, color: selectedColor, workingDir, resumeId, dangerouslySkipPermissions, isObserver, chromeAccess, note, modelOverride }),
     });
     if (!res.ok) {
       const body = await res.json();
