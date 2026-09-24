@@ -144,6 +144,10 @@ export function dedupePermissionDenials(denials) {
  *   accounting for this turn straight from the CLI's own `result` event.
  * @property {number | null} totalCostUsd - The CLI's own cost estimate for this turn.
  * @property {number | null} durationMs - Wall-clock turn duration per the CLI.
+ * @property {string | null} model - The real model ID the CLI reported actually
+ *   running this turn on (e.g. "claude-sonnet-5") — this app never requests a
+ *   model itself, so this is purely observational. Null for a turn with no
+ *   real assistant event (a local command, or a crash before any output).
  */
 
 /**

@@ -313,6 +313,13 @@ function describeToolUse({ name, input }) {
  *   this turn, same caveats as `usage`.
  * @property {number | null} durationMs - Wall-clock turn duration per the
  *   CLI's own `result` event.
+ * @property {string | null} model - The real model ID reported on this
+ *   turn's `assistant` events (e.g. "claude-sonnet-5"), straight from the
+ *   CLI — this app never requests a specific model itself (no `--model`
+ *   spawn flag), so this is purely what the CLI resolved on its own. Null
+ *   for a turn that never produced a real assistant event (a pure local
+ *   command, or a crash before any output) — see wasLocalCommand's docs
+ *   for why "<synthetic>" is excluded here rather than captured as-is.
  * @property {(event: object) => void} handleEvent
  */
 
@@ -340,6 +347,7 @@ export function createTurnAccumulator({ onChunk, onStatus } = {}) {
     usage: null,
     totalCostUsd: null,
     durationMs: null,
+    model: null,
     handleEvent(event) {
       if (typeof event.session_id === 'string') turn.sessionId = event.session_id;
 
@@ -361,6 +369,7 @@ export function createTurnAccumulator({ onChunk, onStatus } = {}) {
       // this turn as the agent having genuinely "spoken" — see
       // Message.isLocalCommandOnly.
       if (event.type === 'assistant' && event.message?.model === '<synthetic>') turn.wasLocalCommand = true;
+      else if (event.type === 'assistant' && typeof event.message?.model === 'string') turn.model = event.message.model;
 
       if (event.type === 'assistant' && Array.isArray(event.message?.content)) {
         for (const block of event.message.content) {
@@ -453,7 +462,7 @@ export function createTurnAccumulator({ onChunk, onStatus } = {}) {
  * this agnostic of exactly when in an agent's lifecycle its process first
  * comes alive).
  * @param {string} agentId
- * @param {(turn: { text: string, toolCalls: ToolCall[], sessionId: string | null, permissionDenials: import('./agentRunner.js').PermissionDenial[] }) => void} handler
+ * @param {(turn: { text: string, toolCalls: ToolCall[], sessionId: string | null, permissionDenials: import('./agentRunner.js').PermissionDenial[], model: string | null }) => void} handler
  * @returns {void}
  */
 export function onBackgroundTurn(agentId, handler) {
@@ -509,6 +518,7 @@ function handleUnsolicitedEvent(proc, event) {
     toolCalls: [...turn.toolCalls.values()],
     sessionId: turn.sessionId,
     permissionDenials: turn.permissionDenials,
+    model: turn.model,
   });
 }
 
@@ -617,7 +627,7 @@ export function spawnForAgent(agent) {
  * @param {import('../store/db.js').Agent} agent
  * @param {import('./agentRunner.js').ContentBlock[]} content
  * @param {{ onChunk: (text: string) => void, onStatus?: (status: string) => void, signal?: AbortSignal }} options
- * @returns {Promise<{ text: string, permissionDenials: import('./agentRunner.js').PermissionDenial[], sessionId: string | null, stopped: boolean, toolCalls: ToolCall[], wasLocalCommand: boolean, usage: TurnUsage | null, totalCostUsd: number | null, durationMs: number | null }>}
+ * @returns {Promise<{ text: string, permissionDenials: import('./agentRunner.js').PermissionDenial[], sessionId: string | null, stopped: boolean, toolCalls: ToolCall[], wasLocalCommand: boolean, usage: TurnUsage | null, totalCostUsd: number | null, durationMs: number | null, model: string | null }>}
  */
 export function runTurn(agent, content, { onChunk, onStatus, signal }) {
   if (!existsSync(agent.workingDir)) {
@@ -640,7 +650,7 @@ export function runTurn(agent, content, { onChunk, onStatus, signal }) {
  * @param {ManagedProcess} proc
  * @param {import('./agentRunner.js').ContentBlock[]} content
  * @param {{ onChunk: (text: string) => void, onStatus?: (status: string) => void, signal?: AbortSignal }} options
- * @returns {Promise<{ text: string, permissionDenials: import('./agentRunner.js').PermissionDenial[], sessionId: string | null, stopped: boolean, toolCalls: ToolCall[], wasLocalCommand: boolean, usage: TurnUsage | null, totalCostUsd: number | null, durationMs: number | null }>}
+ * @returns {Promise<{ text: string, permissionDenials: import('./agentRunner.js').PermissionDenial[], sessionId: string | null, stopped: boolean, toolCalls: ToolCall[], wasLocalCommand: boolean, usage: TurnUsage | null, totalCostUsd: number | null, durationMs: number | null, model: string | null }>}
  */
 function runOneTurn(proc, content, { onChunk, onStatus, signal }) {
   return new Promise((resolve, reject) => {
@@ -672,6 +682,7 @@ function runOneTurn(proc, content, { onChunk, onStatus, signal }) {
         usage: turn.usage,
         totalCostUsd: turn.totalCostUsd,
         durationMs: turn.durationMs,
+        model: turn.model,
       });
     };
 
@@ -692,6 +703,7 @@ function runOneTurn(proc, content, { onChunk, onStatus, signal }) {
       err.usage = turn.usage;
       err.totalCostUsd = turn.totalCostUsd;
       err.durationMs = turn.durationMs;
+      err.model = turn.model;
       reject(err);
     };
 
