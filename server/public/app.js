@@ -86,6 +86,13 @@ import { APP_VERSION } from './appVersion.js';
  */
 
 /**
+ * @typedef {Object} QuickMessage
+ * @property {string} id
+ * @property {string} text
+ * @property {string} createdAt
+ */
+
+/**
  * Tracks one in-progress agent turn's accumulated state independent of
  * whether its chat is the one currently on screen — a turn keeps streaming
  * server-side no matter which chat the user is looking at, so the data
@@ -471,6 +478,9 @@ let pendingAttachments = [];
 /** @type {ScheduledMessage[]} pending scheduled messages for the active chat */
 let pendingScheduledMessages = [];
 
+/** @type {QuickMessage[]} saved quick messages — global, loaded once at init */
+let quickMessages = [];
+
 /** @type {Attachment[]} the schedule modal's own attachment set — decoupled
  *  from pendingAttachments so editing a pending scheduled message's
  *  attachments never touches whatever's independently in the composer */
@@ -550,6 +560,8 @@ const sendBtn          = $('#send-btn');
 const mentionDropdown  = $('#mention-dropdown');
 const scheduledBtn     = $('#scheduled-btn');
 const scheduledPanel   = $('#scheduled-panel');
+const quickMsgBtn      = $('#quick-msg-btn');
+const quickMsgPanel    = $('#quick-msg-panel');
 const scheduleOverlay  = $('#schedule-overlay');
 const scheduleTitleEl  = $('#schedule-title');
 const scheduleClose    = $('#schedule-close');
@@ -3058,6 +3070,132 @@ async function cancelScheduled(id) {
   renderScheduledPanel();
 }
 
+// ─── Quick messages ─────────────────────────────────────────────────────────
+
+/**
+ * Re-renders the ⚡ panel from `quickMessages` — same list/edit/delete-row
+ * shape as renderScheduledPanel, plus a trailing "+ Add" row. Unlike
+ * scheduled messages, the button itself is never hidden (an empty list
+ * still needs a way to add the first one).
+ */
+function renderQuickMsgPanel() {
+  quickMsgPanel.innerHTML = '';
+  if (quickMessages.length === 0) {
+    const empty = document.createElement('li');
+    empty.className = 'quick-msg-item-empty';
+    empty.textContent = t('quickMsg.panelEmpty');
+    quickMsgPanel.appendChild(empty);
+  }
+  for (const qm of quickMessages) {
+    const li = document.createElement('li');
+    li.className = 'quick-msg-item';
+    li.dataset.testid = 'quick-msg-item';
+    li.dataset.quickMsgId = qm.id;
+    li.innerHTML = `
+      <button class="quick-msg-item-text" data-testid="quick-msg-item-text" title="${escHtml(qm.text)}">${escHtml(qm.text)}</button>
+      <button class="quick-msg-edit-btn" data-testid="quick-msg-edit-btn" title="${t('quickMsg.editTitle')}">✎</button>
+      <button class="quick-msg-del-btn" data-testid="quick-msg-del-btn" title="${t('quickMsg.deleteTitle')}">✕</button>`;
+    li.querySelector('.quick-msg-item-text').addEventListener('click', () => useQuickMessage(qm.text));
+    li.querySelector('.quick-msg-edit-btn').addEventListener('click', (e) => { e.stopPropagation(); editQuickMessage(qm); });
+    li.querySelector('.quick-msg-del-btn').addEventListener('click', (e) => { e.stopPropagation(); removeQuickMessage(qm.id); });
+    quickMsgPanel.appendChild(li);
+  }
+  const addBtn = document.createElement('button');
+  addBtn.className = 'quick-msg-add-btn';
+  addBtn.dataset.testid = 'quick-msg-add-btn';
+  addBtn.textContent = `+ ${t('quickMsg.addBtn')}`;
+  addBtn.addEventListener('click', addQuickMessage);
+  quickMsgPanel.appendChild(addBtn);
+}
+
+/**
+ * Inserts a quick message's text at the composer's current cursor position
+ * (same insert-not-replace behavior as quickMention, so e.g. an already-typed
+ * "@Name " prefix is kept rather than clobbered) and focuses it — deliberately
+ * NOT auto-sent, so there's always a chance to glance at it, add an
+ * attachment, or tweak a word before hitting send.
+ * @param {string} text
+ */
+function useQuickMessage(text) {
+  const cursor = msgInput.selectionStart ?? msgInput.value.length;
+  const before = msgInput.value.slice(0, cursor);
+  const needsLeadingSpace = before.length > 0 && !/\s$/.test(before);
+  const insertion = (needsLeadingSpace ? ' ' : '') + text;
+  msgInput.value = before + insertion + msgInput.value.slice(cursor);
+  const newCursor = before.length + insertion.length;
+  quickMsgPanel.hidden = true;
+  msgInput.focus();
+  msgInput.setSelectionRange(newCursor, newCursor);
+  // Auto-resize, same as the textarea's own 'input' handler — setting
+  // .value programmatically doesn't fire 'input', and a saved quick message
+  // can easily be longer than whatever was already in the box.
+  msgInput.style.height = 'auto';
+  msgInput.style.height = Math.min(msgInput.scrollHeight, 140) + 'px';
+}
+
+/**
+ * Prompts for the text of a brand new quick message and, if confirmed with
+ * non-empty content, POSTs it and appends it to local state.
+ * @returns {Promise<void>}
+ */
+async function addQuickMessage() {
+  const { confirmed, value } = await confirmDialog(
+    t('quickMsg.addPrompt'),
+    { textInput: { placeholder: t('quickMsg.textPlaceholder') }, okLabel: t('quickMsg.addBtn') },
+  );
+  const text = value.trim();
+  if (!confirmed || !text) return;
+  const res = await fetch('/api/quick-messages', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text }),
+  });
+  if (res.ok) {
+    quickMessages.push(await res.json());
+    renderQuickMsgPanel();
+  }
+}
+
+/**
+ * Prompts for new text for an existing quick message and, if confirmed with
+ * a real change, PATCHes it.
+ * @param {QuickMessage} qm
+ * @returns {Promise<void>}
+ */
+async function editQuickMessage(qm) {
+  const { confirmed, value } = await confirmDialog(
+    t('quickMsg.editPrompt'),
+    { textInput: { value: qm.text }, okLabel: t('quickMsg.saveBtn') },
+  );
+  const text = value.trim();
+  if (!confirmed || !text || text === qm.text) return;
+  const res = await fetch(`/api/quick-messages/${qm.id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text }),
+  });
+  if (res.ok) {
+    const updated = await res.json();
+    const idx = quickMessages.findIndex((m) => m.id === qm.id);
+    if (idx !== -1) quickMessages[idx] = updated;
+    renderQuickMsgPanel();
+  }
+}
+
+/**
+ * Deletes a quick message via the REST API and updates local state. No
+ * confirmation step — unlike deleting an agent or chat, this is a short
+ * saved snippet with no downstream consequence, trivially re-added if it
+ * turns out to still be wanted.
+ * @param {string} id
+ * @returns {Promise<void>}
+ */
+async function removeQuickMessage(id) {
+  await fetch(`/api/quick-messages/${id}`, { method: 'DELETE' });
+  quickMessages = quickMessages.filter((m) => m.id !== id);
+  renderQuickMsgPanel();
+}
+
 /**
  * Re-renders the schedule modal's own attachment chip row from
  * scheduleModalAttachments — a separate copy from the composer's
@@ -3959,6 +4097,11 @@ msgInput.addEventListener('keydown', (e) => {
 
 sendBtn.addEventListener('click', submitMessage);
 
+quickMsgBtn.addEventListener('click', (e) => {
+  e.stopPropagation();
+  quickMsgPanel.hidden = !quickMsgPanel.hidden;
+});
+
 // ─── Sidebar events ───────────────────────────────────────────────────────────
 
 newChatBtn.addEventListener('click', () => {
@@ -3992,6 +4135,9 @@ document.addEventListener('click', (e) => {
   }
   if (!scheduledPanel.contains(e.target) && e.target !== scheduledBtn) {
     scheduledPanel.hidden = true;
+  }
+  if (!quickMsgPanel.contains(e.target) && e.target !== quickMsgBtn) {
+    quickMsgPanel.hidden = true;
   }
   if (!searchBar.contains(e.target) && e.target !== searchBtn) {
     searchResultsEl.hidden = true;
@@ -4097,14 +4243,17 @@ async function init() {
 
   renderColorGrid(colorGrid, selectedColor, (c) => { selectedColor = c; });
 
-  const [agentsRes, chatsRes, settingsRes] = await Promise.all([
+  const [agentsRes, chatsRes, settingsRes, quickMessagesRes] = await Promise.all([
     fetch('/api/agents'),
     fetch('/api/chats'),
     fetch('/api/settings'),
+    fetch('/api/quick-messages'),
   ]);
   agents = await agentsRes.json();
   userSettings = await settingsRes.json();
   chats = await chatsRes.json();
+  quickMessages = await quickMessagesRes.json();
+  renderQuickMsgPanel();
 
   currentLocale = userSettings.locale ?? DEFAULT_LOCALE;
   applyTranslations();
