@@ -13,6 +13,7 @@ import agentsRouter from './routes/agents.js';
 import createChatsRouter from './routes/chats.js';
 import browseRouter from './routes/browse.js';
 import settingsRouter from './routes/settings.js';
+import quickMessagesRouter from './routes/quickMessages.js';
 import { handleConnection } from './ws/handler.js';
 import { initScheduler } from './services/scheduler.js';
 import { spawnForAgent, killAll } from './services/agentProcessManager.js';
@@ -63,6 +64,7 @@ app.use('/api/agents', agentsRouter);
 app.use('/api/chats', createChatsRouter(wss));
 app.use('/api/browse', browseRouter);
 app.use('/api/settings', settingsRouter);
+app.use('/api/quick-messages', quickMessagesRouter);
 
 app.get('/health', (_req, res) => res.json({ status: 'ok' }));
 
