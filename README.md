@@ -8,6 +8,7 @@ A multi-agent Claude chat app. Each participant in a conversation is a Claude Co
 - Give an agent a note (optional, at creation or any time after via 🗒 in the panel) — a purely personal reminder of why it exists, so a long-running or multi-day chat doesn't leave you wondering what a given agent was for
 - Group multiple agents into a chat — but each agent belongs to only one chat at a time; remove it from a chat to free it up for another (this also resets its Claude session, so it starts fresh with no memory of the old chat)
 - Rename a chat any time via the ✏️ button in the sidebar
+- Group chats into categories via the 🏷️ button — pick an existing one from the popover with a single click (no retyping a name that already exists), clear it back to Uncategorized, or add a new one; each category becomes a collapsible section in the sidebar
 - Send messages; agents respond in parallel with streaming output, showing a live status of what they're doing (reading a file, running a command, etc.) and how long they've been at it
 - Long chats are split into pages (« First / ‹ Prev / Next › / Last ») rather than one endless scroll — opening a chat lands on the latest page
 - Each tool call's real output (command results, diffs, MCP responses) is one click away — collapsed by default so it doesn't clutter the conversation; a reply with several tool calls nests them behind a single "N tool calls" toggle instead of stacking one row per call
@@ -19,10 +20,12 @@ A multi-agent Claude chat app. Each participant in a conversation is a Claude Co
 - Interrupt an agent mid-response with the **Stop** button
 - Attach images or large pasted text blocks to a message
 - Schedule a message for later via the 🕐 button next to Send — pending ones show as a badge count you can open, review, and cancel before they fire
+- Save frequently-sent snippets via the ⚡ **Quick messages** button next to Send — pick one from the list to insert it at the cursor instead of retyping it; never auto-sent, so there's always a chance to review or tweak it first
 - Agents keep one continuous native Claude session for as long as they're in a chat (auto-chained via `--resume` after their first reply) — copy the `claude --resume <id>` command from the agent panel to continue that session in a terminal
 - When an agent's tool call is denied — a path outside its working directory, a Bash command, etc. — a card appears with **Grant** and **Deny** buttons; either one lets the agent continue right away, no need to send a follow-up message
 - Toggle ⏳ **Auto-continue** per chat so a session-limit error ("You've hit your session limit · resets 7:20pm...") auto-schedules a "please continue" message for one minute after it resets, instead of sitting there until you notice and prompt it yourself
 - Enable **YOLO mode** per agent at creation time to skip all permission checks entirely, shown with a 🔥 badge — use with care
+- Pick a model for an agent — Opus, Sonnet, Haiku, Fable, or Custom for a full pinned model ID — at creation, or switch it later via the agent's ⋮ menu without losing conversation history
 - Grant an agent **Browser access** at creation time to give it real control of your Chrome browser via the Claude in Chrome extension, shown with a 🌐 badge — any number of agents can hold it at once
 - Chats with new activity you haven't seen yet (an agent finished a task while you were elsewhere) show an unread dot in the sidebar
 - Hover a reply to copy it as text or as a PNG image
@@ -87,6 +90,7 @@ Other environment variables:
 | Name | yes | Display name used for `@mentions` |
 | Working Directory | yes | Absolute path — the agent's cwd and default tool-access scope. Directories already used by other agents show up as one-click chips, so adding a second agent to the same project doesn't mean re-browsing to it |
 | Resume ID | no | Pass a `--resume` conversation ID to pick up a named Claude session |
+| Model | no | Defaults to letting Claude Code choose. Pick a family (Opus/Sonnet/Haiku/Fable) or Custom for a full pinned model ID. Unlike the fields below, it can be changed later too, via the agent's ⋮ menu "Switch model" action — takes effect on the next message, same conversation history |
 | Note | no | Freeform reminder of why you created this agent — purely for you, never sent to the CLI. Unlike the fields below, it can be added or edited any time from the agent panel (🗒), not just at creation |
 | Color | yes | Avatar color |
 | YOLO mode | no | Skip all permission checks for this agent (`--dangerously-skip-permissions`) — off by default; can't be changed later, only at creation |
