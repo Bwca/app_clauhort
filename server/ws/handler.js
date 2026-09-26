@@ -297,10 +297,14 @@ export function catchUpMessagesFor(agent, messages) {
     // for the same reason buildPromptBlocks' hasSpokenInChat skips them —
     // nothing sent alongside that turn (this catch-up window included)
     // actually reached the model, so it can't be trusted as a point the
-    // session's memory picks up from.
-    if (messages[i].agentId === agent.id && !messages[i].isLocalCommandOnly) { lastOwnIdx = i; break; }
+    // session's memory picks up from. isSystemNote messages (a compaction
+    // report — see Message.isSystemNote's docs) are skipped for the same
+    // reason: nothing the model said, so not a real "last turn" either.
+    if (messages[i].agentId === agent.id && !messages[i].isLocalCommandOnly && !messages[i].isSystemNote) { lastOwnIdx = i; break; }
   }
-  return messages.slice(lastOwnIdx + 1).filter((m) => m.agentId !== agent.id);
+  // isSystemNote messages are never catch-up content for anyone — they're a
+  // UI-only aside about one agent, not information another agent needs.
+  return messages.slice(lastOwnIdx + 1).filter((m) => m.agentId !== agent.id && !m.isSystemNote);
 }
 
 /**
@@ -426,10 +430,10 @@ function buildSystemPreamble(agent, chat, members) {
  * @returns {import('../services/agentRunner.js').ContentBlock[]}
  */
 export function buildPromptBlocks(agent, chat, members, newMessage, priorMessages, excludeMessageId) {
-  // isLocalCommandOnly messages don't count — see catchUpMessagesFor's docs
-  // on why they can't be trusted as evidence the model ever saw anything
-  // sent alongside them, preamble included.
-  const hasSpokenInChat = priorMessages.some((m) => m.agentId === agent.id && !m.isLocalCommandOnly);
+  // isLocalCommandOnly/isSystemNote messages don't count — see
+  // catchUpMessagesFor's docs on why they can't be trusted as evidence the
+  // model ever saw anything sent alongside them, preamble included.
+  const hasSpokenInChat = priorMessages.some((m) => m.agentId === agent.id && !m.isLocalCommandOnly && !m.isSystemNote);
   const systemPreamble = hasSpokenInChat ? '' : buildSystemPreamble(agent, chat, members);
 
   const filteredPriorMessages = excludeMessageId
@@ -449,7 +453,7 @@ export function buildPromptBlocks(agent, chat, members, newMessage, priorMessage
   // (bumped in db.js's addChatMember/removeChatMember) catches that case:
   // if it's newer than this agent's own last turn in the chat, the roster
   // note goes out even with zero catch-up content.
-  const lastOwnMessage = [...priorMessages].reverse().find((m) => m.agentId === agent.id && !m.isLocalCommandOnly);
+  const lastOwnMessage = [...priorMessages].reverse().find((m) => m.agentId === agent.id && !m.isLocalCommandOnly && !m.isSystemNote);
   const rosterStaleSinceLastTurn = Boolean(
     hasSpokenInChat && chat.rosterChangedAt && (!lastOwnMessage || chat.rosterChangedAt > lastOwnMessage.createdAt)
   );

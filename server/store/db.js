@@ -189,6 +189,13 @@ function transaction(fn) {
  *   alongside it (the [System] preamble, any catch-up context) actually
  *   reached the model, so treating it as a real turn would permanently
  *   skip the agent's one-time introduction.
+ * @property {boolean} [isSystemNote] - True for an informational note about
+ *   the agent itself (currently just a context-compaction report — see
+ *   agentProcessManager.js's compact_boundary handling) rather than
+ *   something the agent actually said. Rendered distinctly (no avatar
+ *   bubble) in the frontend — see buildMessageEl in app.js. Excluded from
+ *   catch-up/hasSpokenInChat reasoning the same way isLocalCommandOnly is,
+ *   for the same reason: nothing here ever reached the model as a real turn.
  * @property {string} createdAt - ISO 8601 timestamp
  */
 
@@ -274,6 +281,7 @@ CREATE TABLE IF NOT EXISTS messages (
   attachments TEXT NOT NULL DEFAULT '[]',
   tool_calls TEXT NOT NULL DEFAULT '[]',
   is_local_command_only INTEGER NOT NULL DEFAULT 0,
+  is_system_note INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_messages_chat_created ON messages(chat_id, created_at);
@@ -465,6 +473,18 @@ function migrateMessagesLocalCommandOnly() {
 }
 
 /**
+ * Adds the `is_system_note` column to `messages` if it's missing, same
+ * reasoning as migrateMessagesToolCalls above.
+ * @returns {void}
+ */
+function migrateMessagesSystemNote() {
+  const hasColumn = db.prepare("PRAGMA table_info(messages)").all()
+    .some((col) => col.name === 'is_system_note');
+  if (hasColumn) return;
+  db.exec('ALTER TABLE messages ADD COLUMN is_system_note INTEGER NOT NULL DEFAULT 0');
+}
+
+/**
  * Enforces "each agent belongs to at most one chat at a time" via a UNIQUE
  * index on chat_members.agent_id — an agent's resumeId is a single global
  * Claude session, so being in 2+ chats simultaneously would bleed one
@@ -625,6 +645,7 @@ function rowToMessage(row) {
     createdAt: row.created_at,
   };
   if (row.is_local_command_only) message.isLocalCommandOnly = true;
+  if (row.is_system_note) message.isSystemNote = true;
   return message;
 }
 
@@ -725,6 +746,7 @@ export async function loadDb() {
   migrateMessagesAgentFk();
   migrateMessagesToolCalls();
   migrateMessagesLocalCommandOnly();
+  migrateMessagesSystemNote();
   migrateAgentsAllowedToolPatterns();
   migrateAgentsDangerMode();
   migrateAgentsObserverMode();
@@ -1236,12 +1258,12 @@ export function getMessagesAround(chatId, messageId, before = 25, after = 25) {
  */
 export async function addMessage(message) {
   db.prepare(`
-    INSERT INTO messages (id, chat_id, role, agent_id, author_name, content, attachments, tool_calls, is_local_command_only, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO messages (id, chat_id, role, agent_id, author_name, content, attachments, tool_calls, is_local_command_only, is_system_note, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     message.id, message.chatId, message.role, message.agentId, message.authorName,
     message.content, JSON.stringify(message.attachments ?? []), JSON.stringify(message.toolCalls ?? []),
-    message.isLocalCommandOnly ? 1 : 0, message.createdAt
+    message.isLocalCommandOnly ? 1 : 0, message.isSystemNote ? 1 : 0, message.createdAt
   );
   return message;
 }
