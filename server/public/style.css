@@ -528,6 +528,10 @@ html, body { height: 100%; background: var(--bg0); color: var(--text); font-fami
 #confirm-text-row { margin: -6px 0 16px; }
 #confirm-text-input { width: 100%; background: var(--bg2); border: 1px solid var(--faint); border-radius: 6px; padding: 6px 10px; color: var(--text); font-size: 13px; outline: none; box-sizing: border-box; }
 #confirm-text-input:focus { border-color: var(--blue); }
+#confirm-model-row { margin: -6px 0 16px; display: flex; flex-direction: column; gap: 8px; }
+#confirm-model-select, #confirm-model-custom-input { width: 100%; background: var(--bg2); border: 1px solid var(--faint); border-radius: 6px; padding: 6px 10px; color: var(--text); font-size: 13px; outline: none; box-sizing: border-box; font-family: inherit; }
+#confirm-model-select { cursor: pointer; }
+#confirm-model-select:focus, #confirm-model-custom-input:focus { border-color: var(--blue); }
 #confirm-footer { display: flex; gap: 8px; justify-content: flex-end; }
 #confirm-cancel { padding: 7px 14px; border-radius: 7px; border: 1px solid var(--faint); background: transparent; color: var(--muted); font-size: 14px; cursor: pointer; transition: background .15s; }
 #confirm-cancel:hover { background: var(--bg2); }

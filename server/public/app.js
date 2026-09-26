@@ -594,6 +594,7 @@ const agentDirRecent   = $('#agent-dir-recent');
 const agentDirRecentWrap = $('#agent-dir-recent-wrap');
 const agentResumeInput = $('#agent-resume');
 const agentModelInput  = $('#agent-model');
+const agentModelCustomInput = $('#agent-model-custom');
 const agentNoteInput   = $('#agent-note');
 const colorGrid        = $('#color-grid');
 const yoloModeCheck    = $('#yolo-mode-check');
@@ -624,6 +625,9 @@ const confirmCheckbox      = $('#confirm-checkbox');
 const confirmCheckboxLabel = $('#confirm-checkbox-label');
 const confirmTextRow       = $('#confirm-text-row');
 const confirmTextInput     = $('#confirm-text-input');
+const confirmModelRow      = $('#confirm-model-row');
+const confirmModelSelect   = $('#confirm-model-select');
+const confirmModelCustomInput = $('#confirm-model-custom-input');
 const confirmCancel    = $('#confirm-cancel');
 const confirmOk        = $('#confirm-ok');
 const imageLightboxOverlay = $('#image-lightbox-overlay');
@@ -653,6 +657,12 @@ function shortDir(dir) {
   return parts.length > 1 ? `…/${parts.slice(-2).join('/')}` : dir;
 }
 
+/** The `--model` family aliases the CLI resolves to "latest in that family"
+ * server-side (per `claude --help`) — unlike a dated snapshot ID, this list
+ * only grows when Anthropic ships a genuinely new model family, so the
+ * model-select dropdowns below can offer it directly without going stale. */
+const MODEL_ALIASES = ['opus', 'sonnet', 'haiku', 'fable'];
+
 /**
  * Turns a raw model ID the CLI reported (e.g. "claude-sonnet-5",
  * "claude-opus-4-1-20250805", or an older "claude-3-5-sonnet-20241022")
@@ -670,6 +680,38 @@ function formatModelLabel(model) {
   const withoutDate = model.replace(/-\d{8}$/, '');
   const version = withoutDate.split('-').filter((p) => /^\d+$/.test(p)).join('.');
   return version ? `${family} ${version}` : family;
+}
+
+/**
+ * Prefills a model-family `<select>` (+ its companion "Custom" text input)
+ * from an arbitrary modelOverride string — a known alias selects directly;
+ * any other non-empty value (a full pinned model ID) falls into the Custom
+ * option with that value shown in the companion input.
+ * @param {HTMLSelectElement} select
+ * @param {HTMLInputElement} customInput
+ * @param {string} value
+ */
+function setModelSelectValue(select, customInput, value) {
+  if (value === '' || MODEL_ALIASES.includes(value)) {
+    select.value = value;
+    customInput.hidden = true;
+    customInput.value = '';
+  } else {
+    select.value = 'custom';
+    customInput.hidden = false;
+    customInput.value = value;
+  }
+}
+
+/**
+ * Reads the resolved modelOverride value back out of a model-family
+ * `<select>` (+ companion "Custom" input) pair set up by setModelSelectValue.
+ * @param {HTMLSelectElement} select
+ * @param {HTMLInputElement} customInput
+ * @returns {string}
+ */
+function getModelSelectValue(select, customInput) {
+  return select.value === 'custom' ? customInput.value.trim() : select.value;
 }
 
 /**
@@ -765,10 +807,15 @@ let pendingConfirmResolve = null;
  * `checked` is always false. When `textInput` is given, an extra text field
  * (pre-filled with `textInput.value`) is shown instead — used for renaming a
  * category, where the confirm action needs a new name, not just a yes/no.
+ * When `modelInput` is given, the model-family select (+ companion "Custom"
+ * text input) is shown instead — used for switching an agent's model, same
+ * select/custom-input pair as the New Agent modal's Model field (see
+ * setModelSelectValue/getModelSelectValue). `textInput` and `modelInput` are
+ * mutually exclusive; passing both is undefined behavior.
  * `okLabel` overrides the confirm button's text (defaults to the "Delete"
  * label baked into its markup, right for every other current caller).
  * @param {string} message
- * @param {{ checkboxLabel?: string, textInput?: { value?: string, placeholder?: string }, okLabel?: string }} [opts]
+ * @param {{ checkboxLabel?: string, textInput?: { value?: string, placeholder?: string }, modelInput?: { value?: string }, okLabel?: string }} [opts]
  * @returns {Promise<{ confirmed: boolean, checked: boolean, value: string }>}
  */
 function confirmDialog(message, opts = {}) {
@@ -783,12 +830,18 @@ function confirmDialog(message, opts = {}) {
     confirmTextInput.value = opts.textInput.value ?? '';
     confirmTextInput.placeholder = opts.textInput.placeholder ?? '';
   }
+  confirmModelRow.hidden = !opts.modelInput;
+  if (opts.modelInput) {
+    setModelSelectValue(confirmModelSelect, confirmModelCustomInput, opts.modelInput.value ?? '');
+  }
   confirmOk.textContent = opts.okLabel ?? t('confirm.deleteBtn');
-  confirmOk.classList.toggle('neutral', Boolean(opts.textInput));
+  confirmOk.classList.toggle('neutral', Boolean(opts.textInput || opts.modelInput));
   confirmOverlay.hidden = false;
   if (opts.textInput) {
     confirmTextInput.focus();
     confirmTextInput.select();
+  } else if (opts.modelInput) {
+    confirmModelSelect.focus();
   }
   return new Promise((resolve) => { pendingConfirmResolve = resolve; });
 }
@@ -799,10 +852,13 @@ function confirmDialog(message, opts = {}) {
  */
 function resolveConfirm(confirmed) {
   confirmOverlay.hidden = true;
+  const value = confirmModelRow.hidden
+    ? confirmTextInput.value
+    : getModelSelectValue(confirmModelSelect, confirmModelCustomInput);
   pendingConfirmResolve?.({
     confirmed,
     checked: !confirmCheckboxRow.hidden && confirmCheckbox.checked,
-    value: confirmTextInput.value,
+    value,
   });
   pendingConfirmResolve = null;
 }
@@ -810,6 +866,16 @@ function resolveConfirm(confirmed) {
 confirmCancel.addEventListener('click', () => resolveConfirm(false));
 confirmOk.addEventListener('click', () => resolveConfirm(true));
 confirmTextInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); resolveConfirm(true); }
+});
+confirmModelSelect.addEventListener('change', () => {
+  confirmModelCustomInput.hidden = confirmModelSelect.value !== 'custom';
+  if (confirmModelSelect.value === 'custom') {
+    confirmModelCustomInput.focus();
+    confirmModelCustomInput.select();
+  }
+});
+confirmModelCustomInput.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') { e.preventDefault(); resolveConfirm(true); }
 });
 
@@ -2742,22 +2808,23 @@ async function handleNoteFormSubmit(e) {
 }
 
 /**
- * Prompts for a model override (an alias like "opus"/"sonnet"/"fable", or a
- * full model ID — same values the CLI's own --model flag accepts; blank
- * clears it back to "let the CLI decide") and, if confirmed with a real
- * change, PATCHes it. The PATCH route evicts the agent's running process
- * when this actually changes (baked into spawn args like workingDir/
- * resumeId) so the NEXT message respawns with --model plus --resume — a
- * genuine mid-conversation switch, not a fresh session (confirmed against
- * the real CLI: same session_id, same history, just a one-time prompt-cache
- * rebuild on that turn). See modelOverride's docs in server/store/db.js.
+ * Prompts for a model override (a family alias like "opus"/"sonnet"/"fable",
+ * or — via the "Custom" option — a full model ID; same values the CLI's own
+ * --model flag accepts; "Default" clears it back to "let the CLI decide")
+ * and, if confirmed with a real change, PATCHes it. The PATCH route evicts
+ * the agent's running process when this actually changes (baked into spawn
+ * args like workingDir/resumeId) so the NEXT message respawns with --model
+ * plus --resume — a genuine mid-conversation switch, not a fresh session
+ * (confirmed against the real CLI: same session_id, same history, just a
+ * one-time prompt-cache rebuild on that turn). See modelOverride's docs in
+ * server/store/db.js.
  * @param {Agent} agent
  * @returns {Promise<void>}
  */
 async function changeAgentModel(agent) {
   const { confirmed, value } = await confirmDialog(
     t('confirm.switchModel', { name: agent.name }),
-    { textInput: { value: agent.modelOverride ?? '', placeholder: t('confirm.switchModelPlaceholder') }, okLabel: t('confirm.switchModelBtn') },
+    { modelInput: { value: agent.modelOverride ?? '' }, okLabel: t('confirm.switchModelBtn') },
   );
   if (!confirmed) return;
   const modelOverride = value.trim();
@@ -3336,6 +3403,8 @@ function openModal() {
   agentDirInput.value = '';
   agentResumeInput.value = '';
   agentModelInput.value = '';
+  agentModelCustomInput.value = '';
+  agentModelCustomInput.hidden = true;
   agentNoteInput.value = '';
   yoloModeCheck.checked = false;
   observerModeCheck.checked = false;
@@ -3633,7 +3702,7 @@ async function handleAgentFormSubmit(e) {
   if (!name || !workingDir) return;
 
   const resumeId = agentResumeInput.value.trim() || undefined;
-  const modelOverride = agentModelInput.value.trim() || undefined;
+  const modelOverride = getModelSelectValue(agentModelInput, agentModelCustomInput) || undefined;
   const note = agentNoteInput.value.trim() || undefined;
   const dangerouslySkipPermissions = yoloModeCheck.checked;
   const isObserver = observerModeCheck.checked;
@@ -4211,6 +4280,10 @@ modalOverlay.addEventListener('click', (e) => { if (e.target === modalOverlay) c
 agentForm.addEventListener('submit', handleAgentFormSubmit);
 agentNameGenerateBtn.addEventListener('click', () => {
   agentNameInput.value = generateAgentName();
+});
+agentModelInput.addEventListener('change', () => {
+  agentModelCustomInput.hidden = agentModelInput.value !== 'custom';
+  if (agentModelInput.value === 'custom') agentModelCustomInput.focus();
 });
 
 agentDirBrowseBtn.addEventListener('click', openFolderBrowser);
