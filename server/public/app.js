@@ -79,6 +79,9 @@ import { APP_VERSION } from './appVersion.js';
  * @property {string} content
  * @property {Attachment[]} [attachments]
  * @property {import('../services/agentProcessManager.js').ToolCall[]} [toolCalls]
+ * @property {boolean} [isSystemNote] - An informational aside about the
+ *   agent (currently just a context-compaction report), not something it
+ *   actually said — rendered without an avatar/bubble, see buildMessageEl.
  * @property {string} createdAt
  */
 
@@ -1893,11 +1896,39 @@ async function loadMessagesPage(chatId, page) {
 }
 
 /**
+ * Creates and returns a DOM element for an isSystemNote message (currently
+ * just a context-compaction report — see Message.isSystemNote's docs) — a
+ * single centered line, no avatar/actions/markdown, since it's an aside
+ * about the agent rather than something it said. Kept structurally close to
+ * buildMessageEl's normal output (same dataset attrs, same filter behavior)
+ * so message-list plumbing (jump-to-context, the per-agent filter) doesn't
+ * need to special-case it.
+ * @param {Message} msg
+ * @returns {HTMLElement}
+ */
+function buildSystemNoteEl(msg) {
+  const el = document.createElement('div');
+  el.className = 'msg msg-system-note';
+  el.dataset.msgId = msg.id;
+  el.dataset.testid = 'message';
+  el.dataset.role = msg.role;
+  el.dataset.agentId = msg.agentId ?? '';
+  el.dataset.mentionedIds = '';
+  el.hidden = !isVisibleUnderMessageFilter(msg.agentId, []);
+  el.innerHTML = `
+    <span data-testid="msg-system-note-text">${escHtml(msg.content)}</span>
+    <span class="msg-time" data-iso="${msg.createdAt}">${fmtTime(msg.createdAt)}</span>`;
+  return el;
+}
+
+/**
  * Creates and returns a DOM element for a completed message.
  * @param {Message} msg
  * @returns {HTMLElement}
  */
 function buildMessageEl(msg) {
+  if (msg.isSystemNote) return buildSystemNoteEl(msg);
+
   const agent = msg.agentId ? agentById(msg.agentId) : null;
   const color = agentDisplayColor(msg.role === 'user' ? userSettings.userColor : (agent?.color ?? 'var(--muted)'));
   const initial = msg.authorName[0].toUpperCase();

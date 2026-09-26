@@ -225,6 +225,8 @@ html, body { height: 100%; background: var(--bg0); color: var(--text); font-fami
    elements handle their own spacing. A user's own message is still plain
    escaped text with literal newlines, so it alone needs pre-wrap. */
 .msg-content-plain { white-space: pre-wrap; }
+.msg-system-note { justify-content: center; align-items: baseline; gap: 8px; padding: 4px 14px; border-left: none; background: none; font-size: 12px; color: var(--dim); font-style: italic; }
+.msg-system-note:hover { background: none; }
 
 /* ── Rendered markdown (agent messages only) ──────────────────────────── */
 .msg-content p { margin: 0 0 8px; }
