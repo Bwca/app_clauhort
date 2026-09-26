@@ -13,6 +13,9 @@ import {
   deleteScheduledMessageIfExists,
 } from '../store/db.js';
 import { handleUserMessage, broadcast } from '../ws/handler.js';
+import { logger } from '../logger.js';
+
+const log = logger.child({ component: 'scheduler' });
 
 /**
  * setTimeout's delay is a signed 32-bit int under the hood — anything past
@@ -118,9 +121,31 @@ export async function cancelScheduledMessage(id) {
  * Re-arms a timer for every scheduled message still pending in the DB —
  * called once at server startup so schedules survive a restart, since
  * armed timers themselves are purely in-memory and don't.
+ *
+ * One exception: an auto-continue message (row.isAutoContinue) whose
+ * sendAt has already passed is DELETED here instead of armed. A normal
+ * user-scheduled message firing late after downtime is still the right
+ * call (armTimer's own docs: "fires almost immediately rather than being
+ * treated as an error") — the user asked for that content to go out, late
+ * or not. But an auto-continue's sendAt targets a specific session-limit
+ * reset time; once the server's been down past it, that assumption is
+ * stale and unverifiable, and firing it late risks re-triggering the exact
+ * relay cascade it exists to recover from (see fix(chats) in
+ * ws/handler.js's skipRelay). Reported live: exactly these 3 rows sat
+ * through a ~5-hour outage and would otherwise have fired immediately on
+ * the next start. Dropping it silently is safe — if the agent genuinely
+ * still needs to continue, its next real turn re-schedules a fresh one.
  * @param {import('ws').WebSocketServer} wss
  * @returns {void}
  */
 export function initScheduler(wss) {
-  for (const row of getAllScheduledMessages()) armTimer(row, wss);
+  const now = Date.now();
+  for (const row of getAllScheduledMessages()) {
+    if (row.isAutoContinue && new Date(row.sendAt).getTime() <= now) {
+      deleteScheduledMessageIfExists(row.id);
+      log.info({ chatId: row.chatId, id: row.id, sendAt: row.sendAt }, 'dropped a stale overdue auto-continue message instead of firing it late');
+      continue;
+    }
+    armTimer(row, wss);
+  }
 }
