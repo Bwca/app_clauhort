@@ -309,6 +309,9 @@
       <div class="feature-card"><span class="icon">🌐</span><div><h3 data-i18n="features.f10.title">Browser access</h3><p data-i18n="features.f10.desc">Grant an agent real control of your Chrome browser via the Claude in Chrome extension — any number of agents at once.</p></div></div>
       <div class="feature-card"><span class="icon">♻️</span><div><h3 data-i18n="features.f11.title">Persistent sessions</h3><p data-i18n-html="features.f11.desc">Each agent keeps one continuous native Claude session, auto-chained across turns — copy <code>claude --resume &lt;id&gt;</code> to pick it up in a terminal.</p></div></div>
       <div class="feature-card"><span class="icon">✏️</span><div><h3 data-i18n="features.f12.title">Full chat management</h3><p data-i18n="features.f12.desc">Rename chats in place, delete a chat with an option to clean up its agents too, and browse or search everything after the fact.</p></div></div>
+      <div class="feature-card"><span class="icon">⚡</span><div><h3 data-i18n="features.f13.title">Quick messages</h3><p data-i18n="features.f13.desc">Save short snippets you send often and insert one at the cursor with a click instead of retyping it — never auto-sent, so there's always a chance to review or tweak it first.</p></div></div>
+      <div class="feature-card"><span class="icon">🧠</span><div><h3 data-i18n="features.f14.title">Per-agent model</h3><p data-i18n="features.f14.desc">Pick a model family per agent — Opus, Sonnet, Haiku, Fable, or a custom pinned ID — at creation, or switch it later without losing conversation history.</p></div></div>
+      <div class="feature-card"><span class="icon">🏷️</span><div><h3 data-i18n="features.f15.title">Chat categories</h3><p data-i18n="features.f15.desc">Group chats into collapsible sidebar sections — pick an existing category from a one-click popover, or add a new one on the spot.</p></div></div>
     </div>
   </div>
 </section>
@@ -497,6 +500,12 @@ http://localhost:3001</pre>
       'features.f11.desc': 'Each agent keeps one continuous native Claude session, auto-chained across turns — copy <code>claude --resume &lt;id&gt;</code> to pick it up in a terminal.',
       'features.f12.title': 'Full chat management',
       'features.f12.desc': 'Rename chats in place, delete a chat with an option to clean up its agents too, and browse or search everything after the fact.',
+      'features.f13.title': 'Quick messages',
+      'features.f13.desc': "Save short snippets you send often and insert one at the cursor with a click instead of retyping it — never auto-sent, so there's always a chance to review or tweak it first.",
+      'features.f14.title': 'Per-agent model',
+      'features.f14.desc': 'Pick a model family per agent — Opus, Sonnet, Haiku, Fable, or a custom pinned ID — at creation, or switch it later without losing conversation history.',
+      'features.f15.title': 'Chat categories',
+      'features.f15.desc': 'Group chats into collapsible sidebar sections — pick an existing category from a one-click popover, or add a new one on the spot.',
 
       'how.kicker': 'How it works',
       'how.h2': 'From an empty chat to a working team',
@@ -541,6 +550,12 @@ http://localhost:3001</pre>
       'usecases.skill-invocation.desc': "Typing \"@Agent /command\" in the composer invokes one of that agent's real Claude Code skills, straight from its own project's .claude/commands.",
       'usecases.message-search.label': 'Search + jump',
       'usecases.message-search.desc': "Searching a chat's history and clicking a result jumps straight to that point in the message log.",
+      'usecases.quick-messages.label': 'Quick messages',
+      'usecases.quick-messages.desc': "Opening the ⚡ panel to insert a saved snippet at the cursor with one click, then saving a brand new one on the spot.",
+      'usecases.model-switch.label': 'Model switching',
+      'usecases.model-switch.desc': "Switching an agent's model via its ⋮ menu — picking Custom for a full pinned model ID, then choosing a stable family alias instead.",
+      'usecases.chat-categories.label': 'Chat categories',
+      'usecases.chat-categories.desc': "Assigning a chat to an existing sidebar category with one click, then creating a brand new category for another chat.",
 
       'get.kicker': 'Get started',
       'get.h2': 'Run it locally in under a minute',
@@ -620,6 +635,12 @@ http://localhost:3001</pre>
       'features.f11.desc': "Chaque agent conserve une seule session Claude native continue, enchaînée automatiquement entre les tours — copiez <code>claude --resume &lt;id&gt;</code> pour la reprendre dans un terminal.",
       'features.f12.title': 'Gestion complète des discussions',
       'features.f12.desc': "Renommez les discussions sur place, supprimez-en une avec l'option de nettoyer aussi ses agents, et parcourez ou recherchez tout après coup.",
+      'features.f13.title': 'Messages rapides',
+      'features.f13.desc': "Enregistrez de courts extraits que vous envoyez souvent et insérez-en un au curseur d'un clic plutôt que de le retaper — jamais envoyé automatiquement, pour toujours avoir la chance de le relire ou de l'ajuster d'abord.",
+      'features.f14.title': 'Modèle par agent',
+      'features.f14.desc': "Choisissez une famille de modèle par agent — Opus, Sonnet, Haiku, Fable, ou un identifiant personnalisé — à la création, ou changez-la plus tard sans perdre l'historique de conversation.",
+      'features.f15.title': 'Catégories de discussions',
+      'features.f15.desc': "Regroupez les discussions en sections repliables dans la barre latérale — choisissez une catégorie existante depuis un menu en un clic, ou ajoutez-en une nouvelle sur place.",
 
       'how.kicker': 'Fonctionnement',
       'how.h2': "D'une discussion vide à une équipe fonctionnelle",
@@ -664,6 +685,12 @@ http://localhost:3001</pre>
       'usecases.skill-invocation.desc': "Taper « @Agent /commande » dans le champ de saisie invoque une véritable compétence Claude Code de cet agent, directement depuis son dossier .claude/commands.",
       'usecases.message-search.label': 'Recherche + accès direct',
       'usecases.message-search.desc': "Rechercher dans l'historique d'une discussion et cliquer sur un résultat mène directement à ce point du journal des messages.",
+      'usecases.quick-messages.label': 'Messages rapides',
+      'usecases.quick-messages.desc': "Ouvrir le panneau ⚡ pour insérer un extrait enregistré au curseur d'un clic, puis en enregistrer un tout nouveau sur place.",
+      'usecases.model-switch.label': 'Changement de modèle',
+      'usecases.model-switch.desc': "Changer le modèle d'un agent depuis son menu ⋮ — choisir Personnalisé pour un ID de modèle exact, puis opter plutôt pour une famille stable.",
+      'usecases.chat-categories.label': 'Catégories de discussions',
+      'usecases.chat-categories.desc': "Assigner une discussion à une catégorie existante d'un clic, puis créer une toute nouvelle catégorie pour une autre discussion.",
 
       'get.kicker': 'Démarrer',
       'get.h2': 'Lancez-le localement en moins d\'une minute',
@@ -732,6 +759,7 @@ http://localhost:3001</pre>
   const USE_CASE_SLUGS = [
     'create-agent-chat', 'mention-relay', 'permission-flow', 'chat-rename',
     'free-relay', 'observer-agent', 'skill-invocation', 'message-search',
+    'quick-messages', 'model-switch', 'chat-categories',
   ];
 
   const tabsEl = document.getElementById('tabs');
