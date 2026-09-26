@@ -699,6 +699,45 @@ function buildAutoContinueMessage(agent) {
 }
 
 /**
+ * Persists and broadcasts one isSystemNote message per context-compaction
+ * the CLI's own --autocompact (or a manual /compact) reported for this turn
+ * (see agentProcessManager.js's compact_boundary handling) — otherwise
+ * invisible to the user (confirmed directly against the installed CLI
+ * binary: it's a real stream-json event this app never surfaced anywhere).
+ * A no-op for the normal case of zero compactions. Deliberately does NOT
+ * touch the `responded` map runAgentsParallel's callers use for relay
+ * @mention scanning — a compaction note is never itself relay-worthy.
+ * @param {import('../store/db.js').Chat} chat
+ * @param {import('../store/db.js').Agent} agent
+ * @param {{ trigger: 'auto' | 'manual', preTokens: number | null, postTokens: number | null }[] | undefined} compactions
+ * @param {WebSocketServer} wss
+ * @returns {Promise<void>}
+ */
+async function postCompactionNotes(chat, agent, compactions, wss) {
+  for (const { trigger, preTokens, postTokens } of compactions ?? []) {
+    const tokenSummary = preTokens != null && postTokens != null
+      ? `${preTokens.toLocaleString()} → ${postTokens.toLocaleString()} tokens`
+      : 'size unreported';
+    /** @type {import('../store/db.js').Message} */
+    const noteMessage = {
+      id: uuidv4(),
+      chatId: chat.id,
+      role: 'agent',
+      agentId: agent.id,
+      authorName: agent.name,
+      content: `🗜️ Context compacted (${trigger}): ${tokenSummary}`,
+      attachments: [],
+      toolCalls: [],
+      isSystemNote: true,
+      createdAt: new Date().toISOString(),
+    };
+    await addMessage(noteMessage);
+    /** @type {MessageSavedEvent} */
+    broadcast(wss, { type: 'MESSAGE_SAVED', chatId: chat.id, message: noteMessage });
+  }
+}
+
+/**
  * chat.autoContinue's whole mechanism: when an agent's turn errors out on
  * Claude's own session-limit message ("You've hit your session limit ·
  * resets 7:20pm (Australia/Darwin)" — see services/sessionLimitReset.js),
@@ -804,7 +843,7 @@ async function runAgentsParallel(agents, allMembers, chat, userMessage, wss, pri
     log.info({ agentId: agent.id, chatId: chat.id, streamId }, 'turn started');
 
     try {
-      const { text: fullText, permissionDenials, sessionId, stopped, toolCalls, wasLocalCommand, usage, totalCostUsd, durationMs, model } = await runAgentStream({
+      const { text: fullText, permissionDenials, sessionId, stopped, toolCalls, wasLocalCommand, usage, totalCostUsd, durationMs, model, compactions } = await runAgentStream({
         agent,
         chatId: chat.id,
         content,
@@ -889,6 +928,7 @@ async function runAgentsParallel(agents, allMembers, chat, userMessage, wss, pri
         permissionDenials: dedupedDenials,
         stopped,
       });
+      await postCompactionNotes(chat, agent, compactions, wss);
       log.info(
         {
           agentId: agent.id,
@@ -951,6 +991,7 @@ async function runAgentsParallel(agents, allMembers, chat, userMessage, wss, pri
         });
         if (updated) broadcast(wss, { type: 'AGENT_UPDATED', agent: updated });
       }
+      await postCompactionNotes(chat, agent, err.compactions, wss);
       await maybeScheduleAutoContinue(chat, agent, err.message, wss);
     } finally {
       activeStreams.delete(streamId);
