@@ -135,6 +135,15 @@ function buildArgs(agent) {
     '--input-format=stream-json',
     '--output-format=stream-json',
     '--verbose',
+    // Lets the CLI summarize its own older context once a resumed session's
+    // cache grows large, instead of every turn paying to re-read a
+    // multi-million-token history in full (observed directly: a long-running
+    // multi-day agent's cacheReadInputTokens climbing into the millions per
+    // turn, exhausting a freshly-reset session limit within minutes of
+    // resuming — see maybeScheduleAutoContinue's docs in ws/handler.js for
+    // the other half of that incident). Automatic and lossy-but-graceful,
+    // unlike dropping resumeId outright (which forgets everything).
+    '--autocompact', 'auto',
   ];
   if (agent.dangerouslySkipPermissions) {
     args.push('--dangerously-skip-permissions');
