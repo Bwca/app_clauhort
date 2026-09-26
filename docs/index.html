@@ -559,6 +559,8 @@ http://localhost:3001</pre>
       'usecases.model-switch.desc': "Switching an agent's model via its ⋮ menu — picking Custom for a full pinned model ID, then choosing a stable family alias instead.",
       'usecases.chat-categories.label': 'Chat categories',
       'usecases.chat-categories.desc': "Assigning a chat to an existing sidebar category with one click, then creating a brand new category for another chat.",
+      'usecases.agent-budget.label': 'Cost & context budget',
+      'usecases.agent-budget.desc': "Sending a couple of messages and watching the agent panel's cost/context badge grow live as each turn actually spends real tokens.",
 
       'get.kicker': 'Get started',
       'get.h2': 'Run it locally in under a minute',
@@ -696,6 +698,8 @@ http://localhost:3001</pre>
       'usecases.model-switch.desc': "Changer le modèle d'un agent depuis son menu ⋮ — choisir Personnalisé pour un ID de modèle exact, puis opter plutôt pour une famille stable.",
       'usecases.chat-categories.label': 'Catégories de discussions',
       'usecases.chat-categories.desc': "Assigner une discussion à une catégorie existante d'un clic, puis créer une toute nouvelle catégorie pour une autre discussion.",
+      'usecases.agent-budget.label': 'Budget de coût et de contexte',
+      'usecases.agent-budget.desc': "Envoyer quelques messages et regarder le badge de coût/contexte du panneau de l'agent grandir en direct à mesure que chaque tour dépense réellement des jetons.",
 
       'get.kicker': 'Démarrer',
       'get.h2': 'Lancez-le localement en moins d\'une minute',
@@ -764,7 +768,7 @@ http://localhost:3001</pre>
   const USE_CASE_SLUGS = [
     'create-agent-chat', 'mention-relay', 'permission-flow', 'chat-rename',
     'free-relay', 'observer-agent', 'skill-invocation', 'message-search',
-    'quick-messages', 'model-switch', 'chat-categories',
+    'quick-messages', 'model-switch', 'chat-categories', 'agent-budget',
   ];
 
   const tabsEl = document.getElementById('tabs');
