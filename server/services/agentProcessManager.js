@@ -339,6 +339,12 @@ function describeToolUse({ name, input }) {
  *   for a turn that never produced a real assistant event (a pure local
  *   command, or a crash before any output) — see wasLocalCommand's docs
  *   for why "<synthetic>" is excluded here rather than captured as-is.
+ * @property {{ trigger: 'auto' | 'manual', preTokens: number | null, postTokens: number | null }[]} compactions -
+ *   Every `system`/`compact_boundary` event this turn reported (confirmed
+ *   directly against the installed CLI binary's stream-json schema) —
+ *   almost always 0 or 1, an array only in case the CLI ever reports more
+ *   than one in a single turn. Usually empty; see buildArgs' `--autocompact`
+ *   for what triggers this.
  * @property {(event: object) => void} handleEvent
  */
 
@@ -367,6 +373,7 @@ export function createTurnAccumulator({ onChunk, onStatus } = {}) {
     totalCostUsd: null,
     durationMs: null,
     model: null,
+    compactions: [],
     handleEvent(event) {
       if (typeof event.session_id === 'string') turn.sessionId = event.session_id;
 
@@ -414,6 +421,22 @@ export function createTurnAccumulator({ onChunk, onStatus } = {}) {
           if (!call) continue;
           call.result = truncateToolResult(extractToolResultText(block.content));
           call.isError = !!block.is_error;
+        }
+      } else if (event.type === 'system' && event.subtype === 'compact_boundary') {
+        // The CLI's own --autocompact stepping in mid-turn (or a manual
+        // /compact): confirmed directly against the installed binary's
+        // stream-json schema — {"type":"system","subtype":"compact_boundary",
+        // "compact_metadata":{trigger,pre_tokens,post_tokens,...}}. Not
+        // otherwise visible anywhere (see agentProcessManager.js's buildArgs
+        // --autocompact docs) — surfaced here so ws/handler.js can post a
+        // system note into the chat instead of it silently passing.
+        const meta = event.compact_metadata;
+        if (meta) {
+          turn.compactions.push({
+            trigger: meta.trigger ?? 'auto',
+            preTokens: meta.pre_tokens ?? null,
+            postTokens: meta.post_tokens ?? null,
+          });
         }
       } else if (event.type === 'result') {
         turn.resultText = typeof event.result === 'string' ? event.result : turn.fullText;
@@ -646,7 +669,7 @@ export function spawnForAgent(agent) {
  * @param {import('../store/db.js').Agent} agent
  * @param {import('./agentRunner.js').ContentBlock[]} content
  * @param {{ onChunk: (text: string) => void, onStatus?: (status: string) => void, signal?: AbortSignal }} options
- * @returns {Promise<{ text: string, permissionDenials: import('./agentRunner.js').PermissionDenial[], sessionId: string | null, stopped: boolean, toolCalls: ToolCall[], wasLocalCommand: boolean, usage: TurnUsage | null, totalCostUsd: number | null, durationMs: number | null, model: string | null }>}
+ * @returns {Promise<{ text: string, permissionDenials: import('./agentRunner.js').PermissionDenial[], sessionId: string | null, stopped: boolean, toolCalls: ToolCall[], wasLocalCommand: boolean, usage: TurnUsage | null, totalCostUsd: number | null, durationMs: number | null, model: string | null, compactions: { trigger: 'auto' | 'manual', preTokens: number | null, postTokens: number | null }[] }>}
  */
 export function runTurn(agent, content, { onChunk, onStatus, signal }) {
   if (!existsSync(agent.workingDir)) {
@@ -669,7 +692,7 @@ export function runTurn(agent, content, { onChunk, onStatus, signal }) {
  * @param {ManagedProcess} proc
  * @param {import('./agentRunner.js').ContentBlock[]} content
  * @param {{ onChunk: (text: string) => void, onStatus?: (status: string) => void, signal?: AbortSignal }} options
- * @returns {Promise<{ text: string, permissionDenials: import('./agentRunner.js').PermissionDenial[], sessionId: string | null, stopped: boolean, toolCalls: ToolCall[], wasLocalCommand: boolean, usage: TurnUsage | null, totalCostUsd: number | null, durationMs: number | null, model: string | null }>}
+ * @returns {Promise<{ text: string, permissionDenials: import('./agentRunner.js').PermissionDenial[], sessionId: string | null, stopped: boolean, toolCalls: ToolCall[], wasLocalCommand: boolean, usage: TurnUsage | null, totalCostUsd: number | null, durationMs: number | null, model: string | null, compactions: { trigger: 'auto' | 'manual', preTokens: number | null, postTokens: number | null }[] }>}
  */
 function runOneTurn(proc, content, { onChunk, onStatus, signal }) {
   return new Promise((resolve, reject) => {
@@ -702,6 +725,7 @@ function runOneTurn(proc, content, { onChunk, onStatus, signal }) {
         totalCostUsd: turn.totalCostUsd,
         durationMs: turn.durationMs,
         model: turn.model,
+        compactions: turn.compactions,
       });
     };
 
@@ -723,6 +747,7 @@ function runOneTurn(proc, content, { onChunk, onStatus, signal }) {
       err.totalCostUsd = turn.totalCostUsd;
       err.durationMs = turn.durationMs;
       err.model = turn.model;
+      err.compactions = turn.compactions;
       reject(err);
     };
 

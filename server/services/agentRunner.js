@@ -148,6 +148,10 @@ export function dedupePermissionDenials(denials) {
  *   running this turn on (e.g. "claude-sonnet-5") — this app never requests a
  *   model itself, so this is purely observational. Null for a turn with no
  *   real assistant event (a local command, or a crash before any output).
+ * @property {{ trigger: 'auto' | 'manual', preTokens: number | null, postTokens: number | null }[]} compactions -
+ *   Every context-compaction the CLI's own --autocompact (or a manual
+ *   /compact) reported during this turn — see
+ *   agentProcessManager.js's createTurnAccumulator. Usually empty.
  */
 
 /**
