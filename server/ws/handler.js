@@ -485,12 +485,17 @@ export function buildPromptBlocks(agent, chat, members, newMessage, priorMessage
 /**
  * Handles an incoming USER_MESSAGE event.
  * Saves the user message, determines responders, then runs agents sequentially.
- * @param {UserMessageEvent} event
+ * @param {UserMessageEvent & { skipRelay?: boolean }} event - `skipRelay` is
+ *   set by fireScheduledMessage (services/scheduler.js) for an auto-continue
+ *   "please continue" message (see ScheduledMessage.isAutoContinue's docs in
+ *   store/db.js) — it's a private nudge back to the one agent that hit a
+ *   session limit, not new team information, so its reply shouldn't be
+ *   allowed to kick off a freeRelay cascade through the rest of the chat.
  * @param {WebSocketServer} wss
  * @returns {Promise<void>}
  */
 export async function handleUserMessage(event, wss) {
-  const { chatId, content, attachments = [] } = event;
+  const { chatId, content, attachments = [], skipRelay = false } = event;
 
   const chat = getChat(chatId);
   if (!chat) return;
@@ -555,6 +560,11 @@ export async function handleUserMessage(event, wss) {
   //     produces new @mentions, up to FREE_RELAY_MAX_ROUNDS as a safety
   //     ceiling against a genuinely unbounded two-agent back-and-forth
   //     burning cost/time indefinitely.
+  //
+  // Skipped entirely for an auto-continue message (see this function's own
+  // docs) — its reply staying private to the one agent it woke up is the
+  // whole point.
+  if (skipRelay) return;
   let roundMessages = respondedMessages;
   let round = 0;
   while (roundMessages.size > 0) {
@@ -725,6 +735,7 @@ async function maybeScheduleAutoContinue(chat, agent, errorMessage, wss) {
     content: buildAutoContinueMessage(agent),
     attachments: [],
     sendAt: sendAt.toISOString(),
+    isAutoContinue: true,
   });
   scheduleTimer(row, wss);
   log.info({ agentId: agent.id, chatId: chat.id, sendAt: row.sendAt }, 'auto-continue scheduled after session limit');

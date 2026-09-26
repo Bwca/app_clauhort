@@ -184,6 +184,16 @@ function transaction(fn) {
  * @property {Attachment[]} attachments - Attachments to send along with it
  * @property {string} sendAt - ISO 8601 timestamp of when this should fire
  * @property {string} createdAt - ISO 8601 timestamp of when this was scheduled
+ * @property {boolean} [isAutoContinue] - True for a "please continue" message
+ *   maybeScheduleAutoContinue (ws/handler.js) created after a session-limit
+ *   error, as opposed to one a user scheduled by hand via the 🕐 panel.
+ *   fireScheduledMessage (services/scheduler.js) uses this to skip the relay
+ *   step for the resulting reply — it's a private nudge back to the one
+ *   agent that hit the limit, not new information the rest of a
+ *   freeRelay chat's team needs to react to. Reported live: without this,
+ *   a multi-agent freeRelay chat's auto-continue cascaded through the whole
+ *   team's @mentions, each an expensive resumed turn, re-exhausting a
+ *   freshly-reset session limit within minutes.
  */
 
 /**
@@ -256,6 +266,7 @@ CREATE TABLE IF NOT EXISTS scheduled_messages (
   content TEXT NOT NULL,
   attachments TEXT NOT NULL DEFAULT '[]',
   send_at TEXT NOT NULL,
+  is_auto_continue INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_scheduled_messages_send_at ON scheduled_messages(send_at);
@@ -501,6 +512,18 @@ function migrateChatsCategory() {
 }
 
 /**
+ * Adds the `is_auto_continue` column to `scheduled_messages` if it's
+ * missing, same reasoning as migrateAgentsAllowedToolPatterns above.
+ * @returns {void}
+ */
+function migrateScheduledMessagesAutoContinue() {
+  const hasColumn = db.prepare("PRAGMA table_info(scheduled_messages)").all()
+    .some((col) => col.name === 'is_auto_continue');
+  if (hasColumn) return;
+  db.exec('ALTER TABLE scheduled_messages ADD COLUMN is_auto_continue INTEGER NOT NULL DEFAULT 0');
+}
+
+/**
  * Maps a raw `agents` row to the public Agent shape.
  * @param {Record<string, unknown>} row
  * @returns {Agent}
@@ -573,7 +596,7 @@ function rowToMessage(row) {
  * @returns {ScheduledMessage}
  */
 function rowToScheduledMessage(row) {
-  return {
+  const msg = {
     id: row.id,
     chatId: row.chat_id,
     content: row.content,
@@ -581,6 +604,8 @@ function rowToScheduledMessage(row) {
     sendAt: row.send_at,
     createdAt: row.created_at,
   };
+  if (row.is_auto_continue) msg.isAutoContinue = true;
+  return msg;
 }
 
 /**
@@ -674,6 +699,7 @@ export async function loadDb() {
   migrateChatsFreeRelay();
   migrateChatsAutoContinue();
   migrateChatsCategory();
+  migrateScheduledMessagesAutoContinue();
 
   if (!isMemory && isNewDatabase && existsSync(JSON_DATA_FILE)) {
     importLegacyJson();
@@ -1303,9 +1329,9 @@ export function getAllScheduledMessages() {
 export async function createScheduledMessage(data) {
   const createdAt = new Date().toISOString();
   db.prepare(`
-    INSERT INTO scheduled_messages (id, chat_id, content, attachments, send_at, created_at)
-    VALUES (?, ?, ?, ?, ?, ?)
-  `).run(data.id, data.chatId, data.content, JSON.stringify(data.attachments ?? []), data.sendAt, createdAt);
+    INSERT INTO scheduled_messages (id, chat_id, content, attachments, send_at, is_auto_continue, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run(data.id, data.chatId, data.content, JSON.stringify(data.attachments ?? []), data.sendAt, data.isAutoContinue ? 1 : 0, createdAt);
   return rowToScheduledMessage(
     db.prepare('SELECT * FROM scheduled_messages WHERE id = ?').get(data.id)
   );

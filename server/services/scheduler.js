@@ -4,7 +4,8 @@
  * USER_MESSAGE — @mention targeting (a specific agent, or everyone) is
  * resolved fresh at fire time by handleUserMessage/parseResponders, exactly
  * as it would be for a message typed live, so there's no separate
- * "who responds" logic here.
+ * "who responds" logic here. The one difference: an auto-continue message
+ * (row.isAutoContinue) suppresses the relay step — see fireScheduledMessage.
  */
 
 import {
@@ -43,7 +44,17 @@ async function fireScheduledMessage(id, wss) {
 
   broadcast(wss, { type: 'SCHEDULED_MESSAGE_FIRED', chatId: row.chatId, id });
   await handleUserMessage(
-    { type: 'USER_MESSAGE', chatId: row.chatId, content: row.content, attachments: row.attachments },
+    {
+      type: 'USER_MESSAGE',
+      chatId: row.chatId,
+      content: row.content,
+      attachments: row.attachments,
+      // See ScheduledMessage.isAutoContinue's docs (store/db.js) and
+      // handleUserMessage's skipRelay param — an auto-continue "please
+      // continue" is a private nudge to one agent, not information that
+      // should fan out through the rest of a freeRelay chat's team.
+      skipRelay: row.isAutoContinue,
+    },
     wss
   );
 }
