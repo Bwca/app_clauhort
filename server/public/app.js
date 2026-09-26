@@ -27,6 +27,13 @@ import { APP_VERSION } from './appVersion.js';
  * @property {string} [modelOverride] - User-requested model ("opus", "sonnet",
  *   a full model ID, …), passed to the CLI as `--model`. Absent means the CLI
  *   decides on its own.
+ * @property {number} cumulativeCostUsd - Running total cost (USD) across
+ *   every turn this agent has ever run, successful or errored. 0 for a
+ *   brand-new agent.
+ * @property {number} [lastContextTokens] - Roughly what the agent's most
+ *   recent turn spent just resuming its session (input + cache-creation +
+ *   cache-read tokens) before producing anything new. Absent until the
+ *   agent's first turn — see formatUsageLabel.
  * @property {string} createdAt
  */
 
@@ -663,6 +670,16 @@ function shortDir(dir) {
 const MODEL_ALIASES = ['opus', 'sonnet', 'haiku', 'fable'];
 
 /**
+ * Above this many tokens, an agent's most recent lastContextTokens (see its
+ * docs in server/store/db.js) gets a visually distinct warning treatment in
+ * the agent panel — this is well past the point where --autocompact should
+ * have already stepped in (agentProcessManager.js's buildArgs), so a badge
+ * still showing this much is worth a second look, not just background info.
+ * Not a hard limit of any kind — purely a display threshold.
+ */
+const USAGE_HIGH_CONTEXT_TOKENS = 2_000_000;
+
+/**
  * Turns a raw model ID the CLI reported (e.g. "claude-sonnet-5",
  * "claude-opus-4-1-20250805", or an older "claude-3-5-sonnet-20241022")
  * into a short display label ("Sonnet 5", "Opus 4.1", "Sonnet 3.5"). No
@@ -679,6 +696,30 @@ function formatModelLabel(model) {
   const withoutDate = model.replace(/-\d{8}$/, '');
   const version = withoutDate.split('-').filter((p) => /^\d+$/.test(p)).join('.');
   return version ? `${family} ${version}` : family;
+}
+
+/**
+ * Formats an agent's running cost + last-turn context size into one compact
+ * label (e.g. "$12.45 · 9.7M ctx") for the agent panel — the number that
+ * answers "is this session's resumed context big enough that it's worth
+ * starting fresh (remove + re-add the agent) instead of letting it keep
+ * growing?" (see lastContextTokens's docs in server/store/db.js). Token
+ * counts are rounded to one decimal place at the nearest K/M so the label
+ * stays short — this is a rough sense of scale, not an exact accounting
+ * (the log file's per-turn numbers are exact, if ever needed).
+ * @param {number} cumulativeCostUsd
+ * @param {number} [lastContextTokens]
+ * @returns {string}
+ */
+function formatUsageLabel(cumulativeCostUsd, lastContextTokens) {
+  const cost = `$${cumulativeCostUsd.toFixed(2)}`;
+  if (lastContextTokens == null) return cost;
+  const tokens = lastContextTokens >= 1_000_000
+    ? `${(lastContextTokens / 1_000_000).toFixed(1)}M`
+    : lastContextTokens >= 1_000
+      ? `${(lastContextTokens / 1_000).toFixed(1)}K`
+      : String(lastContextTokens);
+  return `${cost} · ${tokens} ctx`;
 }
 
 /**
@@ -2723,6 +2764,7 @@ function renderAgentPanel() {
         <span class="agent-name" data-testid="agent-name">${escHtml(agent.name)}${hasUnseen ? ` <span class="agent-unseen-dot" data-testid="agent-unseen-dot" title="${t('agent.unseenOutsideFocusTitle', { name: agent.name })}"></span>` : ''}${agent.dangerouslySkipPermissions ? ` <span class="agent-yolo-badge" data-testid="agent-yolo-badge" title="${t('agent.yoloBadgeTitle')}">🔥</span>` : ''}${agent.isObserver ? ` <span class="agent-observer-badge" data-testid="agent-observer-badge" title="${t('agent.observerBadgeTitle')}">👁</span>` : ''}${agent.chromeAccess ? ` <span class="agent-chrome-badge" data-testid="agent-chrome-badge" title="${t('agent.chromeBadgeTitle')}">🌐</span>` : ''}</span>
         <span class="agent-dir" title="${escHtml(agent.workingDir)}">${escHtml(shortDir(agent.workingDir))}</span>
         ${agent.model ? `<span class="agent-model" data-testid="agent-model" title="${t('agent.modelTitle', { model: escHtml(agent.model) })}">🧠 ${escHtml(formatModelLabel(agent.model))}</span>` : ''}
+        ${agent.cumulativeCostUsd > 0 ? `<span class="agent-usage${(agent.lastContextTokens ?? 0) > USAGE_HIGH_CONTEXT_TOKENS ? ' agent-usage-high' : ''}" data-testid="agent-usage" title="${(agent.lastContextTokens ?? 0) > USAGE_HIGH_CONTEXT_TOKENS ? t('agent.usageHighTitle') : t('agent.usageTitle')}">💰 ${formatUsageLabel(agent.cumulativeCostUsd, agent.lastContextTokens)}</span>` : ''}
         ${agent.note ? `<span class="agent-note" data-testid="agent-note" title="${escHtml(agent.note)}">📝 ${escHtml(agent.note)}</span>` : ''}
         ${agent.resumeId ? `<button class="agent-session-btn" data-testid="agent-session-btn" title="${t('agent.copySessionTitle', { resumeId: escHtml(agent.resumeId) })}">⧉ ${agent.resumeId.slice(0, 8)}…</button>` : ''}
       </div>

@@ -138,6 +138,8 @@ export default {
   'agent.chromeBadgeTitle': "Accès au navigateur — cet agent peut contrôler votre navigateur Chrome via l'extension Claude in Chrome",
   'agent.modelTitle': 'Dernier modèle utilisé par cet agent : {model}',
   'agent.switchModelTitle': 'Changer de modèle',
+  'agent.usageTitle': "Coût cumulatif de tous les tours de cet agent, et la taille du contexte repris lors de son dernier tour (approximativement ce qu'il en coûte juste pour reprendre cette session avant qu'elle ne dise quoi que ce soit de nouveau)",
+  'agent.usageHighTitle': "Le contexte repris de cet agent est devenu très volumineux — chaque tour consacre maintenant une grande partie de son budget juste à le relire. Envisagez de retirer puis de rajouter l'agent pour démarrer une session fraîche s'il continue à atteindre rapidement ses limites de session.",
   'agent.addNoteTitle': 'Ajouter une note',
   'agent.editNoteTitle': 'Modifier la note',
   'agent.notePlaceholder': 'p. ex. Refonte du module de paiement',
