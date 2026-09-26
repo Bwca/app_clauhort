@@ -112,6 +112,22 @@ function transaction(fn) {
  *   model-specific, so a switch costs a one-time full cache rebuild, not a
  *   fresh conversation) — so changing it must evict the running process the
  *   same way those do (see PATCH /api/agents/:id's flagsChanged).
+ * @property {number} cumulativeCostUsd - Running total of the CLI's own
+ *   `total_cost_usd` across every turn this agent has ever run (successful
+ *   or errored — an errored turn, e.g. a session-limit failure, still spent
+ *   real money before it hit the wall). Never resets on its own; 0 for a
+ *   brand-new agent. Purely informational, shown in the agent panel so a
+ *   long-running agent's actual spend is visible instead of only ever
+ *   showing up in the log file after the fact.
+ * @property {number} [lastContextTokens] - inputTokens + cacheCreationInputTokens
+ *   + cacheReadInputTokens from this agent's most recent turn — i.e. roughly
+ *   what it costs just to resume this session and read back its accumulated
+ *   history, before any new output. Undefined until the first real turn.
+ *   The number that answers "is this session's cache big enough that I
+ *   should consider starting fresh (remove + re-add the agent) instead of
+ *   letting it keep growing?" — see --autocompact in
+ *   agentProcessManager.js's buildArgs for the automatic mitigation, and
+ *   this field for the manual decision.
  * @property {string} createdAt - ISO 8601 timestamp
  */
 
@@ -222,6 +238,8 @@ CREATE TABLE IF NOT EXISTS agents (
   note TEXT,
   last_known_model TEXT,
   model_override TEXT,
+  cumulative_cost_usd REAL NOT NULL DEFAULT 0,
+  last_context_tokens INTEGER,
   created_at TEXT NOT NULL
 );
 
@@ -403,6 +421,24 @@ function migrateAgentsModelOverride() {
 }
 
 /**
+ * Adds the `cumulative_cost_usd` and `last_context_tokens` columns to
+ * `agents` if missing, same reasoning as migrateAgentsAllowedToolPatterns
+ * above. cumulative_cost_usd defaults to 0 (matching the column default)
+ * rather than NULL, since every agent — even one pre-dating this migration
+ * — has spent $0 as far as this app has ever recorded.
+ * @returns {void}
+ */
+function migrateAgentsUsageStats() {
+  const columns = db.prepare("PRAGMA table_info(agents)").all().map((col) => col.name);
+  if (!columns.includes('cumulative_cost_usd')) {
+    db.exec('ALTER TABLE agents ADD COLUMN cumulative_cost_usd REAL NOT NULL DEFAULT 0');
+  }
+  if (!columns.includes('last_context_tokens')) {
+    db.exec('ALTER TABLE agents ADD COLUMN last_context_tokens INTEGER');
+  }
+}
+
+/**
  * Adds the `tool_calls` column to `messages` if it's missing — needed for
  * any database created before this column existed, since `CREATE TABLE IF
  * NOT EXISTS` in SCHEMA only applies to brand-new databases. A no-op (one
@@ -547,6 +583,8 @@ function rowToAgent(row) {
   if (row.note) agent.note = row.note;
   if (row.last_known_model) agent.model = row.last_known_model;
   if (row.model_override) agent.modelOverride = row.model_override;
+  agent.cumulativeCostUsd = row.cumulative_cost_usd;
+  if (row.last_context_tokens != null) agent.lastContextTokens = row.last_context_tokens;
   return agent;
 }
 
@@ -694,6 +732,7 @@ export async function loadDb() {
   migrateAgentsNote();
   migrateAgentsLastKnownModel();
   migrateAgentsModelOverride();
+  migrateAgentsUsageStats();
   migrateChatMembersUniqueAgent();
   migrateChatsRosterChangedAt();
   migrateChatsFreeRelay();
@@ -812,6 +851,25 @@ export async function setAgentResumeIdIfUnset(id, resumeId) {
  */
 export async function setAgentModel(id, model) {
   const result = db.prepare('UPDATE agents SET last_known_model = ? WHERE id = ? AND last_known_model IS NOT ?').run(model, id, model);
+  return result.changes > 0 ? getAgent(id) : null;
+}
+
+/**
+ * Records one turn's cost/context accounting: adds to the agent's running
+ * cumulativeCostUsd (never reset — a full history of real spend) and
+ * overwrites lastContextTokens (only the most recent turn matters there —
+ * see its docs). Called for both a completed AND an errored turn, since an
+ * errored one (e.g. a session-limit failure) still spent real tokens before
+ * hitting the wall — same reasoning as the 'turn errored' log line in
+ * ws/handler.js already capturing usage off the Error object.
+ * @param {string} id
+ * @param {{ totalCostUsd: number | null, contextTokens: number | null }} usage
+ * @returns {Promise<Agent | null>} the updated agent, or null if not found
+ */
+export async function setAgentUsage(id, { totalCostUsd, contextTokens }) {
+  const result = db.prepare(`
+    UPDATE agents SET cumulative_cost_usd = cumulative_cost_usd + ?, last_context_tokens = ? WHERE id = ?
+  `).run(totalCostUsd ?? 0, contextTokens ?? null, id);
   return result.changes > 0 ? getAgent(id) : null;
 }
 

@@ -6,7 +6,7 @@
 import { WebSocket, WebSocketServer } from 'ws';
 import { v4 as uuidv4 } from 'uuid';
 import { dirname } from 'path';
-import { getChat, getAgent, getAgentChatId, getMessages, addMessage, grantAgentPath, grantAgentToolPattern, setAgentResumeIdIfUnset, setAgentModel, getUserDisplayName, createScheduledMessage, getScheduledMessages } from '../store/db.js';
+import { getChat, getAgent, getAgentChatId, getMessages, addMessage, grantAgentPath, grantAgentToolPattern, setAgentResumeIdIfUnset, setAgentModel, setAgentUsage, getUserDisplayName, createScheduledMessage, getScheduledMessages } from '../store/db.js';
 import { parseResponders, extractMentionedAgents, parseSkillInvocation } from '../services/messageRouter.js';
 import { runAgentStream, FILE_PATH_TOOLS, deriveToolPatterns, dedupePermissionDenials } from '../services/agentRunner.js';
 import { killAgent, onBackgroundTurn } from '../services/agentProcessManager.js';
@@ -840,6 +840,13 @@ async function runAgentsParallel(agents, allMembers, chat, userMessage, wss, pri
         const updated = await setAgentModel(agent.id, model);
         if (updated) broadcast(wss, { type: 'AGENT_UPDATED', agent: updated });
       }
+      if (usage) {
+        const updated = await setAgentUsage(agent.id, {
+          totalCostUsd,
+          contextTokens: usage.inputTokens + usage.cacheCreationInputTokens + usage.cacheReadInputTokens,
+        });
+        if (updated) broadcast(wss, { type: 'AGENT_UPDATED', agent: updated });
+      }
 
       /** @type {import('../store/db.js').Message} */
       const agentMessage = {
@@ -933,6 +940,13 @@ async function runAgentsParallel(agents, allMembers, chat, userMessage, wss, pri
         },
         'turn errored'
       );
+      if (err.usage) {
+        const updated = await setAgentUsage(agent.id, {
+          totalCostUsd: err.totalCostUsd,
+          contextTokens: err.usage.inputTokens + err.usage.cacheCreationInputTokens + err.usage.cacheReadInputTokens,
+        });
+        if (updated) broadcast(wss, { type: 'AGENT_UPDATED', agent: updated });
+      }
       await maybeScheduleAutoContinue(chat, agent, err.message, wss);
     } finally {
       activeStreams.delete(streamId);
