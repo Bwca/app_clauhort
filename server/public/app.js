@@ -524,7 +524,6 @@ const appTitleEl       = $('#app-title');
 const appVersionEl     = $('#app-version');
 const connDot          = $('#conn-dot');
 const chatList         = $('#chat-list');
-const categoryDatalist = $('#category-datalist');
 const newChatBtn       = $('#new-chat-btn');
 const newChatForm      = $('#new-chat-form');
 const newChatInput     = $('#new-chat-input');
@@ -2413,14 +2412,15 @@ function buildChatItem(chat) {
     <span class="chat-item-name" data-testid="chat-item-name" title="${escHtml(chat.name)}">${t('chat.channelName', { name: escHtml(chat.name) })}</span>
     <button class="chat-tag-btn" data-testid="chat-tag-btn" data-tag-chat="${chat.id}" title="${t('category.assignTitle')}">🏷️</button>
     <button class="chat-rename-btn" data-testid="chat-rename-btn" data-rename-chat="${chat.id}" title="${t('chat.renameTitle')}">✏️</button>
-    <button class="chat-del-btn" data-testid="chat-del-btn" data-del-chat="${chat.id}" title="${t('chat.deleteTitle')}">×</button>`;
+    <button class="chat-del-btn" data-testid="chat-del-btn" data-del-chat="${chat.id}" title="${t('chat.deleteTitle')}">×</button>
+    <ul class="category-menu" data-testid="category-menu" hidden></ul>`;
   li.addEventListener('click', (e) => {
     if (e.target.closest('[data-del-chat], [data-rename-chat], [data-tag-chat]')) return;
     selectChat(chat.id);
   });
   li.querySelector('[data-tag-chat]').addEventListener('click', (e) => {
     e.stopPropagation();
-    startCategoryEdit(chat, li);
+    openCategoryMenu(chat, li);
   });
   li.querySelector('[data-rename-chat]').addEventListener('click', (e) => {
     e.stopPropagation();
@@ -2459,8 +2459,6 @@ function renderChatList() {
   const namedKeys = [...groups.keys()].filter((k) => k !== UNCATEGORIZED_KEY).sort((a, b) => a.localeCompare(b));
   const orderedKeys = groups.has(UNCATEGORIZED_KEY) ? [UNCATEGORIZED_KEY, ...namedKeys] : namedKeys;
   const collapsed = getCollapsedCategories();
-
-  categoryDatalist.innerHTML = namedKeys.map((k) => `<option value="${escHtml(k)}"></option>`).join('');
 
   for (const key of orderedKeys) {
     const groupChats = groups.get(key);
@@ -2560,57 +2558,88 @@ function startRenameChat(chat, li) {
 }
 
 /**
- * Swaps a sidebar chat item's name span for a text input (autocompleted
- * against #category-datalist, populated with every category currently in
- * use) so the chat's category can be set/cleared in place. Same
- * commit-on-Enter/blur, cancel-on-Escape shape as startRenameChat, but
- * PATCHes `category` instead of `name`, and a blank value is a valid commit
- * (clears the category — the chat falls back to Uncategorized) rather than
- * being ignored.
+ * Closes every open category-picker popover (there should only ever be one,
+ * but this is called defensively before opening another).
+ */
+function closeAllCategoryMenus() {
+  for (const menu of chatList.querySelectorAll('.category-menu:not([hidden])')) {
+    menu.hidden = true;
+  }
+}
+
+/**
+ * Opens (or, on a second click, closes) the category-picker popover for one
+ * sidebar chat row: every category already in use across `chats` is a
+ * one-click row — no retyping a name that already exists, unlike the old
+ * free-text input (backed by a `<datalist>`, whose browser-native suggestion
+ * popup turned out to be easy to miss) — plus "Uncategorized" to clear (only
+ * shown when the chat currently has a category) and a "+ New category" row
+ * that reveals an inline text input for a name that doesn't exist yet.
  * @param {Chat} chat
  * @param {HTMLElement} li
  */
-function startCategoryEdit(chat, li) {
-  const nameSpan = li.querySelector('[data-testid="chat-item-name"]');
-  if (!nameSpan || li.querySelector('.chat-rename-input')) return;
+function openCategoryMenu(chat, li) {
+  const menu = li.querySelector('.category-menu');
+  if (!menu) return;
+  const wasHidden = menu.hidden;
+  closeAllCategoryMenus();
+  if (!wasHidden) return;
 
-  const input = document.createElement('input');
-  input.type = 'text';
-  input.className = 'chat-rename-input';
-  input.dataset.testid = 'chat-category-input';
-  input.placeholder = t('category.assignPlaceholder');
-  input.setAttribute('list', 'category-datalist');
-  input.value = chat.category ?? '';
-  nameSpan.replaceWith(input);
-  input.focus();
-  input.select();
-
-  let settled = false;
-  const finish = async (commit) => {
-    if (settled) return;
-    settled = true;
-    const newCategory = input.value.trim() || null;
-    if (commit && newCategory !== (chat.category ?? null)) {
-      const res = await fetch(`/api/chats/${chat.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ category: newCategory }),
-      });
-      if (res.ok) {
-        const updated = /** @type {Chat} */ (await res.json());
-        const idx = chats.findIndex((c) => c.id === updated.id);
-        if (idx !== -1) chats[idx] = updated;
-      }
+  const commit = async (category) => {
+    menu.hidden = true;
+    if (category === (chat.category ?? null)) return;
+    const res = await fetch(`/api/chats/${chat.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ category }),
+    });
+    if (res.ok) {
+      const updated = /** @type {Chat} */ (await res.json());
+      const idx = chats.findIndex((c) => c.id === updated.id);
+      if (idx !== -1) chats[idx] = updated;
     }
     renderChatList();
   };
 
-  input.addEventListener('click', (e) => e.stopPropagation());
-  input.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') { e.preventDefault(); finish(true); }
-    else if (e.key === 'Escape') { e.preventDefault(); finish(false); }
+  const existingCategories = [...new Set(chats.map((c) => c.category).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  menu.innerHTML = '';
+  if (chat.category) {
+    const clearItem = document.createElement('li');
+    clearItem.innerHTML = `<button data-testid="category-menu-clear">${t('category.uncategorizedLabel')}</button>`;
+    clearItem.querySelector('button').addEventListener('click', () => commit(null));
+    menu.appendChild(clearItem);
+  }
+  for (const name of existingCategories) {
+    const item = document.createElement('li');
+    item.innerHTML = `<button class="${name === chat.category ? 'active' : ''}" data-testid="category-menu-item">${escHtml(name)}</button>`;
+    item.querySelector('button').addEventListener('click', () => commit(name));
+    menu.appendChild(item);
+  }
+  const newItem = document.createElement('li');
+  newItem.innerHTML = `<button data-testid="category-menu-new-btn">+ ${t('category.newCategoryOption')}</button>`;
+  newItem.querySelector('button').addEventListener('click', (e) => {
+    // Stop the bubble here — swapping this button for an input below detaches
+    // it from the DOM before the event finishes propagating, so the
+    // document-level "click outside" listener would otherwise see a
+    // disconnected e.target (.closest() returns null on it) and immediately
+    // close the menu this click just opened.
+    e.stopPropagation();
+    newItem.innerHTML = `<input type="text" class="category-menu-input" data-testid="category-menu-input" placeholder="${t('category.newCategoryPlaceholder')}" />`;
+    const input = newItem.querySelector('input');
+    input.focus();
+    input.addEventListener('click', (e) => e.stopPropagation());
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); commit(input.value.trim() || null); }
+      else if (e.key === 'Escape') { e.preventDefault(); menu.hidden = true; }
+    });
+    input.addEventListener('blur', () => {
+      const value = input.value.trim();
+      if (value) commit(value); else menu.hidden = true;
+    });
   });
-  input.addEventListener('blur', () => finish(true));
+  menu.appendChild(newItem);
+
+  menu.hidden = false;
 }
 
 /**
@@ -4213,6 +4242,9 @@ document.addEventListener('click', (e) => {
   }
   if (!e.target.closest('.agent-menu-wrap')) {
     closeAllAgentMenus();
+  }
+  if (!e.target.closest('.category-menu')) {
+    closeAllCategoryMenus();
   }
 });
 
