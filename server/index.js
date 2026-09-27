@@ -115,6 +115,9 @@ process.on('SIGINT', gracefulShutdown);
 await loadDb();
 initScheduler(wss);
 initAgentProcesses();
-server.listen(PORT, () => {
+// Bound explicitly to loopback: agents can execute real shell/file tools
+// against the host filesystem, so this must never be reachable from the
+// network, regardless of the host's firewall configuration.
+server.listen(PORT, '127.0.0.1', () => {
   log.info({ port: PORT }, `${APP_NAME} running on http://localhost:${PORT}`);
 });
