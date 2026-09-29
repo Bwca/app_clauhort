@@ -496,13 +496,20 @@ export function buildPromptBlocks(agent, chat, members, newMessage, priorMessage
  *   session limit, not new team information, so its reply shouldn't be
  *   allowed to kick off a freeRelay cascade through the rest of the chat.
  * @param {WebSocketServer} wss
- * @returns {Promise<void>}
+ * @returns {Promise<{ userMessage: import('../store/db.js').Message | null, replies: import('../store/db.js').Message[] }>}
+ *   `replies` is every agent Message this call produced, flattened across
+ *   the initial responders and any relay rounds, in the order each batch
+ *   resolved — not nested by round. Both existing callers (this file's own
+ *   WS dispatch, and services/scheduler.js's fireScheduledMessage) ignore
+ *   the return value; it exists so an in-process caller (the MCP `send_message`
+ *   tool, server/mcp/tools.js) can await a real reply instead of firing and
+ *   forgetting, without needing a WS client of its own.
  */
 export async function handleUserMessage(event, wss) {
   const { chatId, content, attachments = [], skipRelay = false } = event;
 
   const chat = getChat(chatId);
-  if (!chat) return;
+  if (!chat) return { userMessage: null, replies: [] };
 
   // Captured BEFORE this turn's own message is persisted below, so that
   // message never shows up twice — once here, once as the turn's own final
@@ -537,7 +544,7 @@ export async function handleUserMessage(event, wss) {
   // recognizes a command when it's the start of the message it sees.
   const skillInvocation = parseSkillInvocation(content, members);
   const responders = skillInvocation ? [skillInvocation.agent] : parseResponders(content, members);
-  if (responders.length === 0) return;
+  if (responders.length === 0) return { userMessage, replies: [] };
 
   /** @type {NewUserMessage} */
   const originalMessage = { content, attachments };
@@ -545,6 +552,7 @@ export async function handleUserMessage(event, wss) {
   const newMessage = skillInvocation ? { content: skillInvocation.command, attachments } : originalMessage;
 
   const respondedMessages = await runAgentsParallel(responders, members, chat, newMessage, wss, priorMessages, userMessage.id);
+  const allReplies = [...respondedMessages.values()];
 
   // Relay: parse each round's just-saved agent responses for @mentions of
   // teammates, and trigger those teammates too, using the MENTIONING
@@ -568,7 +576,7 @@ export async function handleUserMessage(event, wss) {
   // Skipped entirely for an auto-continue message (see this function's own
   // docs) — its reply staying private to the one agent it woke up is the
   // whole point.
-  if (skipRelay) return;
+  if (skipRelay) return { userMessage, replies: allReplies };
   let roundMessages = respondedMessages;
   let round = 0;
   while (roundMessages.size > 0) {
@@ -627,9 +635,12 @@ export async function handleUserMessage(event, wss) {
     for (const result of results) {
       if (result.status === 'fulfilled') for (const [id, msg] of result.value) nextRoundMessages.set(id, msg);
     }
+    allReplies.push(...nextRoundMessages.values());
     roundMessages = nextRoundMessages;
     round++;
   }
+
+  return { userMessage, replies: allReplies };
 }
 
 /**
