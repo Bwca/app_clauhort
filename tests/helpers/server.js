@@ -17,9 +17,14 @@ let serverProcess = null;
 
 /**
  * Spawns the server process and waits until /health responds.
+ * @param {Record<string, string>} [envOverrides] - Extra/overriding env vars
+ *   for this one spawn — e.g. `{ MCP_AUTH_TOKEN: 'test-token' }` for a suite
+ *   that needs the MCP server mounted, which every other suite leaves unset
+ *   (mirrors the base env's own APP_TRANSCRIPT_LOG-clearing reasoning below:
+ *   only the suite that actually needs a var should be the one setting it).
  * @returns {Promise<void>}
  */
-export async function startServer() {
+export async function startServer(envOverrides = {}) {
   serverProcess = spawn('node', ['index.js'], {
     // fileURLToPath, not raw `.pathname` — see tests/run.js for why.
     cwd: fileURLToPath(new URL('../../server', import.meta.url)),
@@ -29,7 +34,7 @@ export async function startServer() {
     // the suite happens to have it set globally for their own debugging,
     // test runs would otherwise non-deterministically start writing
     // transcript files to disk.
-    env: { ...process.env, PORT: String(TEST_PORT), APP_DB_FILE: ':memory:', APP_LOG_LEVEL: 'silent', APP_TRANSCRIPT_LOG: '' },
+    env: { ...process.env, PORT: String(TEST_PORT), APP_DB_FILE: ':memory:', APP_LOG_LEVEL: 'silent', APP_TRANSCRIPT_LOG: '', ...envOverrides },
   });
 
   serverProcess.stderr.on('data', (d) => process.stderr.write(`[server] ${d}`));
