@@ -14,6 +14,7 @@ import createChatsRouter from './routes/chats.js';
 import browseRouter from './routes/browse.js';
 import settingsRouter from './routes/settings.js';
 import quickMessagesRouter from './routes/quickMessages.js';
+import { mountMcp } from './mcp/index.js';
 import { handleConnection } from './ws/handler.js';
 import { initScheduler } from './services/scheduler.js';
 import { spawnForAgent, killAll } from './services/agentProcessManager.js';
@@ -65,6 +66,8 @@ app.use('/api/chats', createChatsRouter(wss));
 app.use('/api/browse', browseRouter);
 app.use('/api/settings', settingsRouter);
 app.use('/api/quick-messages', quickMessagesRouter);
+
+mountMcp(app, wss);
 
 app.get('/health', (_req, res) => res.json({ status: 'ok' }));
 
