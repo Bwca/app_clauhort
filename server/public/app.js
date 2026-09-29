@@ -2516,7 +2516,7 @@ function buildChatItem(chat) {
     <ul class="category-menu" data-testid="category-menu" hidden></ul>`;
   li.addEventListener('click', (e) => {
     if (e.target.closest('[data-del-chat], [data-rename-chat], [data-tag-chat]')) return;
-    selectChat(chat.id);
+    selectChat(chat.id, { push: true });
   });
   li.querySelector('[data-tag-chat]').addEventListener('click', (e) => {
     e.stopPropagation();
@@ -2976,18 +2976,52 @@ async function changeAgentModel(agent) {
 
 // ─── Chat actions ────────────────────────────────────────────────────────────
 
-/** sessionStorage key for the last-active chat — per-tab, cleared when the
- * tab closes, and never visible in the URL/address bar. */
+/** sessionStorage key for the last-active chat — per-tab fallback for
+ * restoring the chat view on a bare "/" visit (no ?chat= in the URL), e.g.
+ * a stale bookmark from before this existed. The URL (see CHAT_URL_PARAM
+ * below) is the primary source of truth now, since it's what makes a chat
+ * shareable — sessionStorage only covers the case the URL doesn't. */
 const ACTIVE_CHAT_STORAGE_KEY = 'app.activeChatId';
+
+/** Query param a chat's id is mirrored into (?chat=<id>), so the address bar
+ * can be copied and pasted elsewhere (another tab, another Claude instance,
+ * a teammate) to reopen this exact chat. See syncChatIdToUrl/getChatIdFromUrl. */
+const CHAT_URL_PARAM = 'chat';
+
+/**
+ * Reads the ?chat=<id> query param from the current URL, if present.
+ * @returns {string | null}
+ */
+function getChatIdFromUrl() {
+  return new URLSearchParams(location.search).get(CHAT_URL_PARAM);
+}
+
+/**
+ * Mirrors `id` into the ?chat= query param (or removes it, when `id` is
+ * null) without a page reload. `push` adds a new browser-history entry so
+ * Back/Forward step through chat switches; omit it (the default) to replace
+ * the current entry in place instead — used for the initial URL/
+ * sessionStorage-driven restore on load and for popstate-triggered
+ * switches, neither of which should themselves become a new Back stop.
+ * @param {string | null} id
+ * @param {{ push?: boolean }} [opts]
+ */
+function syncChatIdToUrl(id, { push = false } = {}) {
+  const url = new URL(location.href);
+  if (id) url.searchParams.set(CHAT_URL_PARAM, id);
+  else url.searchParams.delete(CHAT_URL_PARAM);
+  history[push ? 'pushState' : 'replaceState'](null, '', url);
+}
 
 /**
  * Clears the chat view back to "no chat selected" — used when deleting the
- * active chat, and when the id restored from sessionStorage no longer
- * corresponds to a real chat (e.g. it was deleted in another tab).
+ * active chat, and when the id restored from the URL/sessionStorage no
+ * longer corresponds to a real chat (e.g. it was deleted in another tab).
  */
 function showEmptyChatState() {
   activeChatId = null;
   sessionStorage.removeItem(ACTIVE_CHAT_STORAGE_KEY);
+  syncChatIdToUrl(null);
   emptyState.hidden = false;
   chatView.hidden = true;
   pendingScheduledMessages = [];
@@ -2995,13 +3029,6 @@ function showEmptyChatState() {
   renderAgentPanel();
 }
 
-/**
- * Switches the active chat, loads its message history, and re-renders.
- * Also remembers the choice in sessionStorage so a refresh returns to the
- * same chat instead of always landing back on "no chat selected" —
- * deliberately not the URL, so the chat id is never exposed there.
- * @param {string} id
- */
 /**
  * Reflects the active chat's freeRelay setting on #free-relay-btn.
  */
@@ -3061,9 +3088,22 @@ async function toggleAutoContinue() {
   renderAutoContinueBtn();
 }
 
-async function selectChat(id) {
+/**
+ * Switches the active chat, loads its message history, and re-renders.
+ * Mirrors the choice into both sessionStorage and the URL's ?chat= param
+ * (see ACTIVE_CHAT_STORAGE_KEY/syncChatIdToUrl) so a refresh — or pasting
+ * the address bar elsewhere — returns to the same chat instead of always
+ * landing back on "no chat selected".
+ * @param {string} id
+ * @param {{ push?: boolean }} [opts] - Forwarded to syncChatIdToUrl; pass
+ *   `{ push: true }` for a user-driven switch (sidebar click, new chat) so
+ *   Back/Forward can step through it. Omit for a programmatic restore
+ *   (initial load, popstate) that shouldn't itself add a history entry.
+ */
+async function selectChat(id, opts = {}) {
   activeChatId = id;
   sessionStorage.setItem(ACTIVE_CHAT_STORAGE_KEY, id);
+  syncChatIdToUrl(id, opts);
   unreadChatIds.delete(id);
   messageFilterAgentIds.clear();
   unseenOutsideFocusAgentIds.clear();
@@ -3124,7 +3164,7 @@ async function createChat(name) {
   const chat = /** @type {Chat} */ (await res.json());
   chats.push(chat);
   renderChatList();
-  await selectChat(chat.id);
+  await selectChat(chat.id, { push: true });
 }
 
 /**
@@ -4470,16 +4510,31 @@ async function init() {
   renderAgentPanel();
   connectWs();
 
-  // Restore whichever chat was last active in this tab (e.g. after a
-  // refresh), rather than always landing back on "no chat selected".
-  const storedChatId = sessionStorage.getItem(ACTIVE_CHAT_STORAGE_KEY);
-  if (storedChatId && chats.some((c) => c.id === storedChatId)) {
-    await selectChat(storedChatId);
-  } else if (storedChatId) {
-    // Stale entry (chat since deleted) — drop it rather than trying to
+  // A ?chat=<id> in the URL (e.g. a link pasted from another tab/instance)
+  // takes priority over this tab's own last-active chat, since opening a
+  // shared link is a deliberate choice that should win over whatever this
+  // tab happened to be on before.
+  const targetChatId = getChatIdFromUrl() ?? sessionStorage.getItem(ACTIVE_CHAT_STORAGE_KEY);
+  if (targetChatId && chats.some((c) => c.id === targetChatId)) {
+    await selectChat(targetChatId);
+  } else if (targetChatId) {
+    // Stale reference (chat since deleted) — drop it rather than trying to
     // restore something that no longer exists.
     sessionStorage.removeItem(ACTIVE_CHAT_STORAGE_KEY);
+    syncChatIdToUrl(null);
   }
+
+  // Lets the browser's Back/Forward buttons step through chat switches
+  // pushed by selectChat's { push: true } callers, and also covers a
+  // manually edited/cleared ?chat= param in the address bar.
+  window.addEventListener('popstate', () => {
+    const id = getChatIdFromUrl();
+    if (id && id !== activeChatId && chats.some((c) => c.id === id)) {
+      selectChat(id);
+    } else if (!id && activeChatId) {
+      showEmptyChatState();
+    }
+  });
 }
 
 init();
