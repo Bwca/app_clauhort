@@ -113,12 +113,23 @@ function transaction(fn) {
  *   fresh conversation) — so changing it must evict the running process the
  *   same way those do (see PATCH /api/agents/:id's flagsChanged).
  * @property {number} cumulativeCostUsd - Running total of the CLI's own
- *   `total_cost_usd` across every turn this agent has ever run (successful
+ *   `total_cost_usd` across every turn this agent has EVER run (successful
  *   or errored — an errored turn, e.g. a session-limit failure, still spent
- *   real money before it hit the wall). Never resets on its own; 0 for a
- *   brand-new agent. Purely informational, shown in the agent panel so a
- *   long-running agent's actual spend is visible instead of only ever
- *   showing up in the log file after the fact.
+ *   real money before it hit the wall) — this is a lifetime total for the
+ *   agent record itself, NOT scoped to its current chat: it keeps
+ *   accumulating across a remove-from-one-chat/add-to-another move (only
+ *   `resumeId` gets cleared on that, see the chat_members unique index
+ *   docs), so it can include spend from turns run in a chat this agent no
+ *   longer belongs to. Never resets on its own; 0 for a brand-new agent.
+ *   Purely informational, shown in the agent panel so a long-running
+ *   agent's actual spend is visible instead of only ever showing up in the
+ *   log file after the fact — the UI must label it as all-time/all-chats
+ *   (not "this chat") so it isn't misread as a per-conversation cost.
+ * @property {number} [lastTurnCostUsd] - The CLI's own `total_cost_usd` for
+ *   just this agent's most recent turn (overwritten each turn, unlike
+ *   cumulativeCostUsd which only ever grows) — the number that answers "why
+ *   did the all-time total just jump," shown alongside it in the agent
+ *   panel. Undefined until the agent's first real turn.
  * @property {number} [lastContextTokens] - inputTokens + cacheCreationInputTokens
  *   + cacheReadInputTokens from this agent's most recent turn — i.e. roughly
  *   what it costs just to resume this session and read back its accumulated
@@ -246,6 +257,7 @@ CREATE TABLE IF NOT EXISTS agents (
   last_known_model TEXT,
   model_override TEXT,
   cumulative_cost_usd REAL NOT NULL DEFAULT 0,
+  last_turn_cost_usd REAL,
   last_context_tokens INTEGER,
   created_at TEXT NOT NULL
 );
@@ -447,6 +459,20 @@ function migrateAgentsUsageStats() {
 }
 
 /**
+ * Adds the `last_turn_cost_usd` column to `agents` if it's missing, same
+ * reasoning as migrateAgentsUsageStats above. Left NULL (not 0) for a
+ * pre-existing agent — unlike cumulative_cost_usd, "$0 for the last turn"
+ * would be a false claim about a turn this app never actually measured.
+ * @returns {void}
+ */
+function migrateAgentsLastTurnCost() {
+  const columns = db.prepare("PRAGMA table_info(agents)").all().map((col) => col.name);
+  if (!columns.includes('last_turn_cost_usd')) {
+    db.exec('ALTER TABLE agents ADD COLUMN last_turn_cost_usd REAL');
+  }
+}
+
+/**
  * Adds the `tool_calls` column to `messages` if it's missing — needed for
  * any database created before this column existed, since `CREATE TABLE IF
  * NOT EXISTS` in SCHEMA only applies to brand-new databases. A no-op (one
@@ -604,6 +630,7 @@ function rowToAgent(row) {
   if (row.last_known_model) agent.model = row.last_known_model;
   if (row.model_override) agent.modelOverride = row.model_override;
   agent.cumulativeCostUsd = row.cumulative_cost_usd;
+  if (row.last_turn_cost_usd != null) agent.lastTurnCostUsd = row.last_turn_cost_usd;
   if (row.last_context_tokens != null) agent.lastContextTokens = row.last_context_tokens;
   return agent;
 }
@@ -755,6 +782,7 @@ export async function loadDb() {
   migrateAgentsLastKnownModel();
   migrateAgentsModelOverride();
   migrateAgentsUsageStats();
+  migrateAgentsLastTurnCost();
   migrateChatMembersUniqueAgent();
   migrateChatsRosterChangedAt();
   migrateChatsFreeRelay();
@@ -878,9 +906,10 @@ export async function setAgentModel(id, model) {
 
 /**
  * Records one turn's cost/context accounting: adds to the agent's running
- * cumulativeCostUsd (never reset — a full history of real spend) and
- * overwrites lastContextTokens (only the most recent turn matters there —
- * see its docs). Called for both a completed AND an errored turn, since an
+ * cumulativeCostUsd (never reset, all-time across every chat this agent has
+ * ever been part of — see its docs) and overwrites both lastTurnCostUsd and
+ * lastContextTokens (only the most recent turn matters for either — see
+ * their docs). Called for both a completed AND an errored turn, since an
  * errored one (e.g. a session-limit failure) still spent real tokens before
  * hitting the wall — same reasoning as the 'turn errored' log line in
  * ws/handler.js already capturing usage off the Error object.
@@ -890,8 +919,8 @@ export async function setAgentModel(id, model) {
  */
 export async function setAgentUsage(id, { totalCostUsd, contextTokens }) {
   const result = db.prepare(`
-    UPDATE agents SET cumulative_cost_usd = cumulative_cost_usd + ?, last_context_tokens = ? WHERE id = ?
-  `).run(totalCostUsd ?? 0, contextTokens ?? null, id);
+    UPDATE agents SET cumulative_cost_usd = cumulative_cost_usd + ?, last_turn_cost_usd = ?, last_context_tokens = ? WHERE id = ?
+  `).run(totalCostUsd ?? 0, totalCostUsd ?? null, contextTokens ?? null, id);
   return result.changes > 0 ? getAgent(id) : null;
 }
 

@@ -138,7 +138,7 @@ export default {
   'agent.chromeBadgeTitle': 'Browser access — this agent can drive your Chrome browser via the Claude in Chrome extension',
   'agent.modelTitle': 'Model last used by this agent: {model}',
   'agent.switchModelTitle': 'Switch model',
-  'agent.usageTitle': 'Cumulative cost across every turn this agent has run, and its most recent turn’s resumed context size (roughly what it costs just to resume this session before it says anything new)',
+  'agent.usageTitle': 'All-time cost across every chat this agent has ever been part of (not just this one), the cost of its most recent turn, and that turn’s resumed context size (roughly what it costs just to resume this session before it says anything new)',
   'agent.usageHighTitle': 'This agent’s resumed context has gotten very large — each turn now spends a lot of its budget just reading it back. Consider removing and re-adding the agent to start a fresh session if it keeps hitting session limits quickly.',
   'agent.addNoteTitle': 'Add a note',
   'agent.editNoteTitle': 'Edit note',
