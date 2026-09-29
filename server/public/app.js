@@ -39,6 +39,10 @@ import { APP_VERSION } from './appVersion.js';
  *   recent turn spent just resuming its session (input + cache-creation +
  *   cache-read tokens) before producing anything new. Absent until the
  *   agent's first turn — see formatUsageLabel.
+ * @property {string} [sessionLimitResetAt] - ISO 8601 instant Claude's own
+ *   session-limit error most recently said this agent's limit resets at.
+ *   Cleared server-side on this agent's next successful turn, so its
+ *   presence means the agent is (or very recently was) still limited.
  * @property {string} createdAt
  */
 
@@ -734,6 +738,19 @@ function formatUsageLabel(cumulativeCostUsd, lastTurnCostUsd, lastContextTokens)
       ? `${(lastContextTokens / 1_000).toFixed(1)}K`
       : String(lastContextTokens);
   return `${cost}${turn} · ${tokens} ctx`;
+}
+
+/**
+ * Whether an agent's session-limit badge should still show — sessionLimitResetAt
+ * is cleared server-side on the agent's next successful turn, but a stale
+ * (already-passed) instant can otherwise briefly linger client-side between
+ * that clear and the next AGENT_UPDATED reaching this tab; treated the same
+ * as "no badge" rather than showing a reset time that's already in the past.
+ * @param {Agent} agent
+ * @returns {boolean}
+ */
+function isSessionLimited(agent) {
+  return !!agent.sessionLimitResetAt && new Date(agent.sessionLimitResetAt) > new Date();
 }
 
 /**
@@ -2807,6 +2824,7 @@ function renderAgentPanel() {
         <span class="agent-dir" title="${escHtml(agent.workingDir)}">${escHtml(shortDir(agent.workingDir))}</span>
         ${agent.model ? `<span class="agent-model" data-testid="agent-model" title="${t('agent.modelTitle', { model: escHtml(agent.model) })}">🧠 ${escHtml(formatModelLabel(agent.model))}</span>` : ''}
         ${agent.cumulativeCostUsd > 0 ? `<span class="agent-usage${(agent.lastContextTokens ?? 0) > USAGE_HIGH_CONTEXT_TOKENS ? ' agent-usage-high' : ''}" data-testid="agent-usage" title="${(agent.lastContextTokens ?? 0) > USAGE_HIGH_CONTEXT_TOKENS ? t('agent.usageHighTitle') : t('agent.usageTitle')}">💰 ${formatUsageLabel(agent.cumulativeCostUsd, agent.lastTurnCostUsd, agent.lastContextTokens)}</span>` : ''}
+        ${isSessionLimited(agent) ? `<span class="agent-session-limit" data-testid="agent-session-limit" title="${t('agent.sessionLimitBadgeTitle')}">⏳ ${t('agent.sessionLimitBadgeLabel', { time: fmtScheduledTime(agent.sessionLimitResetAt) })}</span>` : ''}
         ${agent.note ? `<span class="agent-note" data-testid="agent-note" title="${escHtml(agent.note)}">📝 ${escHtml(agent.note)}</span>` : ''}
         ${agent.resumeId ? `<button class="agent-session-btn" data-testid="agent-session-btn" title="${t('agent.copySessionTitle', { resumeId: escHtml(agent.resumeId) })}">⧉ ${agent.resumeId.slice(0, 8)}…</button>` : ''}
       </div>

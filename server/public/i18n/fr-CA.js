@@ -140,6 +140,8 @@ export default {
   'agent.switchModelTitle': 'Changer de modèle',
   'agent.usageTitle': "Coût cumulatif depuis toujours, tous les clavardages où cet agent a participé confondus (pas seulement celui-ci), le coût de son dernier tour, et la taille du contexte repris lors de ce tour (approximativement ce qu'il en coûte juste pour reprendre cette session avant qu'elle ne dise quoi que ce soit de nouveau)",
   'agent.usageHighTitle': "Le contexte repris de cet agent est devenu très volumineux — chaque tour consacre maintenant une grande partie de son budget juste à le relire. Envisagez de retirer puis de rajouter l'agent pour démarrer une session fraîche s'il continue à atteindre rapidement ses limites de session.",
+  'agent.sessionLimitBadgeLabel': 'réinitialisation {time}',
+  'agent.sessionLimitBadgeTitle': "Cet agent a atteint la limite de session de Claude lors de son dernier tour. Il devrait être de nouveau utilisable après cette heure.",
   'agent.addNoteTitle': 'Ajouter une note',
   'agent.editNoteTitle': 'Modifier la note',
   'agent.notePlaceholder': 'p. ex. Refonte du module de paiement',

@@ -139,6 +139,15 @@ function transaction(fn) {
  *   letting it keep growing?" — see --autocompact in
  *   agentProcessManager.js's buildArgs for the automatic mitigation, and
  *   this field for the manual decision.
+ * @property {string} [sessionLimitResetAt] - ISO 8601 instant when Claude's
+ *   own session-limit message (e.g. "You've hit your session limit · resets
+ *   7:20pm (Australia/Darwin)" — see services/sessionLimitReset.js) most
+ *   recently said this agent's limit resets. Set on every turn error that
+ *   names one, regardless of chat.autoContinue (that flag only controls
+ *   whether a "please continue" gets auto-scheduled — this field is purely
+ *   informational, shown in the agent panel so a still-limited agent is
+ *   visible before you try prompting it again). Cleared on this agent's next
+ *   successful turn.
  * @property {string} createdAt - ISO 8601 timestamp
  */
 
@@ -259,6 +268,7 @@ CREATE TABLE IF NOT EXISTS agents (
   cumulative_cost_usd REAL NOT NULL DEFAULT 0,
   last_turn_cost_usd REAL,
   last_context_tokens INTEGER,
+  session_limit_reset_at TEXT,
   created_at TEXT NOT NULL
 );
 
@@ -473,6 +483,18 @@ function migrateAgentsLastTurnCost() {
 }
 
 /**
+ * Adds the `session_limit_reset_at` column to `agents` if it's missing,
+ * same reasoning as migrateAgentsUsageStats above.
+ * @returns {void}
+ */
+function migrateAgentsSessionLimitReset() {
+  const columns = db.prepare("PRAGMA table_info(agents)").all().map((col) => col.name);
+  if (!columns.includes('session_limit_reset_at')) {
+    db.exec('ALTER TABLE agents ADD COLUMN session_limit_reset_at TEXT');
+  }
+}
+
+/**
  * Adds the `tool_calls` column to `messages` if it's missing — needed for
  * any database created before this column existed, since `CREATE TABLE IF
  * NOT EXISTS` in SCHEMA only applies to brand-new databases. A no-op (one
@@ -632,6 +654,7 @@ function rowToAgent(row) {
   agent.cumulativeCostUsd = row.cumulative_cost_usd;
   if (row.last_turn_cost_usd != null) agent.lastTurnCostUsd = row.last_turn_cost_usd;
   if (row.last_context_tokens != null) agent.lastContextTokens = row.last_context_tokens;
+  if (row.session_limit_reset_at) agent.sessionLimitResetAt = row.session_limit_reset_at;
   return agent;
 }
 
@@ -783,6 +806,7 @@ export async function loadDb() {
   migrateAgentsModelOverride();
   migrateAgentsUsageStats();
   migrateAgentsLastTurnCost();
+  migrateAgentsSessionLimitReset();
   migrateChatMembersUniqueAgent();
   migrateChatsRosterChangedAt();
   migrateChatsFreeRelay();
@@ -921,6 +945,21 @@ export async function setAgentUsage(id, { totalCostUsd, contextTokens }) {
   const result = db.prepare(`
     UPDATE agents SET cumulative_cost_usd = cumulative_cost_usd + ?, last_turn_cost_usd = ?, last_context_tokens = ? WHERE id = ?
   `).run(totalCostUsd ?? 0, totalCostUsd ?? null, contextTokens ?? null, id);
+  return result.changes > 0 ? getAgent(id) : null;
+}
+
+/**
+ * Sets or clears sessionLimitResetAt — see its docs on the Agent typedef.
+ * `resetAt` null clears it (called on this agent's next successful turn).
+ * No-op (no AGENT_UPDATED needed) if the value wouldn't actually change.
+ * @param {string} id
+ * @param {string | null} resetAt - ISO 8601 instant, or null to clear
+ * @returns {Promise<Agent | null>} the updated agent, or null if unchanged/not found
+ */
+export async function setAgentSessionLimitReset(id, resetAt) {
+  const result = db.prepare(
+    'UPDATE agents SET session_limit_reset_at = ? WHERE id = ? AND session_limit_reset_at IS NOT ?'
+  ).run(resetAt, id, resetAt);
   return result.changes > 0 ? getAgent(id) : null;
 }
 

@@ -6,7 +6,7 @@
 import { WebSocket, WebSocketServer } from 'ws';
 import { v4 as uuidv4 } from 'uuid';
 import { dirname } from 'path';
-import { getChat, getAgent, getAgentChatId, getMessages, addMessage, grantAgentPath, grantAgentToolPattern, setAgentResumeIdIfUnset, setAgentModel, setAgentUsage, getUserDisplayName, createScheduledMessage, getScheduledMessages } from '../store/db.js';
+import { getChat, getAgent, getAgentChatId, getMessages, addMessage, grantAgentPath, grantAgentToolPattern, setAgentResumeIdIfUnset, setAgentModel, setAgentUsage, setAgentSessionLimitReset, getUserDisplayName, createScheduledMessage, getScheduledMessages } from '../store/db.js';
 import { parseResponders, extractMentionedAgents, parseSkillInvocation } from '../services/messageRouter.js';
 import { runAgentStream, FILE_PATH_TOOLS, deriveToolPatterns, dedupePermissionDenials } from '../services/agentRunner.js';
 import { killAgent, onBackgroundTurn } from '../services/agentProcessManager.js';
@@ -747,20 +747,20 @@ async function postCompactionNotes(chat, agent, compactions, wss) {
  * so the user doesn't have to notice the limit cleared and say "please go
  * on" themselves.
  *
- * A silent no-op whenever the error text doesn't actually name a reset time
- * (parseSessionLimitReset returns null) — this runs on EVERY turn error in
- * an autoContinue chat, not just session-limit ones, so anything else (a
- * bad --resume flag, a crashed process) must fall through without
+ * A silent no-op whenever `resetAt` is null (the error text didn't actually
+ * name a reset time — see parseSessionLimitReset) — this runs on EVERY turn
+ * error in an autoContinue chat, not just session-limit ones, so anything
+ * else (a bad --resume flag, a crashed process) must fall through without
  * scheduling anything.
  * @param {import('../store/db.js').Chat} chat
  * @param {import('../store/db.js').Agent} agent
- * @param {string} errorMessage
+ * @param {Date | null} resetAt - already parsed by the caller, which also
+ *   persists it onto the agent record regardless of chat.autoContinue
  * @param {WebSocketServer} wss
  * @returns {Promise<void>}
  */
-async function maybeScheduleAutoContinue(chat, agent, errorMessage, wss) {
+async function maybeScheduleAutoContinue(chat, agent, resetAt, wss) {
   if (!chat.autoContinue) return;
-  const resetAt = parseSessionLimitReset(errorMessage);
   if (!resetAt) return;
   const content = buildAutoContinueMessage(agent);
   // A freeRelay chat can retry the same agent across several relay rounds
@@ -890,6 +890,11 @@ async function runAgentsParallel(agents, allMembers, chat, userMessage, wss, pri
         });
         if (updated) broadcast(wss, { type: 'AGENT_UPDATED', agent: updated });
       }
+      // A real (non-error) turn completing at all means this agent is no
+      // longer session-limited, whatever a past error once said — no-ops
+      // via setAgentSessionLimitReset's own guard when already unset.
+      const clearedLimit = await setAgentSessionLimitReset(agent.id, null);
+      if (clearedLimit) broadcast(wss, { type: 'AGENT_UPDATED', agent: clearedLimit });
 
       /** @type {import('../store/db.js').Message} */
       const agentMessage = {
@@ -992,7 +997,15 @@ async function runAgentsParallel(agents, allMembers, chat, userMessage, wss, pri
         if (updated) broadcast(wss, { type: 'AGENT_UPDATED', agent: updated });
       }
       await postCompactionNotes(chat, agent, err.compactions, wss);
-      await maybeScheduleAutoContinue(chat, agent, err.message, wss);
+      // Persisted regardless of chat.autoContinue (unlike the scheduling
+      // below, which is opt-in) — this is purely an informational badge in
+      // the agent panel, not a "please continue" side effect.
+      const resetAt = parseSessionLimitReset(err.message);
+      if (resetAt) {
+        const updated = await setAgentSessionLimitReset(agent.id, resetAt.toISOString());
+        if (updated) broadcast(wss, { type: 'AGENT_UPDATED', agent: updated });
+      }
+      await maybeScheduleAutoContinue(chat, agent, resetAt, wss);
     } finally {
       activeStreams.delete(streamId);
     }
