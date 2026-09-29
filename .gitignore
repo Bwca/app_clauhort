@@ -6,3 +6,4 @@ server/store/data.json
 server/store/*.sqlite3
 server/store/*.sqlite3-wal
 server/store/*.sqlite3-shm
+server/store/*.sqlite3.bak-*
