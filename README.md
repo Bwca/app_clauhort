@@ -83,6 +83,7 @@ Other environment variables:
 | `APP_LOG_DIR` | `server/logs` | Where structured log files (and, if enabled, per-chat transcripts — see below) are written |
 | `APP_LOG_LEVEL` | `info` | Minimum level written to the log file: `debug`, `info`, `warn`, `error`, or `silent` to disable file logging entirely. The console always stays at `info`+ regardless of this setting |
 | `APP_TRANSCRIPT_LOG` | unset (off) | Set to any truthy value to enable a separate, plain-text, per-chat transcript log at `<APP_LOG_DIR>/chats/<chatId>.log` — the exact content sent to and received from each agent on every turn, for debugging without needing to `claude --resume` a session in a real terminal. Off by default: unlike the structured log above, this can contain full conversation content |
+| `MCP_AUTH_TOKEN` | unset (MCP server disabled) | Bearer/query-param token required to reach the `/mcp` endpoint (see [MCP server](#mcp-server) below) — generate with `openssl rand -hex 32`. Unset means `/mcp` isn't mounted at all, not merely unauthenticated |
 
 ## Agent options
 
@@ -98,6 +99,26 @@ Other environment variables:
 | Observer | no | Never responds to a broadcast message (no `@mention`) — only to an explicit `@mention` — and when it does respond, sees the full chat history instead of the usual recent-message window. For an agent whose job is to quietly watch a busy chat and summarize it later. Off by default; can't be changed later, only at creation |
 | Browser access | no | Spawns the agent with real control of your Chrome browser via the Claude in Chrome extension (`--chrome`). Any number of agents can hold this at once — each connecting `--chrome` process gets its own isolated tab group from the extension's local bridge. Off by default; can't be changed later, only at creation |
 | Add to current chat | no | Joins the agent to the chat you created it from — an agent belongs to at most one chat at a time |
+
+## MCP server
+
+Clauhort can itself be driven by another Claude instance — Claude Code, or Claude Desktop — as an MCP server exposing its chats/agents as tools: `list_chats`, `get_chat`, `search_messages`, `create_chat`, `update_chat`, `delete_chat`, `add_agent_to_chat`, `remove_agent_from_chat`, `list_agents`, `create_agent`, `update_agent`, `delete_agent`, `restart_agent`, and `send_message` (posts a message and waits for the resulting agent reply/replies, including any `@mention` relay chain). Every tool calls the exact same functions the REST API and UI use, so behavior is identical.
+
+Off by default — set `MCP_AUTH_TOKEN` to enable it:
+
+```bash
+export MCP_AUTH_TOKEN=$(openssl rand -hex 32)
+```
+
+This token is defense-in-depth on top of the server's existing loopback-only bind, not a real security boundary — it just stops some other local process from silently driving Clauhort, since the endpoint would otherwise be reachable, unauthenticated, and able to run real shell/file tools through the agents it creates.
+
+Connect from **Claude Code**:
+
+```bash
+claude mcp add --transport http clauhort "http://127.0.0.1:3001/mcp?token=<token>"
+```
+
+Connect from **Claude Desktop**: Settings → Connectors → Add custom connector, and paste `http://127.0.0.1:3001/mcp?token=<token>` as the URL (its connector setup has no separate header field, hence the token in the URL itself). Both assume Claude runs on the same machine as the server — this never becomes reachable over the network any more than the rest of the app does.
 
 ## E2E tests
 

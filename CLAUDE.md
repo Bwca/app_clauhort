@@ -53,7 +53,7 @@ Each E2E file starts/stops its own server instance and shares port 3099 — neve
 
 There is no lint/typecheck script configured (JSDoc types only, no TypeScript build).
 
-Key env vars (see README for the full table): `PORT`, `CLAUDE_BIN` (override the `claude` binary name/path), `APP_DB_FILE` (`:memory:` in tests), `APP_LOG_DIR`, `APP_LOG_LEVEL`, `APP_TRANSCRIPT_LOG` (full per-chat prompt/response logging, off by default).
+Key env vars (see README for the full table): `PORT`, `CLAUDE_BIN` (override the `claude` binary name/path), `APP_DB_FILE` (`:memory:` in tests), `APP_LOG_DIR`, `APP_LOG_LEVEL`, `APP_TRANSCRIPT_LOG` (full per-chat prompt/response logging, off by default), `MCP_AUTH_TOKEN` (enables the `/mcp` server, unset = disabled — see "MCP server" below).
 
 ## Architecture
 
@@ -103,6 +103,14 @@ Every turn's own cost/token accounting (the CLI's `result` event `usage`/`total_
 ### Persistence (`server/store/db.js`)
 
 Single file owns the whole SQLite schema and every migration. `CREATE TABLE IF NOT EXISTS` only helps brand-new databases — any schema change needs an explicit, idempotent `migrate*()` function run unconditionally at `loadDb()` startup (see the existing `migrate*` functions for the pattern: check via `PRAGMA table_info`/`PRAGMA index_list`, no-op if already applied). A one-time legacy `data.json` → SQLite import runs automatically if a fresh DB is created and an old `data.json` is found alongside it.
+
+### MCP server (`server/mcp/`) — Clauhort as tools
+
+`server/mcp/index.js`'s `mountMcp(app, wss)` mounts a stateless Streamable HTTP MCP server at `/mcp`, letting an external Claude instance (Claude Code or Claude Desktop, both assumed to run on this same machine) drive Clauhort itself — create/manage chats and agents, send a message and get the reply back. Off by default: gated on `MCP_AUTH_TOKEN` being set (`mcp/auth.js`'s `isMcpEnabled`/`requireMcpToken`) — this is the app's first network-reachable, tool-calling surface, on top of an app that otherwise has zero authentication anywhere, so it gets its own token check even though it inherits the same `127.0.0.1` bind as everything else. The token is accepted either as `Authorization: Bearer <token>` or `?token=<token>`, since Claude Desktop's custom-connector setup only takes a URL with no header field.
+
+Every tool handler (`mcp/tools.js`) calls the exact same functions the REST routes and WS handler already call (`store/db.js`, `services/agentProcessManager.js`, `services/agentRunner.js`) — there's no parallel validation/side-effect path to keep in sync. The one new capability needed to support this: `handleUserMessage` (`ws/handler.js`) used to always return `undefined` even though it already awaited every agent reply internally; it now returns `{ userMessage, replies }` so the `send_message` tool can await a real reply in-process, without a WS client of its own. Both pre-existing callers (this file's own WS dispatch, `services/scheduler.js`'s `fireScheduledMessage`) already ignored the return value, so this was purely additive. Mounted in-process deliberately — live agent-process state (`agentProcessManager.js`'s `processes` map, `activeStreams` in `ws/handler.js`) is plain in-memory state in the one Node process running `index.js`; a separate script driving `send_message` would have no visibility into a live turn to await.
+
+Built with `@modelcontextprotocol/sdk`'s `McpServer`/`StreamableHTTPServerTransport`, stateless (`sessionIdGenerator: undefined`) since every tool call is an independent request/response with no server-push need — a fresh `McpServer` + transport pair is built per request (`mcp/server.js`'s `handleMcpRequest`), per the SDK's own stateless-mode contract.
 
 ### Frontend (`server/public/`)
 
