@@ -6,6 +6,20 @@ import { listAgentCommands } from './commands.js';
 import { getAgentSkills } from './agentProcessManager.js';
 
 /**
+ * CLI built-in local commands (present in the `claude` process's
+ * `system/init` event as `slash_commands`, never in its separate `skills`
+ * array — see parseSkillInvocation's doc comment for why most built-ins are
+ * deliberately NOT forwarded) that are safe to allow anyway. `compact` is
+ * the one exception: unlike a meta-command such as `/clear` or `/help`, a
+ * user only ever invokes it against an agent that's already deep into a
+ * resumed session — i.e. long past the point where its one-time identity
+ * preamble (buildSystemPreamble in ws/handler.js) would have gone out — so
+ * the preamble-discarding collision the general gate exists to prevent
+ * doesn't apply here in practice.
+ */
+const ALLOWED_BUILTIN_COMMANDS = new Set(['compact']);
+
+/**
  * Builds a regex alternation matching any of the given agents' names,
  * longest name first so a shorter name that happens to be a prefix of a
  * longer one (e.g. "TP" vs "TP-Observer") never shadows it. Agent names are
@@ -101,7 +115,9 @@ export function parseResponders(content, chatMembers) {
  * against the real command/skill list closes this: anything that isn't an
  * actual registered skill now falls through to parseResponders as ordinary
  * chat text (content kept intact, "@Name " prefix included), which doesn't
- * match the CLI's bare-slash trigger.
+ * match the CLI's bare-slash trigger. The one deliberate carve-out is
+ * ALLOWED_BUILTIN_COMMANDS ("/compact") — see its own doc comment above for
+ * why that specific built-in doesn't carry the same risk.
  *
  * @param {string} content - Raw message content from the user
  * @param {import('../store/db.js').Agent[]} chatMembers - Agents currently in the chat
@@ -120,6 +136,7 @@ export function parseSkillInvocation(content, chatMembers) {
   if (!agent) return null;
   const commandName = match[2].slice(1).split(/\s/)[0];
   const isRegisteredCommand = listAgentCommands(agent.workingDir).some((c) => c.name === commandName)
-    || getAgentSkills(agent.id).includes(commandName);
+    || getAgentSkills(agent.id).includes(commandName)
+    || ALLOWED_BUILTIN_COMMANDS.has(commandName);
   return isRegisteredCommand ? { agent, command: match[2] } : null;
 }

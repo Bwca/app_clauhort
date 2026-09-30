@@ -121,3 +121,22 @@ describe('parseSkillInvocation — hyphenated names', () => {
     assert.equal(result.agent, long);
   });
 });
+
+describe('parseSkillInvocation — /compact carve-out', () => {
+  // No .claude/commands/compact.md and no live process (so getAgentSkills
+  // returns []) — /compact still resolves via ALLOWED_BUILTIN_COMMANDS,
+  // unlike an arbitrary unregistered CLI built-in such as /clear.
+  const workDir = mkdtempSync(join(tmpdir(), 'clauhort-compact-test-'));
+  after(() => rmSync(workDir, { recursive: true, force: true }));
+
+  test('/compact is recognized as a skill invocation despite not being a project command or reported skill', () => {
+    const a = { id: 'a', name: 'Alice', workingDir: workDir };
+    const result = parseSkillInvocation('@Alice /compact', [a]);
+    assert.deepEqual(result, { agent: a, command: '/compact' });
+  });
+
+  test('an unrelated unregistered built-in like /clear is still not forwarded', () => {
+    const a = { id: 'a', name: 'Alice', workingDir: workDir };
+    assert.equal(parseSkillInvocation('@Alice /clear', [a]), null);
+  });
+});
