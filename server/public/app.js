@@ -741,6 +741,26 @@ function formatUsageLabel(cumulativeCostUsd, lastTurnCostUsd, lastContextTokens)
 }
 
 /**
+ * Formats the same three fields as formatUsageLabel, but at full precision
+ * (4 decimal places on cost, exact token count with thousands separators)
+ * for the usage badge's tooltip. formatUsageLabel's own rounding (2 decimals,
+ * K/M-scaled tokens) is deliberately a rough-scale label for the badge
+ * itself — this is the "how is this actually calculated" answer that only
+ * shows up on hover, so it should show real numbers rather than repeat the
+ * same rounding.
+ * @param {number} cumulativeCostUsd
+ * @param {number} [lastTurnCostUsd]
+ * @param {number} [lastContextTokens]
+ * @returns {string}
+ */
+function formatUsageExact(cumulativeCostUsd, lastTurnCostUsd, lastContextTokens) {
+  const cost = `$${cumulativeCostUsd.toFixed(4)} all-time`;
+  const turn = lastTurnCostUsd != null ? `, +$${lastTurnCostUsd.toFixed(4)} last turn` : '';
+  const tokens = lastContextTokens != null ? `, ${lastContextTokens.toLocaleString()} context tokens` : '';
+  return `${cost}${turn}${tokens}`;
+}
+
+/**
  * Whether an agent's session-limit badge should still show — sessionLimitResetAt
  * is cleared server-side on the agent's next successful turn, but a stale
  * (already-passed) instant can otherwise briefly linger client-side between
@@ -2823,7 +2843,7 @@ function renderAgentPanel() {
         <span class="agent-name" data-testid="agent-name">${escHtml(agent.name)}${hasUnseen ? ` <span class="agent-unseen-dot" data-testid="agent-unseen-dot" title="${t('agent.unseenOutsideFocusTitle', { name: agent.name })}"></span>` : ''}${agent.dangerouslySkipPermissions ? ` <span class="agent-yolo-badge" data-testid="agent-yolo-badge" title="${t('agent.yoloBadgeTitle')}">🔥</span>` : ''}${agent.isObserver ? ` <span class="agent-observer-badge" data-testid="agent-observer-badge" title="${t('agent.observerBadgeTitle')}">👁</span>` : ''}${agent.chromeAccess ? ` <span class="agent-chrome-badge" data-testid="agent-chrome-badge" title="${t('agent.chromeBadgeTitle')}">🌐</span>` : ''}</span>
         <span class="agent-dir" title="${escHtml(agent.workingDir)}">${escHtml(shortDir(agent.workingDir))}</span>
         ${agent.model ? `<span class="agent-model" data-testid="agent-model" title="${t('agent.modelTitle', { model: escHtml(agent.model) })}">🧠 ${escHtml(formatModelLabel(agent.model))}</span>` : ''}
-        ${agent.cumulativeCostUsd > 0 ? `<span class="agent-usage${(agent.lastContextTokens ?? 0) > USAGE_HIGH_CONTEXT_TOKENS ? ' agent-usage-high' : ''}" data-testid="agent-usage" title="${(agent.lastContextTokens ?? 0) > USAGE_HIGH_CONTEXT_TOKENS ? t('agent.usageHighTitle') : t('agent.usageTitle')}">💰 ${formatUsageLabel(agent.cumulativeCostUsd, agent.lastTurnCostUsd, agent.lastContextTokens)}</span>` : ''}
+        ${agent.cumulativeCostUsd > 0 ? `<span class="agent-usage${(agent.lastContextTokens ?? 0) > USAGE_HIGH_CONTEXT_TOKENS ? ' agent-usage-high' : ''}" data-testid="agent-usage" title="${(agent.lastContextTokens ?? 0) > USAGE_HIGH_CONTEXT_TOKENS ? t('agent.usageHighTitle', { exact: formatUsageExact(agent.cumulativeCostUsd, agent.lastTurnCostUsd, agent.lastContextTokens) }) : t('agent.usageTitle', { exact: formatUsageExact(agent.cumulativeCostUsd, agent.lastTurnCostUsd, agent.lastContextTokens) })}">💰 ${formatUsageLabel(agent.cumulativeCostUsd, agent.lastTurnCostUsd, agent.lastContextTokens)}</span>` : ''}
         ${isSessionLimited(agent) ? `<span class="agent-session-limit" data-testid="agent-session-limit" title="${t('agent.sessionLimitBadgeTitle')}">⏳ ${t('agent.sessionLimitBadgeLabel', { time: fmtScheduledTime(agent.sessionLimitResetAt) })}</span>` : ''}
         ${agent.note ? `<span class="agent-note" data-testid="agent-note" title="${escHtml(agent.note)}">📝 ${escHtml(agent.note)}</span>` : ''}
         ${agent.resumeId ? `<button class="agent-session-btn" data-testid="agent-session-btn" title="${t('agent.copySessionTitle', { resumeId: escHtml(agent.resumeId) })}">⧉ ${agent.resumeId.slice(0, 8)}…</button>` : ''}
