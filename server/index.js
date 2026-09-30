@@ -37,6 +37,19 @@ process.on('unhandledRejection', (reason) => {
 });
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+
+// Optional local secrets (MCP_AUTH_TOKEN, etc.) survive a reboot this way —
+// a plain shell `export` only lives in that one terminal session, so past
+// restarts the MCP server silently came back disabled. Loaded from a file
+// next to this one so it works regardless of the CWD the process is
+// launched from. Absence is fine (real env vars still take precedence /
+// still work standalone); any other read error is unexpected and fatal.
+try {
+  process.loadEnvFile(join(__dirname, '.env'));
+} catch (err) {
+  if (err.code !== 'ENOENT') throw err;
+}
+
 const PORT = process.env.PORT || 3001;
 
 const app = express();
