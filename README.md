@@ -110,6 +110,8 @@ Off by default — set `MCP_AUTH_TOKEN` to enable it:
 export MCP_AUTH_TOKEN=$(openssl rand -hex 32)
 ```
 
+A plain shell `export` only lives in that one terminal session, so the MCP server silently comes back disabled after every reboot (or any time the server is started from a fresh shell). To persist it, copy `server/.env.example` to `server/.env` (gitignored) and set `MCP_AUTH_TOKEN` there instead — `index.js` loads it on startup via Node's built-in `process.loadEnvFile`, and a real environment variable of the same name still takes precedence over it.
+
 This token is defense-in-depth on top of the server's existing loopback-only bind, not a real security boundary — it just stops some other local process from silently driving Clauhort, since the endpoint would otherwise be reachable, unauthenticated, and able to run real shell/file tools through the agents it creates.
 
 Connect from **Claude Code**:
