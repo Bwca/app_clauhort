@@ -2,22 +2,8 @@
  * @fileoverview Parses @mention patterns to determine which agents should respond.
  */
 
-import { listAgentCommands } from './commands.js';
+import { listAgentCommands, ALLOWED_BUILTIN_COMMANDS } from './commands.js';
 import { getAgentSkills } from './agentProcessManager.js';
-
-/**
- * CLI built-in local commands (present in the `claude` process's
- * `system/init` event as `slash_commands`, never in its separate `skills`
- * array — see parseSkillInvocation's doc comment for why most built-ins are
- * deliberately NOT forwarded) that are safe to allow anyway. `compact` is
- * the one exception: unlike a meta-command such as `/clear` or `/help`, a
- * user only ever invokes it against an agent that's already deep into a
- * resumed session — i.e. long past the point where its one-time identity
- * preamble (buildSystemPreamble in ws/handler.js) would have gone out — so
- * the preamble-discarding collision the general gate exists to prevent
- * doesn't apply here in practice.
- */
-const ALLOWED_BUILTIN_COMMANDS = new Set(['compact']);
 
 /**
  * Builds a regex alternation matching any of the given agents' names,
@@ -116,8 +102,8 @@ export function parseResponders(content, chatMembers) {
  * actual registered skill now falls through to parseResponders as ordinary
  * chat text (content kept intact, "@Name " prefix included), which doesn't
  * match the CLI's bare-slash trigger. The one deliberate carve-out is
- * ALLOWED_BUILTIN_COMMANDS ("/compact") — see its own doc comment above for
- * why that specific built-in doesn't carry the same risk.
+ * ALLOWED_BUILTIN_COMMANDS ("/compact", commands.js) — see its doc comment
+ * for why that specific built-in doesn't carry the same risk.
  *
  * @param {string} content - Raw message content from the user
  * @param {import('../store/db.js').Agent[]} chatMembers - Agents currently in the chat
