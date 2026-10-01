@@ -1,6 +1,6 @@
 {
   "name": "clauhort-server",
-  "version": "1.2.26",
+  "version": "1.2.27",
   "description": "Multi-agent Claude chat server",
   "type": "module",
   "main": "index.js",
