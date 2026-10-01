@@ -1077,6 +1077,21 @@ function handleServerEvent(event) {
     case 'AGENT_UPDATED':
       onAgentUpdated(/** @type {Agent} */ (event.agent));
       break;
+    case 'AGENT_CREATED':
+      onAgentCreated(/** @type {Agent} */ (event.agent));
+      break;
+    case 'AGENT_DELETED':
+      onAgentDeleted(/** @type {{ agentId: string }} */ (event));
+      break;
+    case 'CHAT_CREATED':
+      onChatCreated(/** @type {Chat} */ (event.chat));
+      break;
+    case 'CHAT_UPDATED':
+      onChatUpdated(/** @type {Chat} */ (event.chat));
+      break;
+    case 'CHAT_DELETED':
+      onChatDeleted(/** @type {{ chatId: string }} */ (event));
+      break;
     case 'SCHEDULED_MESSAGE_FIRED':
       onScheduledMessageFired(/** @type {{ chatId: string, id: string }} */ (event));
       break;
@@ -1330,6 +1345,71 @@ function onAgentUpdated(updatedAgent) {
   const idx = agents.findIndex((a) => a.id === updatedAgent.id);
   if (idx !== -1) agents[idx] = updatedAgent;
   renderAgentPanel();
+}
+
+/**
+ * Handles a server-sent AGENT_CREATED event — an agent created outside this
+ * tab (e.g. via an MCP tool call) wasn't in local state yet, unlike
+ * AGENT_UPDATED which only ever patches an existing entry. Guarded against
+ * double-adding an echo of a creation this same tab already made via REST.
+ * @param {Agent} agent
+ */
+function onAgentCreated(agent) {
+  if (agents.some((a) => a.id === agent.id)) return;
+  agents.push(agent);
+  renderAgentPanel();
+}
+
+/**
+ * Handles a server-sent AGENT_DELETED event — an agent deleted outside this
+ * tab. Harmless no-op if this tab already removed it locally.
+ * @param {{ agentId: string }} event
+ */
+function onAgentDeleted({ agentId }) {
+  agents = agents.filter((a) => a.id !== agentId);
+  renderAgentPanel();
+}
+
+/**
+ * Handles a server-sent CHAT_CREATED event, same reasoning as
+ * onAgentCreated above.
+ * @param {Chat} chat
+ */
+function onChatCreated(chat) {
+  if (chats.some((c) => c.id === chat.id)) return;
+  chats.push(chat);
+  renderChatList();
+}
+
+/**
+ * Handles a server-sent CHAT_UPDATED event (rename, freeRelay/autoContinue/
+ * category change, or a membership change) — same fetch-then-patch-local-
+ * state update the REST-driven call sites (toggleFreeRelay, addMember, ...)
+ * already do for this tab's own edits, just triggered by someone else's.
+ * @param {Chat} chat
+ */
+function onChatUpdated(chat) {
+  const idx = chats.findIndex((c) => c.id === chat.id);
+  if (idx !== -1) chats[idx] = chat; else chats.push(chat);
+  if (chat.id === activeChatId) {
+    chatTopbarName.textContent = t('chat.channelName', { name: chat.name });
+    renderFreeRelayBtn();
+    renderAutoContinueBtn();
+  }
+  renderChatList();
+  renderAgentPanel();
+}
+
+/**
+ * Handles a server-sent CHAT_DELETED event — mirrors deleteChat's own local
+ * cleanup for this tab's own deletes.
+ * @param {{ chatId: string }} event
+ */
+function onChatDeleted({ chatId }) {
+  chats = chats.filter((c) => c.id !== chatId);
+  unreadChatIds.delete(chatId);
+  if (activeChatId === chatId) showEmptyChatState();
+  renderChatList();
 }
 
 /**
