@@ -2,8 +2,11 @@
  * @fileoverview E2E tests for the /mcp endpoint (server/mcp/*) — drives it
  * with the real @modelcontextprotocol/sdk client over Streamable HTTP, the
  * same protocol path a real Claude Code or Claude Desktop connection would
- * use, rather than hand-rolled JSON-RPC over fetch. No Puppeteer/browser
- * needed here — this is a pure server-API surface.
+ * use, rather than hand-rolled JSON-RPC over fetch. Mostly a pure
+ * server-API surface (no Puppeteer/browser needed), except the one
+ * "MCP mutations broadcast live" suite below, which specifically needs a
+ * real open browser tab to prove those mutations reach it over the WS
+ * without a refresh.
  */
 
 import { test, describe, before, after } from 'node:test';
@@ -11,6 +14,7 @@ import assert from 'node:assert/strict';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { startServer, stopServer, resetData, TEST_PORT } from '../helpers/server.js';
+import { launchBrowser, closeBrowser, openPage, closePage, tid, createChat } from '../helpers/browser.js';
 
 const TOKEN = 'test-mcp-token';
 const MCP_URL = `http://localhost:${TEST_PORT}/mcp?token=${TOKEN}`;
@@ -148,5 +152,74 @@ describe('MCP server disabled (no MCP_AUTH_TOKEN)', () => {
       body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' }),
     });
     assert.equal(res.status, 404);
+  });
+});
+
+describe('MCP mutations broadcast live to connected browser clients', () => {
+  /** @type {import('puppeteer').Page} */
+  let page;
+
+  before(async () => {
+    await startServer({ MCP_AUTH_TOKEN: TOKEN });
+    await launchBrowser();
+  });
+
+  after(async () => {
+    await closeBrowser();
+    await stopServer();
+  });
+
+  // An external MCP caller is never a browser tab, unlike every REST call
+  // the UI makes itself — so without the broadcast() calls added alongside
+  // these tools, a tab left open during an MCP-driven agent/chat change
+  // would just sit stale until manually refreshed. This drives that exact
+  // scenario against a real open tab, start to finish, asserting each step
+  // lands with no reload in between.
+  test('create_agent, add_agent_to_chat, update_chat, remove_agent_from_chat and delete_chat all land without a page refresh', async () => {
+    await resetData();
+    if (page) await closePage();
+    page = await openPage();
+    await createChat(page, 'MCP Live Chat');
+
+    const client = await connectClient();
+
+    const { parsed: agent } = await callTool(client, 'create_agent', {
+      name: 'Live Agent',
+      color: '#336699',
+      workingDir: process.cwd(),
+    });
+
+    const { parsed: chats } = await callTool(client, 'list_chats');
+    const chat = chats.find((c) => c.name === 'MCP Live Chat');
+    assert.ok(chat, 'the chat created via the UI should be visible to MCP tools');
+
+    await callTool(client, 'add_agent_to_chat', { chatId: chat.id, agentId: agent.id });
+    await page.waitForFunction(
+      (name) => [...document.querySelectorAll('[data-testid="agent-name"]')].some((el) => el.textContent.includes(name)),
+      { timeout: 3000 },
+      agent.name
+    );
+
+    await callTool(client, 'update_chat', { chatId: chat.id, name: 'Renamed Live Chat' });
+    await page.waitForFunction(
+      (name) => document.querySelector('[data-testid="chat-topbar-name"]')?.textContent.includes(name),
+      { timeout: 3000 },
+      'Renamed Live Chat'
+    );
+
+    await callTool(client, 'remove_agent_from_chat', { chatId: chat.id, agentId: agent.id });
+    await page.waitForFunction(
+      () => document.querySelectorAll('[data-testid="agent-item"]').length === 0,
+      { timeout: 3000 }
+    );
+
+    await callTool(client, 'delete_chat', { chatId: chat.id, deleteAgents: true });
+    await page.waitForFunction(
+      (name) => ![...document.querySelectorAll('[data-testid="chat-item-name"]')].some((el) => el.textContent.includes(name)),
+      { timeout: 3000 },
+      'Renamed Live Chat'
+    );
+
+    await client.close();
   });
 });
