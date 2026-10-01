@@ -7,6 +7,14 @@
  * already call — there is no parallel validation/side-effect path to keep
  * in sync; a tool call should behave identically to the same action taken
  * through the UI.
+ *
+ * Unlike the REST routes (whose caller is always the browser tab that made
+ * the request, so a local post-fetch state patch is enough), an MCP caller
+ * is never a browser tab at all — without broadcasting, a chat/agent
+ * mutation made here would sit invisible in every connected UI until a
+ * manual refresh. So every mutating tool here also `broadcast()`s a
+ * CHAT_CREATED/CHAT_UPDATED/CHAT_DELETED/AGENT_CREATED/AGENT_UPDATED/
+ * AGENT_DELETED event (see app.js's handleServerEvent for the client side).
  */
 import { z } from 'zod';
 import { existsSync } from 'fs';
@@ -30,7 +38,7 @@ import {
 } from '../store/db.js';
 import { verifyClaudeBinAvailable } from '../services/agentRunner.js';
 import { spawnForAgent, killAgent } from '../services/agentProcessManager.js';
-import { handleUserMessage } from '../ws/handler.js';
+import { handleUserMessage, broadcast } from '../ws/handler.js';
 import { t } from '../i18n/t.js';
 
 /** @returns {{ content: [{ type: 'text', text: string }] }} */
@@ -148,6 +156,7 @@ export function registerTools(mcpServer, wss) {
         const agent = getAgent(agentId);
         if (agent) spawnForAgent(agent);
       }
+      broadcast(wss, { type: 'CHAT_CREATED', chat });
       return ok(chat);
     }
   );
@@ -168,6 +177,7 @@ export function registerTools(mcpServer, wss) {
       if (name !== undefined && !name.trim()) return fail(t('errors.chatNameRequired'));
       const chat = await updateChat(chatId, { name, freeRelay, autoContinue, category: normalizeCategory(category) });
       if (!chat) return fail(t('errors.chatNotFound'));
+      broadcast(wss, { type: 'CHAT_UPDATED', chat });
       return ok(chat);
     }
   );
@@ -186,7 +196,19 @@ export function registerTools(mcpServer, wss) {
       const deleted = await deleteChat(chatId);
       if (!deleted) return fail(t('errors.chatNotFound'));
       await Promise.all(memberAgentIds.map((agentId) => killAgent(agentId)));
-      if (deleteAgents) await Promise.all(memberAgentIds.map((agentId) => deleteAgent(agentId)));
+      broadcast(wss, { type: 'CHAT_DELETED', chatId });
+      if (deleteAgents) {
+        await Promise.all(memberAgentIds.map((agentId) => deleteAgent(agentId)));
+        for (const agentId of memberAgentIds) broadcast(wss, { type: 'AGENT_DELETED', agentId });
+      } else {
+        // deleteChat() already cleared each former member's resumeId (see its
+        // docs in store/db.js) — surface that, same as a plain removeMember
+        // would, so a stale resumeId badge doesn't linger in another tab.
+        for (const agentId of memberAgentIds) {
+          const agent = getAgent(agentId);
+          if (agent) broadcast(wss, { type: 'AGENT_UPDATED', agent });
+        }
+      }
       return ok({ deleted: true });
     }
   );
@@ -204,6 +226,7 @@ export function registerTools(mcpServer, wss) {
       if (!chat) return fail(t('errors.chatNotFound'));
       const agent = getAgent(agentId);
       if (agent) spawnForAgent(agent);
+      broadcast(wss, { type: 'CHAT_UPDATED', chat });
       return ok(chat);
     }
   );
@@ -218,7 +241,14 @@ export function registerTools(mcpServer, wss) {
       const wasMember = getChat(chatId)?.memberAgentIds.includes(agentId) ?? false;
       const chat = await removeChatMember(chatId, agentId);
       if (!chat) return fail(t('errors.chatNotFound'));
-      if (wasMember) await killAgent(agentId);
+      broadcast(wss, { type: 'CHAT_UPDATED', chat });
+      if (wasMember) {
+        await killAgent(agentId);
+        // removeChatMember() already cleared the agent's resumeId — surface
+        // that too, same reasoning as delete_chat above.
+        const agent = getAgent(agentId);
+        if (agent) broadcast(wss, { type: 'AGENT_UPDATED', agent });
+      }
       return ok(chat);
     }
   );
@@ -256,7 +286,9 @@ export function registerTools(mcpServer, wss) {
       if (chromeAccess) data.chromeAccess = true;
       if (note) data.note = note.trim();
       if (modelOverride) data.modelOverride = modelOverride.trim();
-      return ok(await createAgent(data));
+      const agent = await createAgent(data);
+      broadcast(wss, { type: 'AGENT_CREATED', agent });
+      return ok(agent);
     }
   );
 
@@ -300,6 +332,7 @@ export function registerTools(mcpServer, wss) {
         || (chromeAccess !== undefined && chromeAccess !== existing.chromeAccess)
         || (trimmedModelOverride !== undefined && trimmedModelOverride !== (existing.modelOverride ?? ''));
       if (flagsChanged) await killAgent(agentId);
+      broadcast(wss, { type: 'AGENT_UPDATED', agent });
       return ok(agent);
     }
   );
@@ -311,9 +344,18 @@ export function registerTools(mcpServer, wss) {
       inputSchema: { agentId: z.string() },
     },
     async ({ agentId }) => {
+      const chatId = getAgentChatId(agentId);
       const deleted = await deleteAgent(agentId);
       if (!deleted) return fail(t('errors.agentNotFound'));
       await killAgent(agentId);
+      broadcast(wss, { type: 'AGENT_DELETED', agentId });
+      // Deleting an agent cascade-deletes its chat_members row (see the
+      // schema's ON DELETE CASCADE) — surface the chat's now-shorter
+      // memberAgentIds too, same as remove_agent_from_chat does.
+      if (chatId) {
+        const chat = getChat(chatId);
+        if (chat) broadcast(wss, { type: 'CHAT_UPDATED', chat });
+      }
       return ok({ deleted: true });
     }
   );
