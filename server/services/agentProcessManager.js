@@ -116,6 +116,13 @@ const lastKnownSkills = new Map();
 const backgroundTurnHandlers = new Map();
 
 /**
+ * Handlers registered via onBackgroundCompaction, one per agent. See that
+ * function's docs for what fires them.
+ * @type {Map<string, (compaction: { trigger: 'auto' | 'manual', preTokens: number | null, postTokens: number | null }) => void>}
+ */
+const backgroundCompactionHandlers = new Map();
+
+/**
  * @param {ManagedProcess} proc
  * @returns {boolean}
  */
@@ -512,6 +519,27 @@ export function onBackgroundTurn(agentId, handler) {
 }
 
 /**
+ * Registers the handler to call whenever this agent's persistent process
+ * reports a `compact_boundary` OUTSIDE of an explicit turn — i.e.
+ * --autocompact firing (or a background task's own resumed turn triggering
+ * one) while `proc.currentTurn` is null. A compaction during an explicit
+ * turn is already captured on that turn's own `compactions` array and
+ * surfaced by the caller once the turn resolves; this covers the gap where
+ * one happens while the agent is otherwise idle, which handleUnsolicitedEvent
+ * would silently drop since it isn't part of any assistant/tool-result
+ * stretch of output and may never be followed by one.
+ *
+ * One handler per agent; same replace-on-reregister contract as
+ * onBackgroundTurn.
+ * @param {string} agentId
+ * @param {(compaction: { trigger: 'auto' | 'manual', preTokens: number | null, postTokens: number | null }) => void} handler
+ * @returns {void}
+ */
+export function onBackgroundCompaction(agentId, handler) {
+  backgroundCompactionHandlers.set(agentId, handler);
+}
+
+/**
  * The built-in/marketplace/plugin skill names an agent can invoke: its live
  * process's own most recent report if one is currently running, falling
  * back to `lastKnownSkills` (see its docs) when there's no live process at
@@ -543,6 +571,21 @@ export function getAgentSkills(agentId) {
  * @returns {void}
  */
 function handleUnsolicitedEvent(proc, event) {
+  if (event.type === 'system' && event.subtype === 'compact_boundary') {
+    // Reported immediately, independent of the assistant/result accumulator
+    // below — a compaction firing while idle isn't guaranteed to be
+    // followed by any actual agent speech (see onBackgroundCompaction's
+    // docs), so it can't wait on `done` the way handler() below does.
+    const meta = event.compact_metadata;
+    if (meta) {
+      backgroundCompactionHandlers.get(proc.agentId)?.({
+        trigger: meta.trigger ?? 'auto',
+        preTokens: meta.pre_tokens ?? null,
+        postTokens: meta.post_tokens ?? null,
+      });
+    }
+    return;
+  }
   if (event.type !== 'assistant' && event.type !== 'user' && event.type !== 'result') return;
 
   if (!proc.background) proc.background = createTurnAccumulator();

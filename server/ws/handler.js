@@ -9,7 +9,7 @@ import { dirname } from 'path';
 import { getChat, getAgent, getAgentChatId, getMessages, addMessage, grantAgentPath, grantAgentToolPattern, setAgentResumeIdIfUnset, setAgentModel, setAgentUsage, setAgentSessionLimitReset, getUserDisplayName, createScheduledMessage, getScheduledMessages } from '../store/db.js';
 import { parseResponders, extractMentionedAgents, parseSkillInvocation } from '../services/messageRouter.js';
 import { runAgentStream, FILE_PATH_TOOLS, deriveToolPatterns, dedupePermissionDenials } from '../services/agentRunner.js';
-import { killAgent, onBackgroundTurn } from '../services/agentProcessManager.js';
+import { killAgent, onBackgroundTurn, onBackgroundCompaction } from '../services/agentProcessManager.js';
 import { scheduleTimer } from '../services/scheduler.js';
 import { parseSessionLimitReset } from '../services/sessionLimitReset.js';
 import { t } from '../i18n/t.js';
@@ -698,6 +698,28 @@ function makeBackgroundTurnHandler(agentId, wss) {
 }
 
 /**
+ * Builds the handler passed to agentProcessManager's onBackgroundCompaction
+ * for a given agent: posts the same 🗜️ system note postCompactionNotes
+ * posts for a compaction that happened mid-explicit-turn, for one the CLI
+ * reported while the agent was otherwise idle instead (see that function's
+ * own docs for the mechanism). Looked up fresh at delivery time, same
+ * reasoning as makeBackgroundTurnHandler just above.
+ * @param {string} agentId
+ * @param {WebSocketServer} wss
+ * @returns {(compaction: { trigger: 'auto' | 'manual', preTokens: number | null, postTokens: number | null }) => Promise<void>}
+ */
+function makeBackgroundCompactionHandler(agentId, wss) {
+  return async (compaction) => {
+    const agent = getAgent(agentId);
+    const chatId = getAgentChatId(agentId);
+    if (!agent || !chatId) return;
+    const chat = getChat(chatId);
+    if (!chat) return;
+    await postCompactionNotes(chat, agent, [compaction], wss);
+  };
+}
+
+/**
  * Scheduled-message content that nudges a single agent to continue once its
  * session limit resets. @-targeted (not a bare "please continue") so
  * parseResponders resolves it to just that agent at fire time, not a
@@ -841,6 +863,7 @@ async function runAgentsParallel(agents, allMembers, chat, userMessage, wss, pri
     // is cheap (a Map.set) and keeps this agnostic of exactly when in the
     // agent's lifecycle its process first comes alive.
     onBackgroundTurn(agent.id, makeBackgroundTurnHandler(agent.id, wss));
+    onBackgroundCompaction(agent.id, makeBackgroundCompactionHandler(agent.id, wss));
 
     /** @type {AgentStreamStartEvent} */
     broadcast(wss, {
