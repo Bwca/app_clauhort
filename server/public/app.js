@@ -711,33 +711,39 @@ function formatModelLabel(model) {
 }
 
 /**
- * Formats an agent's cost + last-turn context size into one compact label
- * (e.g. "$12.45 all-time (+$0.03 last turn) · 9.7M ctx") for the agent
- * panel. The literal "all-time" and "last turn" words are spelled out right
- * in the label — not left to the title tooltip alone — because
- * cumulativeCostUsd is genuinely a lifetime total across every chat this
- * agent has ever been part of (see its docs in server/store/db.js), and
- * that scope needs to be unambiguous at a glance rather than only
- * discoverable on hover. lastTurnCostUsd is what answers "why did the
- * all-time total just jump." Token counts are rounded to one decimal place
- * at the nearest K/M so the label stays short — this is a rough sense of
- * scale, not an exact accounting (the log file's per-turn numbers are
- * exact, if ever needed).
+ * Formats an agent's cost + last-turn context size for the agent panel's
+ * usage badge, split into two short lines instead of one long run-on
+ * sentence: a `primary` line ("$12.45 all-time") and a `secondary` line
+ * ("+$0.03 last turn · 9.7M ctx"). Splitting it is deliberate — the agent
+ * panel is only ~240px wide, and a single-string label long enough to spell
+ * out "all-time"/"last turn" in full would otherwise wrap at arbitrary
+ * character boundaries (mid-word, mid-number) rather than at a clean
+ * line break; returning two pre-split, independently-truncatable parts
+ * lets the CSS put the break exactly between them instead. The literal
+ * "all-time" and "last turn" words are still spelled out — not left to the
+ * title tooltip alone — because cumulativeCostUsd is genuinely a lifetime
+ * total across every chat this agent has ever been part of (see its docs in
+ * server/store/db.js), and that scope needs to be unambiguous at a glance
+ * rather than only discoverable on hover. lastTurnCostUsd is what answers
+ * "why did the all-time total just jump." Token counts are rounded to one
+ * decimal place at the nearest K/M so the label stays short — this is a
+ * rough sense of scale, not an exact accounting (formatUsageExact has the
+ * precise numbers, shown in the tooltip).
  * @param {number} cumulativeCostUsd
  * @param {number} [lastTurnCostUsd]
  * @param {number} [lastContextTokens]
- * @returns {string}
+ * @returns {{ primary: string, secondary: string }}
  */
 function formatUsageLabel(cumulativeCostUsd, lastTurnCostUsd, lastContextTokens) {
-  const cost = `$${cumulativeCostUsd.toFixed(2)} all-time`;
-  const turn = lastTurnCostUsd != null ? ` (+$${lastTurnCostUsd.toFixed(2)} last turn)` : '';
-  if (lastContextTokens == null) return `${cost}${turn}`;
-  const tokens = lastContextTokens >= 1_000_000
-    ? `${(lastContextTokens / 1_000_000).toFixed(1)}M`
+  const primary = `$${cumulativeCostUsd.toFixed(2)} all-time`;
+  const turn = lastTurnCostUsd != null ? `+$${lastTurnCostUsd.toFixed(2)} last turn` : '';
+  const tokens = lastContextTokens == null ? '' : lastContextTokens >= 1_000_000
+    ? `${(lastContextTokens / 1_000_000).toFixed(1)}M ctx`
     : lastContextTokens >= 1_000
-      ? `${(lastContextTokens / 1_000).toFixed(1)}K`
-      : String(lastContextTokens);
-  return `${cost}${turn} · ${tokens} ctx`;
+      ? `${(lastContextTokens / 1_000).toFixed(1)}K ctx`
+      : `${lastContextTokens} ctx`;
+  const secondary = [turn, tokens].filter(Boolean).join(' · ');
+  return { primary, secondary };
 }
 
 /**
@@ -758,6 +764,26 @@ function formatUsageExact(cumulativeCostUsd, lastTurnCostUsd, lastContextTokens)
   const turn = lastTurnCostUsd != null ? `, +$${lastTurnCostUsd.toFixed(4)} last turn` : '';
   const tokens = lastContextTokens != null ? `, ${lastContextTokens.toLocaleString()} context tokens` : '';
   return `${cost}${turn}${tokens}`;
+}
+
+/**
+ * Builds the agent panel's 💰 usage badge markup, or '' for an agent with no
+ * cost yet (cumulativeCostUsd === 0). Pulled out of the agent-card template
+ * literal because it's no longer a single interpolated string — see
+ * formatUsageLabel for why it's two lines (primary/secondary) instead of one.
+ * @param {Agent} agent
+ * @returns {string}
+ */
+function renderUsageBadge(agent) {
+  if (!(agent.cumulativeCostUsd > 0)) return '';
+  const isHigh = (agent.lastContextTokens ?? 0) > USAGE_HIGH_CONTEXT_TOKENS;
+  const exact = formatUsageExact(agent.cumulativeCostUsd, agent.lastTurnCostUsd, agent.lastContextTokens);
+  const title = isHigh ? t('agent.usageHighTitle', { exact }) : t('agent.usageTitle', { exact });
+  const { primary, secondary } = formatUsageLabel(agent.cumulativeCostUsd, agent.lastTurnCostUsd, agent.lastContextTokens);
+  return `<span class="agent-usage${isHigh ? ' agent-usage-high' : ''}" data-testid="agent-usage" title="${title}">
+    <span class="agent-usage-primary">💰 ${primary}</span>
+    ${secondary ? `<span class="agent-usage-secondary">${secondary}</span>` : ''}
+  </span>`;
 }
 
 /**
@@ -2843,7 +2869,7 @@ function renderAgentPanel() {
         <span class="agent-name" data-testid="agent-name">${escHtml(agent.name)}${hasUnseen ? ` <span class="agent-unseen-dot" data-testid="agent-unseen-dot" title="${t('agent.unseenOutsideFocusTitle', { name: agent.name })}"></span>` : ''}${agent.dangerouslySkipPermissions ? ` <span class="agent-yolo-badge" data-testid="agent-yolo-badge" title="${t('agent.yoloBadgeTitle')}">🔥</span>` : ''}${agent.isObserver ? ` <span class="agent-observer-badge" data-testid="agent-observer-badge" title="${t('agent.observerBadgeTitle')}">👁</span>` : ''}${agent.chromeAccess ? ` <span class="agent-chrome-badge" data-testid="agent-chrome-badge" title="${t('agent.chromeBadgeTitle')}">🌐</span>` : ''}</span>
         <span class="agent-dir" title="${escHtml(agent.workingDir)}">${escHtml(shortDir(agent.workingDir))}</span>
         ${agent.model ? `<span class="agent-model" data-testid="agent-model" title="${t('agent.modelTitle', { model: escHtml(agent.model) })}">🧠 ${escHtml(formatModelLabel(agent.model))}</span>` : ''}
-        ${agent.cumulativeCostUsd > 0 ? `<span class="agent-usage${(agent.lastContextTokens ?? 0) > USAGE_HIGH_CONTEXT_TOKENS ? ' agent-usage-high' : ''}" data-testid="agent-usage" title="${(agent.lastContextTokens ?? 0) > USAGE_HIGH_CONTEXT_TOKENS ? t('agent.usageHighTitle', { exact: formatUsageExact(agent.cumulativeCostUsd, agent.lastTurnCostUsd, agent.lastContextTokens) }) : t('agent.usageTitle', { exact: formatUsageExact(agent.cumulativeCostUsd, agent.lastTurnCostUsd, agent.lastContextTokens) })}">💰 ${formatUsageLabel(agent.cumulativeCostUsd, agent.lastTurnCostUsd, agent.lastContextTokens)}</span>` : ''}
+        ${renderUsageBadge(agent)}
         ${isSessionLimited(agent) ? `<span class="agent-session-limit" data-testid="agent-session-limit" title="${t('agent.sessionLimitBadgeTitle')}">⏳ ${t('agent.sessionLimitBadgeLabel', { time: fmtScheduledTime(agent.sessionLimitResetAt) })}</span>` : ''}
         ${agent.note ? `<span class="agent-note" data-testid="agent-note" title="${escHtml(agent.note)}">📝 ${escHtml(agent.note)}</span>` : ''}
         ${agent.resumeId ? `<button class="agent-session-btn" data-testid="agent-session-btn" title="${t('agent.copySessionTitle', { resumeId: escHtml(agent.resumeId) })}">⧉ ${agent.resumeId.slice(0, 8)}…</button>` : ''}
