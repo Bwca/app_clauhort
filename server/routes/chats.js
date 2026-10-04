@@ -29,7 +29,7 @@ import {
   createScheduledMessage,
   updateScheduledMessage,
 } from '../store/db.js';
-import { scheduleTimer, cancelScheduledMessage } from '../services/scheduler.js';
+import { scheduleTimer, cancelScheduledMessage, fireScheduledMessage } from '../services/scheduler.js';
 import { spawnForAgent, killAgent } from '../services/agentProcessManager.js';
 import { t } from '../i18n/t.js';
 
@@ -391,6 +391,23 @@ export default function createChatsRouter(wss) {
       return res.status(404).json({ error: t('errors.scheduleNotFound') });
     }
     await cancelScheduledMessage(req.params.scheduledId);
+    res.status(204).end();
+  });
+
+  /**
+   * POST /api/chats/:id/scheduled-messages/:scheduledId/fire-now
+   * Sends a pending scheduled message right away instead of waiting for its
+   * armed timer. Mainly for a stale auto-continue message that initScheduler
+   * (services/scheduler.js) left un-armed after downtime — the frontend's
+   * stale-auto-continue banner (app.js) is what calls this, once the user
+   * decides to fire it rather than discard it (the DELETE route above).
+   */
+  router.post('/:id/scheduled-messages/:scheduledId/fire-now', async (req, res) => {
+    const existing = getScheduledMessage(req.params.scheduledId);
+    if (!existing || existing.chatId !== req.params.id) {
+      return res.status(404).json({ error: t('errors.scheduleNotFound') });
+    }
+    await fireScheduledMessage(req.params.scheduledId, wss);
     res.status(204).end();
   });
 
