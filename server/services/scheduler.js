@@ -36,11 +36,16 @@ const timers = new Map();
  * USER_MESSAGE takes. No-ops if the row is already gone — canceled, or
  * already fired by a race with cancelScheduledMessage (see
  * deleteScheduledMessageIfExists's docs for why that's race-free).
+ * Exported so the fire-now REST route (routes/chats.js) can trigger the
+ * exact same send path for a row that initScheduler left un-armed — see
+ * initScheduler's docs below.
  * @param {string} id
  * @param {import('ws').WebSocketServer} wss
  * @returns {Promise<void>}
  */
-async function fireScheduledMessage(id, wss) {
+export async function fireScheduledMessage(id, wss) {
+  const existingTimer = timers.get(id);
+  if (existingTimer) clearTimeout(existingTimer);
   timers.delete(id);
   const row = await deleteScheduledMessageIfExists(id);
   if (!row) return;
@@ -123,18 +128,24 @@ export async function cancelScheduledMessage(id) {
  * armed timers themselves are purely in-memory and don't.
  *
  * One exception: an auto-continue message (row.isAutoContinue) whose
- * sendAt has already passed is DELETED here instead of armed. A normal
- * user-scheduled message firing late after downtime is still the right
- * call (armTimer's own docs: "fires almost immediately rather than being
- * treated as an error") — the user asked for that content to go out, late
- * or not. But an auto-continue's sendAt targets a specific session-limit
- * reset time; once the server's been down past it, that assumption is
- * stale and unverifiable, and firing it late risks re-triggering the exact
+ * sendAt has already passed is left UN-ARMED here instead of being armed
+ * (which would fire it almost immediately — see armTimer's docs) or
+ * deleted outright (an earlier version of this function did that). A
+ * normal user-scheduled message firing late after downtime is still the
+ * right call — the user asked for that content to go out, late or not.
+ * But an auto-continue's sendAt targets a specific session-limit reset
+ * time; once the server's been down past it, that assumption is stale and
+ * unverifiable, and firing it automatically risks re-triggering the exact
  * relay cascade it exists to recover from (see fix(chats) in
- * ws/handler.js's skipRelay). Reported live: exactly these 3 rows sat
- * through a ~5-hour outage and would otherwise have fired immediately on
- * the next start. Dropping it silently is safe — if the agent genuinely
- * still needs to continue, its next real turn re-schedules a fresh one.
+ * ws/handler.js's skipRelay). Silently deleting it was the old behaviour,
+ * but that took the decision away from the user entirely. Instead, the row
+ * is simply left in the DB with no timer: getScheduledMessages still
+ * returns it, so the next time the user opens that chat the frontend's
+ * stale-auto-continue banner (app.js) surfaces it and lets them fire it
+ * now or discard it — see the fire-now and DELETE scheduled-message routes
+ * in routes/chats.js. Reported live: exactly 3 rows sat through a ~5-hour
+ * outage and would otherwise have fired immediately (or been silently
+ * dropped) on the next start.
  * @param {import('ws').WebSocketServer} wss
  * @returns {void}
  */
@@ -142,8 +153,7 @@ export function initScheduler(wss) {
   const now = Date.now();
   for (const row of getAllScheduledMessages()) {
     if (row.isAutoContinue && new Date(row.sendAt).getTime() <= now) {
-      deleteScheduledMessageIfExists(row.id);
-      log.info({ chatId: row.chatId, id: row.id, sendAt: row.sendAt }, 'dropped a stale overdue auto-continue message instead of firing it late');
+      log.info({ chatId: row.chatId, id: row.id, sendAt: row.sendAt }, 'leaving a stale overdue auto-continue message un-armed for the user to decide on');
       continue;
     }
     armTimer(row, wss);
