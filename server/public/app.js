@@ -565,6 +565,7 @@ const searchClose      = $('#search-close');
 const searchResultsEl  = $('#search-results');
 const jumpedBanner     = $('#jumped-banner');
 const jumpedBannerBackBtn = $('#jumped-banner-back-btn');
+const staleAutoContinueBanner = $('#stale-auto-continue-banner');
 const pageNav          = $('#page-nav');
 const pageFirstBtn     = $('#page-first-btn');
 const pagePrevBtn      = $('#page-prev-btn');
@@ -3237,6 +3238,7 @@ async function selectChat(id, opts = {}) {
   closeSearchBar();
   isViewingSearchContext = false;
   jumpedBanner.hidden = true;
+  staleAutoContinueBanner.hidden = true;
   pageNav.hidden = true;
   renderChatList();
   renderAgentPanel();
@@ -3394,6 +3396,8 @@ async function deleteGlobalAgent(agentId) {
  * available-candidates check.
  */
 function renderScheduledPanel() {
+  renderStaleAutoContinueBanner();
+
   scheduledBtn.hidden = !activeChatId || pendingScheduledMessages.length === 0;
   scheduledBtn.textContent = `🕐 ${pendingScheduledMessages.length}`;
   scheduledBtn.title = t('schedule.panelTitle');
@@ -3430,6 +3434,60 @@ function renderScheduledPanel() {
  */
 async function cancelScheduled(id) {
   await fetch(`/api/chats/${activeChatId}/scheduled-messages/${id}`, { method: 'DELETE' });
+  pendingScheduledMessages = pendingScheduledMessages.filter((m) => m.id !== id);
+  renderScheduledPanel();
+}
+
+/**
+ * Renders the inline banner for a scheduled message that's stuck: an
+ * auto-continue "please continue" nudge (ScheduledMessage.isAutoContinue)
+ * whose sendAt has already passed. initScheduler (services/scheduler.js)
+ * leaves these un-armed after a restart instead of firing them
+ * automatically — a session-limit reset time assumed stale after downtime
+ * shouldn't just fire on its own — so the user gets to decide, right here,
+ * whether it still makes sense to send. Hidden entirely when there's
+ * nothing stuck, same convention as the scheduled panel's own badge.
+ */
+function renderStaleAutoContinueBanner() {
+  const now = Date.now();
+  const stale = pendingScheduledMessages.filter(
+    (m) => m.isAutoContinue && new Date(m.sendAt).getTime() <= now
+  );
+  staleAutoContinueBanner.innerHTML = '';
+  staleAutoContinueBanner.hidden = stale.length === 0;
+  for (const scheduled of stale) {
+    const li = document.createElement('li');
+    li.className = 'stale-auto-continue-item';
+    li.dataset.testid = 'stale-auto-continue-item';
+    li.dataset.scheduledId = scheduled.id;
+    li.innerHTML = `
+      <div class="stale-auto-continue-text">
+        <span class="stale-auto-continue-preview" data-testid="stale-auto-continue-preview">${escHtml(scheduled.content || t('attachments.defaultPastedTextLabel'))}</span>
+        <span class="stale-auto-continue-note" data-testid="stale-auto-continue-note">${t('schedule.staleAutoContinueNote', { time: fmtScheduledTime(scheduled.sendAt) })}</span>
+      </div>
+      <div class="stale-auto-continue-actions">
+        <button class="stale-auto-continue-fire-btn" data-testid="stale-auto-continue-fire-btn">${t('schedule.fireNowBtn')}</button>
+        <button class="stale-auto-continue-discard-btn" data-testid="stale-auto-continue-discard-btn">${t('schedule.discardBtn')}</button>
+      </div>`;
+    li.querySelector('.stale-auto-continue-fire-btn').addEventListener('click', () => fireScheduledNow(scheduled.id));
+    li.querySelector('.stale-auto-continue-discard-btn').addEventListener('click', () => cancelScheduled(scheduled.id));
+    staleAutoContinueBanner.appendChild(li);
+  }
+}
+
+/**
+ * Fires a stuck scheduled message right now via the fire-now REST route,
+ * instead of waiting for a timer that initScheduler deliberately never
+ * armed for it (see renderStaleAutoContinueBanner's docs). Used by that
+ * banner's "Continue now" button. The resulting agent reply arrives the
+ * normal way via AGENT_STREAM_* events; the SCHEDULED_MESSAGE_FIRED
+ * broadcast this triggers (see onScheduledMessageFired) would also remove
+ * it from pendingScheduledMessages, but this does so eagerly so the banner
+ * doesn't wait on that round-trip.
+ * @param {string} id
+ */
+async function fireScheduledNow(id) {
+  await fetch(`/api/chats/${activeChatId}/scheduled-messages/${id}/fire-now`, { method: 'POST' });
   pendingScheduledMessages = pendingScheduledMessages.filter((m) => m.id !== id);
   renderScheduledPanel();
 }

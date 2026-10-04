@@ -177,6 +177,9 @@ export default {
   'schedule.panelEmpty': 'No scheduled messages',
   'schedule.editTitle': 'Edit this scheduled message',
   'schedule.cancelTitle': 'Cancel this scheduled message',
+  'schedule.staleAutoContinueNote': 'Was due {time}, while the server was offline — send it now, or discard it?',
+  'schedule.fireNowBtn': 'Continue now',
+  'schedule.discardBtn': 'Discard',
 
   'quickMsg.btnTitle': 'Quick messages',
   'quickMsg.panelEmpty': 'No quick messages yet',

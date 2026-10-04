@@ -177,6 +177,9 @@ export default {
   'schedule.panelEmpty': 'Aucun message programmé',
   'schedule.editTitle': 'Modifier ce message programmé',
   'schedule.cancelTitle': 'Annuler ce message programmé',
+  'schedule.staleAutoContinueNote': 'Devait partir {time}, pendant que le serveur était hors ligne — l’envoyer maintenant, ou l’ignorer?',
+  'schedule.fireNowBtn': 'Continuer maintenant',
+  'schedule.discardBtn': 'Ignorer',
 
   'quickMsg.btnTitle': 'Messages rapides',
   'quickMsg.panelEmpty': 'Aucun message rapide pour l\'instant',
