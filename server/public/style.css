@@ -186,6 +186,17 @@ html, body { height: 100%; background: var(--bg0); color: var(--text); font-fami
 #jumped-banner-back-btn { flex-shrink: 0; background: none; border: 1px solid var(--faint); border-radius: 6px; padding: 3px 10px; color: var(--muted); font-size: 11px; cursor: pointer; transition: background .15s, color .15s; }
 #jumped-banner-back-btn:hover { background: var(--bg2); color: var(--text); }
 
+#stale-auto-continue-banner { list-style: none; margin: 0; padding: 0; border-bottom: 1px solid var(--border); }
+.stale-auto-continue-item { display: flex; align-items: center; gap: 10px; padding: 7px 18px; font-size: 12px; color: var(--muted); background: color-mix(in srgb, var(--peach) 12%, var(--bg0)); border-top: 1px solid var(--border); }
+.stale-auto-continue-item:first-child { border-top: none; }
+.stale-auto-continue-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.stale-auto-continue-preview { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stale-auto-continue-note { font-size: 11px; color: var(--dim); }
+.stale-auto-continue-actions { flex-shrink: 0; display: flex; gap: 6px; }
+.stale-auto-continue-fire-btn, .stale-auto-continue-discard-btn { flex-shrink: 0; background: none; border: 1px solid var(--faint); border-radius: 6px; padding: 3px 10px; color: var(--muted); font-size: 11px; cursor: pointer; transition: background .15s, color .15s; }
+.stale-auto-continue-fire-btn:hover { background: var(--bg2); color: var(--blue); }
+.stale-auto-continue-discard-btn:hover { background: var(--bg2); color: var(--red); }
+
 #page-nav { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 6px 18px; font-size: 12px; color: var(--muted); border-bottom: 1px solid var(--border); }
 #page-nav button { flex-shrink: 0; background: none; border: 1px solid var(--faint); border-radius: 6px; padding: 3px 10px; color: var(--muted); font-size: 11px; cursor: pointer; transition: background .15s, color .15s; }
 #page-nav button:hover:not(:disabled) { background: var(--bg2); color: var(--text); }
