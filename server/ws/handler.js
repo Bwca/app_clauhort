@@ -19,13 +19,61 @@ import { logTranscript } from '../transcriptLog.js';
 const log = logger.child({ component: 'ws:handler' });
 
 /**
+ * @typedef {Object} ActiveStream
+ * @property {AbortController} controller - consulted by the STOP_AGENT
+ *   handler below to interrupt this turn.
+ * @property {string} chatId
+ * @property {string} agentId
+ * @property {string} agentName
+ * @property {string} agentColor
+ * @property {number} startedAt - epoch ms
+ * @property {string} text - accumulated response text so far (mirrors every
+ *   AGENT_STREAM_CHUNK broadcast for this stream)
+ * @property {string} statusText - last live "what's happening" status line
+ *   broadcast for this stream (e.g. "Running: ls", "Delegating: …"), '' if
+ *   none has fired yet this turn
+ */
+
+/**
  * Live streams that could still be interrupted, keyed by streamId. Populated
  * for the duration of each runAgentStream() call in runAgentsParallel and
  * consulted by the STOP_AGENT handler below — a stream not in this map has
  * already finished (or never existed), so a late/duplicate stop is a no-op.
- * @type {Map<string, AbortController>}
+ *
+ * Also doubles as the source of truth for catching a freshly-connected
+ * client up on turns already in flight (see handleConnection's snapshot
+ * send below) — a browser refresh mid-turn used to show nothing at all
+ * until the turn finished and MESSAGE_SAVED arrived, which looked
+ * indistinguishable from the agent being stuck or the server having
+ * dropped the request. text/statusText are kept in step with every
+ * broadcast chunk/status so a newly-connecting client can reconstruct the
+ * exact bubble a client that stayed connected would have.
+ * @type {Map<string, ActiveStream>}
  */
 const activeStreams = new Map();
+
+/**
+ * Builds the snapshot of every currently in-flight stream, newest first —
+ * sent once to each newly-connected client (see handleConnection) so a page
+ * refresh (or first load) mid-turn doesn't look idle. Not broadcast to
+ * existing clients: they've already been receiving the real-time
+ * START/CHUNK/STATUS events for these streams and reconstructing this from
+ * the snapshot would just redundantly recreate bubbles they already have.
+ * @returns {Array<{type: 'AGENT_STREAM_SNAPSHOT', streamId: string, chatId: string, agentId: string, agentName: string, agentColor: string, startedAt: number, text: string, statusText: string}>}
+ */
+function buildActiveStreamSnapshot() {
+  return [...activeStreams.entries()].map(([streamId, s]) => ({
+    type: 'AGENT_STREAM_SNAPSHOT',
+    streamId,
+    chatId: s.chatId,
+    agentId: s.agentId,
+    agentName: s.agentName,
+    agentColor: s.agentColor,
+    startedAt: s.startedAt,
+    text: s.text,
+    statusText: s.statusText,
+  }));
+}
 
 /**
  * History-fetch cap for an observer agent's own turn (see runAgentsParallel),
@@ -854,7 +902,16 @@ async function runAgentsParallel(agents, allMembers, chat, userMessage, wss, pri
     const content = buildPromptBlocks(agent, chat, allMembers, userMessage, agentPriorMessages, excludeMessageId);
     logTranscript({ chatId: chat.id, agentId: agent.id, agentName: agent.name, streamId, direction: 'SENT', content });
     const controller = new AbortController();
-    activeStreams.set(streamId, controller);
+    activeStreams.set(streamId, {
+      controller,
+      chatId: chat.id,
+      agentId: agent.id,
+      agentName: agent.name,
+      agentColor: agent.color,
+      startedAt: Date.now(),
+      text: '',
+      statusText: '',
+    });
     // Registered before this turn even starts (not just after it ends) —
     // the process this turn spawns/reuses is what might later resume and
     // report on a backgrounded task entirely unprompted, so the handler
@@ -884,6 +941,8 @@ async function runAgentsParallel(agents, allMembers, chat, userMessage, wss, pri
         streamId,
         signal: controller.signal,
         onChunk: (text) => {
+          const stream = activeStreams.get(streamId);
+          if (stream) stream.text += text;
           /** @type {AgentStreamChunkEvent} */
           broadcast(wss, {
             type: 'AGENT_STREAM_CHUNK',
@@ -894,6 +953,8 @@ async function runAgentsParallel(agents, allMembers, chat, userMessage, wss, pri
           });
         },
         onStatus: (status) => {
+          const stream = activeStreams.get(streamId);
+          if (stream) stream.statusText = status;
           /** @type {AgentStreamStatusEvent} */
           broadcast(wss, {
             type: 'AGENT_STREAM_STATUS',
@@ -1156,7 +1217,7 @@ export function handleConnection(ws, _req, wss) {
         // { type: 'STOP_AGENT', streamId: string }
         // A no-op if the stream already finished (or never existed) —
         // activeStreams only holds entries for turns still in flight.
-        activeStreams.get(event.streamId)?.abort();
+        activeStreams.get(event.streamId)?.controller.abort();
         break;
       }
       case 'PING':
@@ -1168,4 +1229,14 @@ export function handleConnection(ws, _req, wss) {
   ws.on('error', (err) => {
     log.error({ err }, 'WebSocket error');
   });
+
+  // Catch this one newly-connected client up on any turn already in flight
+  // — see buildActiveStreamSnapshot's docs for why: without this, a page
+  // refresh (or first load) while an agent is mid-turn showed nothing at
+  // all until the turn finished, indistinguishable from the request having
+  // silently gone nowhere. Sent directly to this socket, not broadcast —
+  // every other connected client already has these streams live.
+  for (const snapshot of buildActiveStreamSnapshot()) {
+    ws.send(JSON.stringify(snapshot));
+  }
 }

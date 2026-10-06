@@ -1064,6 +1064,9 @@ function handleServerEvent(event) {
     case 'AGENT_STREAM_START':
       onStreamStart(event);
       break;
+    case 'AGENT_STREAM_SNAPSHOT':
+      onStreamSnapshot(event);
+      break;
     case 'AGENT_STREAM_CHUNK':
       onStreamChunk(event);
       break;
@@ -1145,6 +1148,42 @@ function onStreamStart({ streamId, chatId, agentId, agentName, agentColor }) {
   // See onMessageSaved's matching guard — an older page is a frozen
   // snapshot; the bubble stays un-rendered (entry itself is still tracked)
   // until the user pages back to the end.
+  if (chatId === activeChatId && (isViewingSearchContext || isViewingLatestPage())) attachStreamingBubble(entry);
+}
+
+/**
+ * A turn that was already in flight when this client connected — see
+ * ws/handler.js's buildActiveStreamSnapshot. Sent once per stream, right
+ * after the socket opens, so a page refresh (or first load) mid-turn
+ * reconstructs the same bubble a client that stayed connected would have,
+ * instead of showing nothing until the turn finishes.
+ *
+ * Skipped if this streamId is already tracked — a brief reconnect (not a
+ * full page reload) keeps the existing JS state, which is already correct
+ * and live; re-seeding it from the snapshot would just clobber it with a
+ * (by now stale) one-time copy.
+ * @param {{ streamId: string, chatId: string, agentId: string, agentName: string,
+ *           agentColor: string, startedAt: number, text: string, statusText: string }} event
+ */
+function onStreamSnapshot({ streamId, chatId, agentId, agentName, agentColor, startedAt, text, statusText }) {
+  if (streamingEntries[streamId]) return;
+  const entry = {
+    streamId,
+    chatId,
+    agentId,
+    agentName,
+    agentColor,
+    startedAt,
+    rawText: text,
+    statusText,
+    // A status already fired this turn (a tool ran, or is running) iff
+    // statusText is non-empty — mirrors onStreamStatus's own un-hide logic,
+    // so e.g. a subagent delegation that was mid-flight when this client
+    // connected still shows as "Delegating: …" instead of silently reverting
+    // to a bare "responding…" the moment real text does arrive.
+    typingHidden: text.length > 0 && !statusText,
+  };
+  streamingEntries[streamId] = entry;
   if (chatId === activeChatId && (isViewingSearchContext || isViewingLatestPage())) attachStreamingBubble(entry);
 }
 
