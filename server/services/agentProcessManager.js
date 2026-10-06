@@ -366,6 +366,13 @@ function describeToolUse({ name, input }) {
  * @returns {TurnAccumulator}
  */
 export function createTurnAccumulator({ onChunk, onStatus } = {}) {
+  // Tracks how much of each text block (keyed by its index in the current
+  // assistant message's content array) has already been emitted, so a
+  // streaming delta can be computed per-block rather than against a single
+  // turn-wide length — see the message-id check below for why that matters.
+  let lastAssistantMessageId;
+  let textBlockSeenLengths = new Map();
+
   /** @type {TurnAccumulator} */
   const turn = {
     fullText: '',
@@ -405,11 +412,27 @@ export function createTurnAccumulator({ onChunk, onStatus } = {}) {
       else if (event.type === 'assistant' && typeof event.message?.model === 'string') turn.model = event.message.model;
 
       if (event.type === 'assistant' && Array.isArray(event.message?.content)) {
-        for (const block of event.message.content) {
+        // Confirmed live against the real CLI: a turn with "text, tool call,
+        // more text" isn't one assistant message whose content array keeps
+        // growing across the tool call — it's a SEQUENCE OF SEPARATE
+        // assistant messages, a new message.id each time a tool call
+        // interrupts the model's output, each with its own content array
+        // that starts fresh. Comparing a new message's (short, just-started)
+        // text against the PREVIOUS message's already-longer length silently
+        // dropped or mangled every text block after the turn's first tool
+        // call — so block text is tracked per (message id, block index)
+        // instead of against a single turn-wide length.
+        if (event.message.id !== lastAssistantMessageId) {
+          lastAssistantMessageId = event.message.id;
+          textBlockSeenLengths = new Map();
+        }
+        event.message.content.forEach((block, index) => {
           if (block.type === 'text') {
-            const delta = block.text.slice(turn.fullText.length);
+            const seenLength = textBlockSeenLengths.get(index) ?? 0;
+            const delta = block.text.slice(seenLength);
             if (delta) {
-              turn.fullText = block.text;
+              textBlockSeenLengths.set(index, block.text.length);
+              turn.fullText += delta;
               onChunk?.(delta);
             }
           } else if (block.type === 'tool_use') {
@@ -417,7 +440,7 @@ export function createTurnAccumulator({ onChunk, onStatus } = {}) {
             onStatus?.(label);
             turn.toolCalls.set(block.id, { id: block.id, name: block.name, label, result: '', isError: false });
           }
-        }
+        });
       } else if (event.type === 'user' && Array.isArray(event.message?.content)) {
         // Tool results are fed back to the model as a "user" turn (same
         // wire shape the Anthropic API always uses) — this is where the
@@ -758,7 +781,16 @@ function runOneTurn(proc, content, { onChunk, onStatus, signal }) {
       proc.currentTurn = null;
       if (signal) signal.removeEventListener('abort', killForStop);
       resolve({
-        text: turn.resultText || turn.fullText,
+        // turn.fullText is every text block emitted across the whole turn,
+        // concatenated in order (see handleEvent above); turn.resultText is
+        // just the CLI's own final `result` event text, which — confirmed
+        // live — covers only the LAST assistant message, not the full turn,
+        // for any turn with a tool call in the middle. Preferring fullText
+        // here is what stops that earlier commentary from silently
+        // vanishing from the persisted message. Falls back to resultText
+        // only for the degenerate case where fullText never got anything
+        // (e.g. a turn whose only output was a result-event summary).
+        text: turn.fullText || turn.resultText,
         permissionDenials: turn.permissionDenials,
         sessionId: turn.sessionId,
         stopped,

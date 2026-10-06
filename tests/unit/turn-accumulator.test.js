@@ -60,3 +60,83 @@ describe('createTurnAccumulator — result event error detection', () => {
     assert.equal(turn.errorMessage, null);
   });
 });
+
+describe('createTurnAccumulator — text across a tool call', () => {
+  // Confirmed live against the real CLI (`claude --print --output-format=
+  // stream-json --verbose`): a turn with "text, tool call, more text" isn't
+  // one assistant message whose content array keeps growing across the tool
+  // call — it's a sequence of SEPARATE assistant messages, a new message.id
+  // each time a tool call interrupts the model's output, each with its own
+  // content array that starts fresh (same shape reproduced inline below).
+  // Before this was tracked per (message id, block index), the second
+  // message's short, just-started text got sliced against the first
+  // message's already-longer length, dropping or mangling everything after
+  // the turn's first tool call.
+
+  test('text before and after a tool call is both captured, in order, with nothing dropped', () => {
+    const chunks = [];
+    const turn = createTurnAccumulator({ onChunk: (text) => chunks.push(text) });
+
+    // First assistant message: commentary, then a tool call. The CLI sends
+    // growing snapshots of the SAME message as it's produced.
+    turn.handleEvent({ type: 'assistant', message: { id: 'msg_1', content: [] } });
+    turn.handleEvent({
+      type: 'assistant',
+      message: { id: 'msg_1', content: [{ type: 'text', text: 'Let me check something first.' }] },
+    });
+    turn.handleEvent({
+      type: 'assistant',
+      message: {
+        id: 'msg_1',
+        content: [
+          { type: 'text', text: 'Let me check something first.' },
+          { type: 'tool_use', id: 'call_1', name: 'Bash', input: { command: 'ls' } },
+        ],
+      },
+    });
+    turn.handleEvent({
+      type: 'user',
+      message: { content: [{ type: 'tool_result', tool_use_id: 'call_1', content: 'file1\nfile2' }] },
+    });
+
+    // Second assistant message: a brand new message.id, own content array
+    // starting fresh — NOT a continuation of msg_1's text.
+    turn.handleEvent({
+      type: 'assistant',
+      message: { id: 'msg_2', content: [{ type: 'text', text: 'Found it, done.' }] },
+    });
+    turn.handleEvent({ type: 'result', result: 'Found it, done.' });
+
+    assert.equal(turn.fullText, 'Let me check something first.Found it, done.');
+    assert.deepEqual(chunks, ['Let me check something first.', 'Found it, done.']);
+  });
+
+  test('a second text block at the same index in a new message does not get its head sliced off', () => {
+    // The exact failure mode: msg_1's text block (30 chars) sets the old
+    // turn-wide length to 30; msg_2's text block starts short and only
+    // grows past 30 once fully formed, at which point slicing it against
+    // the stale turn-wide length used to emit a tail fragment starting
+    // mid-string instead of the block's actual start.
+    const chunks = [];
+    const turn = createTurnAccumulator({ onChunk: (text) => chunks.push(text) });
+
+    turn.handleEvent({
+      type: 'assistant',
+      message: { id: 'msg_1', content: [{ type: 'text', text: 'A'.repeat(30) }] },
+    });
+    turn.handleEvent({
+      type: 'assistant',
+      message: {
+        id: 'msg_1',
+        content: [{ type: 'text', text: 'A'.repeat(30) }, { type: 'tool_use', id: 'call_1', name: 'Bash', input: {} }],
+      },
+    });
+    turn.handleEvent({
+      type: 'assistant',
+      message: { id: 'msg_2', content: [{ type: 'text', text: 'short reply' }] },
+    });
+
+    assert.equal(turn.fullText, `${'A'.repeat(30)}short reply`);
+    assert.equal(chunks.at(-1), 'short reply');
+  });
+});
