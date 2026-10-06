@@ -129,7 +129,11 @@ import { APP_VERSION } from './appVersion.js';
  * @property {number} startedAt
  * @property {string} rawText - full accumulated response text so far
  * @property {string} statusText - last live "what's happening" status line
- * @property {boolean} typingHidden - true once real text has started streaming (the "responding…" row hides for good at that point)
+ * @property {boolean} typingHidden - true while the "responding…"/status row
+ *   is hidden because text is actively streaming. Not one-way: a tool call
+ *   or subagent delegation that interrupts the text re-shows the row (see
+ *   onStreamStatus/showStreamStatus), and the next chunk of text hides it
+ *   again (onStreamChunk/stopStreamStatus).
  * @property {HTMLElement} [el]   - The .msg DOM element, present only while `chatId` is the active chat
  * @property {HTMLElement} [body] - The .msg-content text node container
  * @property {HTMLElement} [typingEl]
@@ -1207,13 +1211,35 @@ function detachStreamingBubble(entry) {
 
 /**
  * Stops an entry's elapsed-time ticker and hides its "responding…"/status
- * row — called once real content starts arriving or the stream ends, so the
- * live status doesn't linger once it's no longer telling the user anything new.
- * @param {{ timerId: number, typingEl: HTMLElement }} entry
+ * row — called whenever real text starts (or resumes) flowing, so the live
+ * status doesn't sit stale next to content that's already answering the
+ * question. Not a one-way transition: a tool call (e.g. a Bash command or a
+ * subagent delegation) occurring mid-reply pauses text and should bring this
+ * row right back — see showStreamStatus, which this pairs with.
+ * @param {{ timerId: number | undefined, typingEl: HTMLElement }} entry
  */
 function stopStreamStatus(entry) {
   clearInterval(entry.timerId);
+  entry.timerId = undefined;
   entry.typingEl.hidden = true;
+}
+
+/**
+ * Re-shows the "what's happening now" row and restarts its elapsed-time
+ * ticker — the counterpart to stopStreamStatus, called when a tool_use
+ * status arrives after text had already hidden the row. Without this, any
+ * tool call or subagent delegation that happens after an agent's first
+ * sentence of commentary (the common case — "let me check X first…") was
+ * invisible: the row stayed hidden for the rest of the turn and the bubble
+ * looked idle until the next chunk of text appeared out of nowhere.
+ * @param {StreamingEntry} entry
+ */
+function showStreamStatus(entry) {
+  entry.typingEl.hidden = false;
+  entry.elapsedEl.textContent = t('chat.elapsedSeconds', { seconds: Math.floor((Date.now() - entry.startedAt) / 1000) });
+  entry.timerId = setInterval(() => {
+    entry.elapsedEl.textContent = t('chat.elapsedSeconds', { seconds: Math.floor((Date.now() - entry.startedAt) / 1000) });
+  }, 1000);
 }
 
 /**
@@ -1240,15 +1266,26 @@ function onStreamChunk({ streamId, text }) {
 
 /**
  * Live "what's happening now" update, parsed server-side from the agent's
- * tool_use calls (e.g. "Reading file.js", "Running: ls") — replaces the
- * static "responding…" placeholder so a long multi-step turn doesn't look stalled.
+ * tool_use calls (e.g. "Reading file.js", "Delegating: …" for a subagent) —
+ * replaces the static "responding…" placeholder so a long multi-step turn
+ * doesn't look stalled. Previously this bailed out for good once any text
+ * had streamed (entry.typingHidden), which meant a tool call or subagent
+ * delegation happening AFTER the agent's first bit of commentary had no
+ * visible effect at all — the bubble just looked frozen on stale text until
+ * more text eventually appeared. Now a status always updates the label, and
+ * re-shows the row if text had hidden it, since a status only ever fires
+ * when the model has paused texting to actually do something.
  * @param {{ streamId: string, status: string }} event
  */
 function onStreamStatus({ streamId, status }) {
   const entry = streamingEntries[streamId];
-  if (!entry || entry.typingHidden) return;
+  if (!entry) return;
   entry.statusText = status;
   if (entry.statusTextEl) entry.statusTextEl.textContent = status;
+  if (entry.typingHidden) {
+    entry.typingHidden = false;
+    if (entry.el) showStreamStatus(entry);
+  }
 }
 
 /**
