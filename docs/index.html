@@ -569,6 +569,8 @@ http://localhost:3001</pre>
       'usecases.agent-budget.desc': "Sending a couple of messages and watching the agent panel's cost/context badge grow live as each turn actually spends real tokens.",
       'usecases.mcp-server.label': 'MCP server',
       'usecases.mcp-server.desc': "An external Claude instance drives Clauhort over /mcp — creating an agent and a chat, then sending a message and getting a real reply — all without a single click in the UI.",
+      'usecases.dictation.label': 'Voice dictation',
+      'usecases.dictation.desc': "Clicking the mic next to the composer to dictate a message, then sending it and watching the agent reply.",
 
       'get.kicker': 'Get started',
       'get.h2': 'Run it locally in under a minute',
@@ -714,6 +716,8 @@ http://localhost:3001</pre>
       'usecases.agent-budget.desc': "Envoyer quelques messages et regarder le badge de coût/contexte du panneau de l'agent grandir en direct à mesure que chaque tour dépense réellement des jetons.",
       'usecases.mcp-server.label': 'Serveur MCP',
       'usecases.mcp-server.desc': "Une instance Claude externe pilote Clauhort via /mcp — elle crée un agent et une discussion, puis envoie un message et reçoit une vraie réponse — le tout sans un seul clic dans l'interface.",
+      'usecases.dictation.label': 'Dictée vocale',
+      'usecases.dictation.desc': "Cliquer sur le micro à côté du champ de saisie pour dicter un message, puis l'envoyer et regarder l'agent répondre.",
 
       'get.kicker': 'Démarrer',
       'get.h2': 'Lancez-le localement en moins d\'une minute',
@@ -783,7 +787,7 @@ http://localhost:3001</pre>
     'create-agent-chat', 'mention-relay', 'permission-flow', 'chat-rename',
     'free-relay', 'observer-agent', 'skill-invocation', 'message-search',
     'quick-messages', 'model-switch', 'chat-categories', 'agent-budget',
-    'mcp-server',
+    'mcp-server', 'dictation',
   ];
 
   const tabsEl = document.getElementById('tabs');
