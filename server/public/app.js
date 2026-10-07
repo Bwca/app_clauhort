@@ -3584,12 +3584,14 @@ function renderQuickMsgPanel() {
     empty.textContent = t('quickMsg.panelEmpty');
     quickMsgPanel.appendChild(empty);
   }
-  for (const qm of quickMessages) {
+  quickMessages.forEach((qm, i) => {
     const li = document.createElement('li');
     li.className = 'quick-msg-item';
     li.dataset.testid = 'quick-msg-item';
     li.dataset.quickMsgId = qm.id;
+    const hotkey = i < 9 ? `<span class="quick-msg-hotkey">Alt+${i + 1}</span>` : '';
     li.innerHTML = `
+      ${hotkey}
       <button class="quick-msg-item-text" data-testid="quick-msg-item-text" title="${escHtml(qm.text)}">${escHtml(qm.text)}</button>
       <button class="quick-msg-edit-btn" data-testid="quick-msg-edit-btn" title="${t('quickMsg.editTitle')}">✎</button>
       <button class="quick-msg-del-btn" data-testid="quick-msg-del-btn" title="${t('quickMsg.deleteTitle')}">✕</button>`;
@@ -3597,7 +3599,7 @@ function renderQuickMsgPanel() {
     li.querySelector('.quick-msg-edit-btn').addEventListener('click', (e) => { e.stopPropagation(); editQuickMessage(qm); });
     li.querySelector('.quick-msg-del-btn').addEventListener('click', (e) => { e.stopPropagation(); removeQuickMessage(qm.id); });
     quickMsgPanel.appendChild(li);
-  }
+  });
   const addBtn = document.createElement('button');
   addBtn.className = 'quick-msg-add-btn';
   addBtn.dataset.testid = 'quick-msg-add-btn';
@@ -4701,6 +4703,23 @@ document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
   closeDrawer();
   closeImageLightbox();
+});
+
+/**
+ * Alt+1..Alt+9 insert the Nth quick message into the composer, same as
+ * clicking it in the ⚡ panel (see useQuickMessage) — a hotkey shortcut for
+ * the same action, not a new send path. Ignored while a modal is open (its
+ * own fields take priority) or there's no active chat to type into.
+ */
+document.addEventListener('keydown', (e) => {
+  if (!e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+  if (!/^[1-9]$/.test(e.key)) return;
+  if (!activeChatId || msgInput.disabled) return;
+  if (document.querySelector('[id$="-overlay"]:not([hidden])')) return;
+  const qm = quickMessages[Number(e.key) - 1];
+  if (!qm) return;
+  e.preventDefault();
+  useQuickMessage(qm.text);
 });
 
 imageLightboxOverlay.addEventListener('click', (e) => { if (e.target === imageLightboxOverlay) closeImageLightbox(); });
