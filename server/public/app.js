@@ -579,6 +579,7 @@ const pageLastBtn      = $('#page-last-btn');
 const messageList      = $('#message-list');
 const msgInput         = $('#msg-input');
 const scheduleBtn      = $('#schedule-btn');
+const micBtn           = $('#mic-btn');
 const sendBtn          = $('#send-btn');
 const mentionDropdown  = $('#mention-dropdown');
 const scheduledBtn     = $('#scheduled-btn');
@@ -1013,6 +1014,7 @@ function connectWs() {
     reconnNotice.hidden = true;
     msgInput.disabled = false;
     sendBtn.disabled = false;
+    micBtn.disabled = false;
     wsBackoff = 1000;
   };
 
@@ -1028,6 +1030,8 @@ function connectWs() {
     reconnNotice.hidden = false;
     msgInput.disabled = true;
     sendBtn.disabled = true;
+    micBtn.disabled = true;
+    if (isDictating) recognition.stop();
     ws = null;
     setTimeout(() => {
       wsBackoff = Math.min(wsBackoff * 2, MAX_BACKOFF);
@@ -4535,6 +4539,68 @@ inputArea.addEventListener('drop', (e) => {
     if (file.type.startsWith('image/')) addImageAttachment(file);
   }
 });
+
+// ─── Dictation (push-to-talk speech-to-text) ──────────────────────────────────
+
+const SpeechRecognitionCtor = window.SpeechRecognition ?? window.webkitSpeechRecognition;
+let recognition = null;
+let isDictating = false;
+let dictationBaseValue = '';
+
+if (SpeechRecognitionCtor) {
+  micBtn.hidden = false;
+  recognition = new SpeechRecognitionCtor();
+  recognition.continuous = true;
+  recognition.interimResults = true;
+
+  recognition.onresult = (event) => {
+    let finalChunk = '';
+    let interimChunk = '';
+    for (let i = event.resultIndex; i < event.results.length; i++) {
+      const transcript = event.results[i][0].transcript;
+      if (event.results[i].isFinal) finalChunk += transcript;
+      else interimChunk += transcript;
+    }
+    if (finalChunk) dictationBaseValue += finalChunk;
+    msgInput.value = dictationBaseValue + interimChunk;
+    msgInput.style.height = 'auto';
+    msgInput.style.height = Math.min(msgInput.scrollHeight, 140) + 'px';
+  };
+
+  recognition.onerror = (event) => {
+    if (event.error === 'no-speech' || event.error === 'aborted') return;
+    const key = event.error === 'not-allowed' || event.error === 'service-not-allowed'
+      ? 'chat.micPermissionError'
+      : 'chat.micNoSpeechError';
+    showAttachmentError(t(key));
+  };
+
+  recognition.onend = () => {
+    isDictating = false;
+    micBtn.classList.remove('recording');
+    micBtn.title = t('chat.micBtnTitle');
+    msgInput.focus();
+  };
+
+  micBtn.addEventListener('click', () => {
+    if (isDictating) {
+      recognition.stop();
+      return;
+    }
+    dictationBaseValue = msgInput.value ? msgInput.value.replace(/\s*$/, ' ') : '';
+    recognition.lang = currentLocale;
+    try {
+      recognition.start();
+      isDictating = true;
+      micBtn.classList.add('recording');
+      micBtn.title = t('chat.micBtnTitleRecording');
+    } catch {
+      // already started — ignore
+    }
+  });
+} else {
+  micBtn.hidden = true;
+}
 
 // ─── Input handling ───────────────────────────────────────────────────────────
 
