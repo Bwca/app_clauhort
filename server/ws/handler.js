@@ -9,7 +9,7 @@ import { dirname } from 'path';
 import { getChat, getAgent, getAgentChatId, getMessages, addMessage, grantAgentPath, grantAgentToolPattern, setAgentResumeIdIfUnset, setAgentModel, setAgentUsage, setAgentSessionLimitReset, getUserDisplayName, createScheduledMessage, getScheduledMessages } from '../store/db.js';
 import { parseResponders, extractMentionedAgents, parseSkillInvocation } from '../services/messageRouter.js';
 import { runAgentStream, FILE_PATH_TOOLS, deriveToolPatterns, dedupePermissionDenials } from '../services/agentRunner.js';
-import { killAgent, onBackgroundTurn, onBackgroundCompaction } from '../services/agentProcessManager.js';
+import { killAgent, onBackgroundTurn, onBackgroundCompaction, onBackgroundError } from '../services/agentProcessManager.js';
 import { scheduleTimer } from '../services/scheduler.js';
 import { parseSessionLimitReset } from '../services/sessionLimitReset.js';
 import { t } from '../i18n/t.js';
@@ -718,6 +718,11 @@ function makeBackgroundTurnHandler(agentId, wss) {
       const updated = await setAgentModel(agentId, model);
       if (updated) broadcast(wss, { type: 'AGENT_UPDATED', agent: updated });
     }
+    // A real background completion means this agent isn't session-limited
+    // any more, whatever a past background failure (see onBackgroundError)
+    // once set — same reasoning as runAgentsParallel's own clearedLimit.
+    const clearedLimit = await setAgentSessionLimitReset(agentId, null);
+    if (clearedLimit) broadcast(wss, { type: 'AGENT_UPDATED', agent: clearedLimit });
 
     /** @type {import('../store/db.js').Message} */
     const agentMessage = {
@@ -764,6 +769,41 @@ function makeBackgroundCompactionHandler(agentId, wss) {
     const chat = getChat(chatId);
     if (!chat) return;
     await postCompactionNotes(chat, agent, [compaction], wss);
+  };
+}
+
+/**
+ * Builds the handler passed to agentProcessManager's onBackgroundError for a
+ * given agent: the background-turn equivalent of runAgentsParallel's own
+ * catch block, for a turn the CLI resumed and ran entirely unprompted but
+ * that ended in is_error:true rather than real content (see onBackgroundError's
+ * docs for why this exists and the incident that motivated it). Deliberately
+ * does NOT persist or broadcast a chat message — unlike makeBackgroundTurnHandler,
+ * there is no genuine agent reply here, only a failed retry, so this just
+ * does the same session-limit bookkeeping an explicit turn's error gets:
+ * stamp the informational badge, and — only if this chat opted into
+ * chat.autoContinue — (re-)arm the same cancelable scheduled nudge a user
+ * would get from an explicit turn hitting the same wall.
+ * @param {string} agentId
+ * @param {WebSocketServer} wss
+ * @returns {({ errorMessage: string }) => Promise<void>}
+ */
+function makeBackgroundErrorHandler(agentId, wss) {
+  return async ({ errorMessage }) => {
+    const agent = getAgent(agentId);
+    const chatId = getAgentChatId(agentId);
+    if (!agent || !chatId) return;
+    const chat = getChat(chatId);
+    if (!chat) return;
+
+    log.warn({ agentId, chatId, errorMessage }, 'agent background retry errored');
+
+    const resetAt = parseSessionLimitReset(errorMessage);
+    if (resetAt) {
+      const updated = await setAgentSessionLimitReset(agentId, resetAt.toISOString());
+      if (updated) broadcast(wss, { type: 'AGENT_UPDATED', agent: updated });
+    }
+    await maybeScheduleAutoContinue(chat, agent, resetAt, wss);
   };
 }
 
@@ -921,6 +961,7 @@ async function runAgentsParallel(agents, allMembers, chat, userMessage, wss, pri
     // agent's lifecycle its process first comes alive.
     onBackgroundTurn(agent.id, makeBackgroundTurnHandler(agent.id, wss));
     onBackgroundCompaction(agent.id, makeBackgroundCompactionHandler(agent.id, wss));
+    onBackgroundError(agent.id, makeBackgroundErrorHandler(agent.id, wss));
 
     /** @type {AgentStreamStartEvent} */
     broadcast(wss, {
