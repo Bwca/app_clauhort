@@ -123,6 +123,13 @@ const backgroundTurnHandlers = new Map();
 const backgroundCompactionHandlers = new Map();
 
 /**
+ * Handlers registered via onBackgroundError, one per agent. See that
+ * function's docs for what fires them.
+ * @type {Map<string, (error: { errorMessage: string }) => void>}
+ */
+const backgroundErrorHandlers = new Map();
+
+/**
  * @param {ManagedProcess} proc
  * @returns {boolean}
  */
@@ -563,6 +570,34 @@ export function onBackgroundCompaction(agentId, handler) {
 }
 
 /**
+ * Registers the handler to call whenever this agent's persistent process
+ * resumes a backgrounded turn ENTIRELY ON ITS OWN and that turn ends in a
+ * `result` with is_error:true (e.g. the account-wide session limit named in
+ * maybeScheduleAutoContinue's docs, ws/handler.js, still hadn't cleared when
+ * the CLI's own background-task machinery retried it) rather than reporting
+ * normal content — see handleUnsolicitedEvent's `turn.errorMessage` check.
+ * Reported live: an agent running its own ~20-minute self-rescheduled
+ * check-in loop kept hitting the same still-active session limit on every
+ * retry, and before this handler existed each failed retry fell through to
+ * onBackgroundTurn's handler anyway (nothing distinguished it from a real
+ * reply), posting the bare "You've hit your session limit · resets ..."
+ * text into the chat as if the agent had genuinely said it — over and over,
+ * once per retry, for hours, with no relation to chat.autoContinue and no
+ * scheduled message for the user to see or cancel. The foreground
+ * equivalent (runOneTurn) has always had this same is_error guard; this is
+ * that guard's missing half for the background path.
+ *
+ * One handler per agent; same replace-on-reregister contract as
+ * onBackgroundTurn.
+ * @param {string} agentId
+ * @param {(error: { errorMessage: string }) => void} handler
+ * @returns {void}
+ */
+export function onBackgroundError(agentId, handler) {
+  backgroundErrorHandlers.set(agentId, handler);
+}
+
+/**
  * The built-in/marketplace/plugin skill names an agent can invoke: its live
  * process's own most recent report if one is currently running, falling
  * back to `lastKnownSkills` (see its docs) when there's no live process at
@@ -584,16 +619,23 @@ export function getAgentSkills(agentId) {
  * (`proc.currentTurn` is null) into a lazily-created accumulator scoped to
  * this unsolicited stretch of output, and — once its `result` lands —
  * hands the finished text/tool calls off to this agent's registered
- * onBackgroundTurn handler, if any. Most events seen here are pure
+ * onBackgroundTurn handler, or to onBackgroundError if that `result` was
+ * is_error:true (see its docs). Most events seen here are pure
  * informational chatter (background_tasks_changed, task_updated,
  * task_notification) with no assistant/result pair ever following; those
- * are harmless no-ops, since the accumulator only actually fires its
- * handler on a genuine `result`, and only if it captured real content.
+ * are harmless no-ops, since the accumulator only actually fires a handler
+ * on a genuine `result`, and (for onBackgroundTurn) only if it captured
+ * real content.
+ * Exported (alongside createTurnAccumulator) so this routing decision — a
+ * `result` with is_error:true going to onBackgroundError, never
+ * onBackgroundTurn — has a direct unit test; see
+ * tests/unit/background-unprompted-error.test.js. Otherwise only ever
+ * called from spawnProcess's own stdout handler against a real process.
  * @param {ManagedProcess} proc
  * @param {{ type: string, [key: string]: unknown }} event
  * @returns {void}
  */
-function handleUnsolicitedEvent(proc, event) {
+export function handleUnsolicitedEvent(proc, event) {
   if (event.type === 'system' && event.subtype === 'compact_boundary') {
     // Reported immediately, independent of the assistant/result accumulator
     // below — a compaction firing while idle isn't guaranteed to be
@@ -617,6 +659,17 @@ function handleUnsolicitedEvent(proc, event) {
 
   const turn = proc.background;
   proc.background = null;
+  // A `result` with is_error:true (e.g. the session limit still hadn't
+  // cleared when this background retry ran) is a failure, not real agent
+  // speech — same distinction runOneTurn's own turn.errorMessage check
+  // already makes for an explicit foreground turn. Routed to a dedicated
+  // handler instead of onBackgroundTurn's so the caller can react to the
+  // failure (e.g. re-arm an auto-continue) without it ever being mistaken
+  // for genuine content — see onBackgroundError's docs for why this exists.
+  if (turn.errorMessage) {
+    backgroundErrorHandlers.get(proc.agentId)?.({ errorMessage: turn.errorMessage });
+    return;
+  }
   if (!turn.fullText && turn.toolCalls.size === 0) return;
 
   const handler = backgroundTurnHandlers.get(proc.agentId);
