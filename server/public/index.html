@@ -188,15 +188,17 @@
             <span class="field-hint" data-i18n="agentModal.chromeAccessHint">grants real control of your Chrome browser via the Claude in Chrome extension — only one agent app-wide can hold this at a time</span>
           </span>
         </label>
-        <label id="add-to-chat-label" class="check-label">
-          <input id="add-to-chat-check" data-testid="add-to-chat-check" type="checkbox" checked />
-          <span data-i18n="agentModal.addToChatLabel">Add to current chat</span>
-        </label>
         </div>
         <p id="agent-error" data-testid="agent-error" class="error-text" hidden></p>
         <div id="modal-footer">
-          <button type="button" id="modal-cancel" data-testid="modal-cancel" data-i18n="common.cancel">Cancel</button>
-          <button type="submit" id="modal-submit" data-testid="modal-submit" data-i18n="agentModal.createBtn">Create</button>
+          <label id="add-to-chat-label" class="check-label">
+            <input id="add-to-chat-check" data-testid="add-to-chat-check" type="checkbox" checked />
+            <span data-i18n="agentModal.addToChatLabel">Add to current chat</span>
+          </label>
+          <div id="modal-footer-actions">
+            <button type="button" id="modal-cancel" data-testid="modal-cancel" data-i18n="common.cancel">Cancel</button>
+            <button type="submit" id="modal-submit" data-testid="modal-submit" data-i18n="agentModal.createBtn">Create</button>
+          </div>
         </div>
       </form>
     </div>
