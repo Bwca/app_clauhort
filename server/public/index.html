@@ -131,13 +131,13 @@
       </div>
       <form id="agent-form">
         <div id="agent-form-fields">
-        <label class="field-label"><span data-i18n="agentModal.nameLabel">Name</span>
+        <label class="field-label field-span-2"><span data-i18n="agentModal.nameLabel">Name</span>
           <div id="agent-name-row">
             <input id="agent-name" data-testid="agent-name-input" data-i18n-placeholder="agentModal.namePlaceholder" placeholder="e.g. Claudia" autocomplete="off" required />
             <button type="button" id="agent-name-generate" data-testid="agent-name-generate" data-i18n-title="agentModal.generateNameTitle" title="Generate a name">🎲</button>
           </div>
         </label>
-        <label class="field-label"><span data-i18n="agentModal.workingDirLabel">Working Directory</span>
+        <label class="field-label field-span-2"><span data-i18n="agentModal.workingDirLabel">Working Directory</span>
           <div id="agent-dir-row">
             <input id="agent-dir" data-testid="agent-dir-input" data-i18n-placeholder="agentModal.workingDirPlaceholder" placeholder="/home/you/projects/myapp" autocomplete="off" required />
             <button type="button" id="agent-dir-browse" data-testid="agent-dir-browse" data-i18n="agentModal.browseBtn">Browse…</button>
@@ -167,21 +167,21 @@
         <div class="field-label"><span data-i18n="agentModal.colorLabel">Color</span>
           <div id="color-grid" class="color-grid" data-testid="color-grid"></div>
         </div>
-        <label id="yolo-mode-label" class="check-label check-label-danger">
+        <label id="yolo-mode-label" class="check-label check-label-danger field-span-2">
           <input id="yolo-mode-check" data-testid="yolo-mode-check" type="checkbox" />
           <span>
             <span data-i18n="agentModal.yoloModeLabel">⚡ YOLO mode</span>
             <span class="field-hint" data-i18n="agentModal.yoloModeHint">skips ALL permission checks — no denials, no grant prompts, ever</span>
           </span>
         </label>
-        <label id="observer-mode-label" class="check-label">
+        <label id="observer-mode-label" class="check-label field-span-2">
           <input id="observer-mode-check" data-testid="observer-mode-check" type="checkbox" />
           <span>
             <span data-i18n="agentModal.observerModeLabel">👁 Observer</span>
             <span class="field-hint" data-i18n="agentModal.observerModeHint">only responds when @mentioned — never to broadcast messages — and sees the full chat history, not just the recent window</span>
           </span>
         </label>
-        <label id="chrome-access-label" class="check-label check-label-danger">
+        <label id="chrome-access-label" class="check-label check-label-danger field-span-2">
           <input id="chrome-access-check" data-testid="chrome-access-check" type="checkbox" />
           <span>
             <span data-i18n="agentModal.chromeAccessLabel">🌐 Browser access</span>

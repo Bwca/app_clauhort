@@ -443,13 +443,18 @@ html, body { height: 100%; background: var(--bg0); color: var(--text); font-fami
 
 /* ── Modal ─────────────────────────────────────────────────────────── */
 #modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: flex; align-items: center; justify-content: center; z-index: 100; }
-#modal { background: var(--bg1); border: 1px solid var(--bg3); border-radius: 12px; width: 380px; max-width: 95vw; max-height: 85vh; display: flex; flex-direction: column; box-shadow: 0 8px 32px rgba(0,0,0,.5); }
+#modal { background: var(--bg1); border: 1px solid var(--bg3); border-radius: 12px; width: 560px; max-width: 95vw; max-height: 90vh; display: flex; flex-direction: column; box-shadow: 0 8px 32px rgba(0,0,0,.5); }
 #modal-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; border-bottom: 1px solid var(--border); font-weight: 600; font-size: 15px; flex-shrink: 0; }
 #modal-close { background: none; border: none; color: var(--dim); font-size: 20px; cursor: pointer; line-height: 1; transition: color .15s; }
 #modal-close:hover { color: var(--red); }
 
 #agent-form { display: flex; flex-direction: column; min-height: 0; }
-#agent-form-fields { padding: 18px; display: flex; flex-direction: column; gap: 14px; overflow-y: auto; flex: 1; min-height: 0; }
+#agent-form-fields { padding: 18px; display: grid; grid-template-columns: 1fr 1fr; gap: 14px 18px; align-items: start; overflow-y: auto; flex: 1; min-height: 0; }
+.field-span-2 { grid-column: 1 / -1; }
+
+@media (max-width: 520px) {
+  #agent-form-fields { grid-template-columns: 1fr; }
+}
 .field-label { display: flex; flex-direction: column; gap: 5px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .6px; color: var(--dim); }
 .field-label input, .field-label select, .field-label textarea { background: var(--bg2); border: 1px solid var(--faint); border-radius: 7px; padding: 8px 11px; color: var(--text); font-size: 14px; outline: none; font-family: inherit; transition: border-color .15s; }
 .field-label input:focus, .field-label select:focus, .field-label textarea:focus { border-color: var(--blue); }
