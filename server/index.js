@@ -9,7 +9,7 @@ import { fileURLToPath } from 'url';
 import express from 'express';
 import { WebSocketServer } from 'ws';
 import { loadDb, resetAll, getChats, getAgent } from './store/db.js';
-import agentsRouter from './routes/agents.js';
+import createAgentsRouter from './routes/agents.js';
 import createChatsRouter from './routes/chats.js';
 import browseRouter from './routes/browse.js';
 import settingsRouter from './routes/settings.js';
@@ -74,7 +74,7 @@ app.use('/api', (req, res, next) => {
   next();
 });
 
-app.use('/api/agents', agentsRouter);
+app.use('/api/agents', createAgentsRouter(wss));
 app.use('/api/chats', createChatsRouter(wss));
 app.use('/api/browse', browseRouter);
 app.use('/api/settings', settingsRouter);

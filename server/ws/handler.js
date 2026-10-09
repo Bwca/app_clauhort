@@ -876,6 +876,51 @@ async function postCompactionNotes(chat, agent, compactions, wss) {
 }
 
 /**
+ * Who took a roster-changing action (removed an agent from a chat, or
+ * deleted one outright) — the only two surfaces that can do either are a
+ * REST call from the browser tab ('user' — the app has no auth, so this is
+ * always the single local operator, see CLAUDE.md) or an external Claude
+ * instance driving Clauhort over /mcp ('mcp' — see mcp/tools.js). An MCP
+ * caller has no finer-grained identity than the bearer token it connected
+ * with, so 'mcp' is as specific as this can get.
+ * @typedef {'user' | 'mcp'} RosterActor
+ */
+
+/**
+ * Persists and broadcasts one isSystemNote message recording that `agent`
+ * was removed from `chat` — either unmembered or deleted outright — so the
+ * chat keeps a visible, searchable record of who/what did it. Mirrors
+ * postCompactionNotes above, except `agentId` here is set to the REMOVED
+ * agent's id specifically so the per-agent message filter still surfaces
+ * this note when filtering to that agent, even though the removal itself
+ * never reached its session.
+ * @param {import('../store/db.js').Chat} chat
+ * @param {import('../store/db.js').Agent} agent - the agent that was removed
+ * @param {RosterActor} actor
+ * @param {WebSocketServer} wss
+ * @returns {Promise<void>}
+ */
+export async function postAgentRemovedNote(chat, agent, actor, wss) {
+  const actorLabel = actor === 'mcp' ? 'An MCP client' : 'You';
+  /** @type {import('../store/db.js').Message} */
+  const noteMessage = {
+    id: uuidv4(),
+    chatId: chat.id,
+    role: 'agent',
+    agentId: agent.id,
+    authorName: 'System',
+    content: `🚪 ${actorLabel} removed ${agent.name} from the chat`,
+    attachments: [],
+    toolCalls: [],
+    isSystemNote: true,
+    createdAt: new Date().toISOString(),
+  };
+  await addMessage(noteMessage);
+  /** @type {MessageSavedEvent} */
+  broadcast(wss, { type: 'MESSAGE_SAVED', chatId: chat.id, message: noteMessage });
+}
+
+/**
  * chat.autoContinue's whole mechanism: when an agent's turn errors out on
  * Claude's own session-limit message ("You've hit your session limit ·
  * resets 7:20pm (Australia/Darwin)" — see services/sessionLimitReset.js),

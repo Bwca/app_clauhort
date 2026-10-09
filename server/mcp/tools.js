@@ -38,7 +38,7 @@ import {
 } from '../store/db.js';
 import { verifyClaudeBinAvailable } from '../services/agentRunner.js';
 import { spawnForAgent, killAgent } from '../services/agentProcessManager.js';
-import { handleUserMessage, broadcast } from '../ws/handler.js';
+import { handleUserMessage, broadcast, postAgentRemovedNote } from '../ws/handler.js';
 import { t } from '../i18n/t.js';
 
 /** @returns {{ content: [{ type: 'text', text: string }] }} */
@@ -247,7 +247,10 @@ export function registerTools(mcpServer, wss) {
         // removeChatMember() already cleared the agent's resumeId — surface
         // that too, same reasoning as delete_chat above.
         const agent = getAgent(agentId);
-        if (agent) broadcast(wss, { type: 'AGENT_UPDATED', agent });
+        if (agent) {
+          broadcast(wss, { type: 'AGENT_UPDATED', agent });
+          await postAgentRemovedNote(chat, agent, 'mcp', wss);
+        }
       }
       return ok(chat);
     }
@@ -345,6 +348,15 @@ export function registerTools(mcpServer, wss) {
     },
     async ({ agentId }) => {
       const chatId = getAgentChatId(agentId);
+      // Both captured before the delete, and the note posted before it too:
+      // the agent row, name included, won't exist to read afterward, and
+      // the note's agent_id foreign key needs that row to still exist to
+      // insert against (messages.agent_id is only ON DELETE SET NULL for
+      // rows that already existed at delete time, not a fresh insert
+      // against an already-gone id).
+      const agent = chatId ? getAgent(agentId) : null;
+      const chatBeforeDelete = chatId ? getChat(chatId) : null;
+      if (chatBeforeDelete && agent) await postAgentRemovedNote(chatBeforeDelete, agent, 'mcp', wss);
       const deleted = await deleteAgent(agentId);
       if (!deleted) return fail(t('errors.agentNotFound'));
       await killAgent(agentId);
