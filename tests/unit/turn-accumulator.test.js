@@ -61,6 +61,37 @@ describe('createTurnAccumulator — result event error detection', () => {
   });
 });
 
+describe('createTurnAccumulator — "/clear" (conversation_reset) handling', () => {
+  // Confirmed live against the real CLI (v2.1.260) via a raw two-turn
+  // --print --input-format=stream-json --output-format=stream-json run: a
+  // bare "/clear" does NOT produce the synthetic assistant message
+  // "/chrome"/"/help" do (wasLocalCommand's shape) — it fires a standalone
+  // {"type":"system","subtype":"conversation_reset"} event, still tagged
+  // with the OLD session_id, immediately followed by a fresh "system"/
+  // "init" carrying a BRAND-NEW session_id, and this turn's own closing
+  // `result` event already reports that new id — i.e. turn.sessionId (set
+  // generically from every event's session_id) ends up holding the new one
+  // by the time the turn resolves.
+  test('a conversation_reset event sets contextCleared, independent of wasLocalCommand', () => {
+    const turn = createTurnAccumulator();
+    turn.handleEvent({ type: 'system', subtype: 'init', session_id: 'old-session' });
+    turn.handleEvent({ type: 'system', subtype: 'conversation_reset', session_id: 'old-session' });
+    turn.handleEvent({ type: 'system', subtype: 'init', session_id: 'new-session' });
+    turn.handleEvent({ type: 'result', result: '', session_id: 'new-session' });
+    assert.equal(turn.contextCleared, true);
+    assert.equal(turn.wasLocalCommand, false, 'conversation_reset is a different wire shape than the synthetic-assistant local commands');
+    assert.equal(turn.sessionId, 'new-session', 'the turn must end up holding the ROTATED session id, not the one it started with');
+  });
+
+  test('an ordinary turn never sets contextCleared', () => {
+    const turn = createTurnAccumulator();
+    turn.handleEvent({ type: 'system', subtype: 'init', session_id: 'sess-1' });
+    turn.handleEvent({ type: 'assistant', message: { id: 'm1', model: 'claude-sonnet-5', content: [{ type: 'text', text: 'hi' }] } });
+    turn.handleEvent({ type: 'result', result: 'hi', session_id: 'sess-1' });
+    assert.equal(turn.contextCleared, false);
+  });
+});
+
 describe('createTurnAccumulator — text across a tool call', () => {
   // Confirmed live against the real CLI (`claude --print --output-format=
   // stream-json --verbose`): a turn with "text, tool call, more text" isn't

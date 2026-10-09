@@ -101,9 +101,11 @@ export function parseResponders(content, chatMembers) {
  * against the real command/skill list closes this: anything that isn't an
  * actual registered skill now falls through to parseResponders as ordinary
  * chat text (content kept intact, "@Name " prefix included), which doesn't
- * match the CLI's bare-slash trigger. The one deliberate carve-out is
- * ALLOWED_BUILTIN_COMMANDS ("/compact", commands.js) — see its doc comment
- * for why that specific built-in doesn't carry the same risk.
+ * match the CLI's bare-slash trigger. The deliberate carve-out is
+ * ALLOWED_BUILTIN_COMMANDS ("/compact", "/clear" — commands.js) — see its
+ * doc comment for why those two specific built-ins don't carry the same
+ * risk (and, for "/clear", how its own different risk — session rotation —
+ * is handled instead).
  *
  * @param {string} content - Raw message content from the user
  * @param {import('../store/db.js').Agent[]} chatMembers - Agents currently in the chat

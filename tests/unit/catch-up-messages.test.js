@@ -86,4 +86,32 @@ describe('catchUpMessagesFor', () => {
     const result = catchUpMessagesFor(agent, messages);
     assert.deepEqual(result.map((m) => m.id), ['1', '3'], 'must catch up on everything except its own messages, not just what follows the local-command reply');
   });
+
+  test('a "/clear" since the agent\'s last own turn wipes its session memory — the full window goes out, not just what followed that turn', () => {
+    // The agent DID speak after message '1', but a /clear happened after
+    // that reply — its live CLI session no longer has any memory of it, so
+    // that old turn can't be trusted as a "last own turn" boundary anymore.
+    const agent = { id: 'claudia', name: 'Claudia', resumeId: 'sess-2', contextResetAt: '2026-01-01T00:00:10.000Z' };
+    const messages = [
+      msg('1', 'clarence', 'clarence says hi', { createdAt: '2026-01-01T00:00:00.000Z' }),
+      msg('2', 'claudia', 'hi clarence', { createdAt: '2026-01-01T00:00:05.000Z' }),
+      msg('3', 'claudia', '🧹 Context cleared — starting a fresh session', { createdAt: '2026-01-01T00:00:10.000Z', isSystemNote: true }),
+      msg('4', null, 'claudia, are you there?', { createdAt: '2026-01-01T00:00:15.000Z' }),
+    ];
+    const result = catchUpMessagesFor(agent, messages);
+    assert.deepEqual(result.map((m) => m.id), ['1', '4'], 'the pre-clear own turn must not count as a memory boundary, so everything but the agent\'s own messages goes out');
+  });
+
+  test('an own turn AFTER the "/clear" is still a valid memory boundary', () => {
+    const agent = { id: 'claudia', name: 'Claudia', resumeId: 'sess-3', contextResetAt: '2026-01-01T00:00:10.000Z' };
+    const messages = [
+      msg('1', 'clarence', 'before the clear', { createdAt: '2026-01-01T00:00:00.000Z' }),
+      msg('2', 'claudia', '🧹 Context cleared — starting a fresh session', { createdAt: '2026-01-01T00:00:10.000Z', isSystemNote: true }),
+      msg('3', null, 'hi again claudia', { createdAt: '2026-01-01T00:00:15.000Z' }),
+      msg('4', 'claudia', 'hi!', { createdAt: '2026-01-01T00:00:20.000Z' }),
+      msg('5', 'clarence', 'one more thing', { createdAt: '2026-01-01T00:00:25.000Z' }),
+    ];
+    const result = catchUpMessagesFor(agent, messages);
+    assert.deepEqual(result.map((m) => m.id), ['5'], 'the post-clear reply is a genuine memory boundary, so only what came after it is new');
+  });
 });

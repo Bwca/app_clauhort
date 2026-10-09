@@ -122,10 +122,11 @@ describe('parseSkillInvocation — hyphenated names', () => {
   });
 });
 
-describe('parseSkillInvocation — /compact carve-out', () => {
-  // No .claude/commands/compact.md and no live process (so getAgentSkills
-  // returns []) — /compact still resolves via ALLOWED_BUILTIN_COMMANDS,
-  // unlike an arbitrary unregistered CLI built-in such as /clear.
+describe('parseSkillInvocation — ALLOWED_BUILTIN_COMMANDS carve-out', () => {
+  // No .claude/commands/compact.md or clear.md and no live process (so
+  // getAgentSkills returns []) — /compact and /clear still resolve via
+  // ALLOWED_BUILTIN_COMMANDS, unlike an arbitrary unregistered CLI built-in
+  // such as /help.
   const workDir = mkdtempSync(join(tmpdir(), 'clauhort-compact-test-'));
   after(() => rmSync(workDir, { recursive: true, force: true }));
 
@@ -135,8 +136,14 @@ describe('parseSkillInvocation — /compact carve-out', () => {
     assert.deepEqual(result, { agent: a, command: '/compact' });
   });
 
-  test('an unrelated unregistered built-in like /clear is still not forwarded', () => {
+  test('/clear is recognized as a skill invocation despite not being a project command or reported skill', () => {
     const a = { id: 'a', name: 'Alice', workingDir: workDir };
-    assert.equal(parseSkillInvocation('@Alice /clear', [a]), null);
+    const result = parseSkillInvocation('@Alice /clear', [a]);
+    assert.deepEqual(result, { agent: a, command: '/clear' });
+  });
+
+  test('an unrelated unregistered built-in like /help is still not forwarded', () => {
+    const a = { id: 'a', name: 'Alice', workingDir: workDir };
+    assert.equal(parseSkillInvocation('@Alice /help', [a]), null);
   });
 });

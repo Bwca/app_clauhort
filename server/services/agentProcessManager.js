@@ -389,6 +389,7 @@ export function createTurnAccumulator({ onChunk, onStatus } = {}) {
     toolCalls: new Map(),
     done: false,
     wasLocalCommand: false,
+    contextCleared: false,
     errorMessage: null,
     usage: null,
     totalCostUsd: null,
@@ -475,6 +476,19 @@ export function createTurnAccumulator({ onChunk, onStatus } = {}) {
             postTokens: meta.post_tokens ?? null,
           });
         }
+      } else if (event.type === 'system' && event.subtype === 'conversation_reset') {
+        // A bare "/clear" — confirmed directly against the installed CLI
+        // binary via a raw two-turn stream-json run, NOT the same shape as
+        // "/chrome"/"/help" above (no synthetic assistant message at all).
+        // Instead this fires alone, still tagged with the OLD session_id,
+        // and is immediately followed by a fresh system/init carrying a
+        // BRAND-NEW session_id — i.e. unlike /compact, this genuinely
+        // rotates which CLI session this process is resuming. turn.sessionId
+        // (set generically above from every event) ends up holding that new
+        // id by the time this turn's own `result` event arrives, which is
+        // what callers need to persist going forward — see
+        // store/db.js's recordContextClear.
+        turn.contextCleared = true;
       } else if (event.type === 'result') {
         turn.resultText = typeof event.result === 'string' ? event.result : turn.fullText;
         if (Array.isArray(event.permission_denials) && event.permission_denials.length) {
@@ -788,7 +802,7 @@ export function spawnForAgent(agent) {
  * @param {import('../store/db.js').Agent} agent
  * @param {import('./agentRunner.js').ContentBlock[]} content
  * @param {{ onChunk: (text: string) => void, onStatus?: (status: string) => void, signal?: AbortSignal }} options
- * @returns {Promise<{ text: string, permissionDenials: import('./agentRunner.js').PermissionDenial[], sessionId: string | null, stopped: boolean, toolCalls: ToolCall[], wasLocalCommand: boolean, usage: TurnUsage | null, totalCostUsd: number | null, durationMs: number | null, model: string | null, compactions: { trigger: 'auto' | 'manual', preTokens: number | null, postTokens: number | null }[] }>}
+ * @returns {Promise<{ text: string, permissionDenials: import('./agentRunner.js').PermissionDenial[], sessionId: string | null, stopped: boolean, toolCalls: ToolCall[], wasLocalCommand: boolean, contextCleared: boolean, usage: TurnUsage | null, totalCostUsd: number | null, durationMs: number | null, model: string | null, compactions: { trigger: 'auto' | 'manual', preTokens: number | null, postTokens: number | null }[] }>}
  */
 export function runTurn(agent, content, { onChunk, onStatus, signal }) {
   if (!existsSync(agent.workingDir)) {
@@ -811,7 +825,7 @@ export function runTurn(agent, content, { onChunk, onStatus, signal }) {
  * @param {ManagedProcess} proc
  * @param {import('./agentRunner.js').ContentBlock[]} content
  * @param {{ onChunk: (text: string) => void, onStatus?: (status: string) => void, signal?: AbortSignal }} options
- * @returns {Promise<{ text: string, permissionDenials: import('./agentRunner.js').PermissionDenial[], sessionId: string | null, stopped: boolean, toolCalls: ToolCall[], wasLocalCommand: boolean, usage: TurnUsage | null, totalCostUsd: number | null, durationMs: number | null, model: string | null, compactions: { trigger: 'auto' | 'manual', preTokens: number | null, postTokens: number | null }[] }>}
+ * @returns {Promise<{ text: string, permissionDenials: import('./agentRunner.js').PermissionDenial[], sessionId: string | null, stopped: boolean, toolCalls: ToolCall[], wasLocalCommand: boolean, contextCleared: boolean, usage: TurnUsage | null, totalCostUsd: number | null, durationMs: number | null, model: string | null, compactions: { trigger: 'auto' | 'manual', preTokens: number | null, postTokens: number | null }[] }>}
  */
 function runOneTurn(proc, content, { onChunk, onStatus, signal }) {
   return new Promise((resolve, reject) => {
@@ -849,6 +863,7 @@ function runOneTurn(proc, content, { onChunk, onStatus, signal }) {
         stopped,
         toolCalls: [...turn.toolCalls.values()],
         wasLocalCommand: turn.wasLocalCommand,
+        contextCleared: turn.contextCleared,
         usage: turn.usage,
         totalCostUsd: turn.totalCostUsd,
         durationMs: turn.durationMs,
@@ -876,6 +891,7 @@ function runOneTurn(proc, content, { onChunk, onStatus, signal }) {
       err.durationMs = turn.durationMs;
       err.model = turn.model;
       err.compactions = turn.compactions;
+      err.contextCleared = turn.contextCleared;
       reject(err);
     };
 

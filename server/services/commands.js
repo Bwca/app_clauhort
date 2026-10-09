@@ -14,17 +14,29 @@ import { join } from 'path';
  * `system/init` event as `slash_commands`, never in its separate `skills`
  * array — getAgentSkills only ever captures the latter, see
  * agentProcessManager.js's `init` handling) that are safe to expose anyway.
- * `compact` is the one exception: unlike a meta-command such as `/clear` or
- * `/help`, a user only ever invokes it against an agent that's already deep
- * into a resumed session — i.e. long past the point where its one-time
- * identity preamble (buildSystemPreamble in ws/handler.js) would have gone
- * out — so the preamble-discarding collision messageRouter.js's
+ * `compact` and `clear` are the two exceptions: unlike a generic meta-command
+ * such as `/help`, a user only ever invokes either against an agent that's
+ * already deep into a resumed session — i.e. long past the point where its
+ * one-time identity preamble (buildSystemPreamble in ws/handler.js) would
+ * have gone out — so the preamble-discarding collision messageRouter.js's
  * parseSkillInvocation gate exists to prevent doesn't apply here in
- * practice. Shared between that gate and mergeSkills below so the
- * composer's autocomplete never offers a command parseSkillInvocation
- * would then refuse to forward.
+ * practice.
+ *
+ * `clear` carries a second risk `compact` doesn't: it genuinely rotates the
+ * CLI's underlying session_id (confirmed directly against the installed
+ * binary — see agentProcessManager.js's conversation_reset handling), which
+ * would collide with this app's "only capture resumeId once" assumption
+ * (setAgentResumeIdIfUnset) if left unhandled — ws/handler.js's turn
+ * completion specifically detects this and calls store/db.js's
+ * recordContextClear instead, which overwrites resumeId unconditionally and
+ * stamps contextResetAt so the next turn re-sends a full system preamble
+ * rather than trusting now-stale --resume memory.
+ *
+ * Shared between that gate and mergeSkills below so the composer's
+ * autocomplete never offers a command parseSkillInvocation would then
+ * refuse to forward.
  */
-export const ALLOWED_BUILTIN_COMMANDS = new Set(['compact']);
+export const ALLOWED_BUILTIN_COMMANDS = new Set(['compact', 'clear']);
 
 /**
  * @typedef {Object} SlashCommand

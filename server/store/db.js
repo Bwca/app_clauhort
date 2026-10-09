@@ -148,6 +148,16 @@ function transaction(fn) {
  *   informational, shown in the agent panel so a still-limited agent is
  *   visible before you try prompting it again). Cleared on this agent's next
  *   successful turn.
+ * @property {string} [contextResetAt] - ISO 8601 timestamp of this agent's
+ *   most recent "/clear" (see commands.js's ALLOWED_BUILTIN_COMMANDS and
+ *   agentProcessManager.js's conversation_reset handling), or undefined if
+ *   it's never been cleared. A "/clear" rotates the underlying CLI session
+ *   to a brand-new one with zero memory of anything before it — unlike a
+ *   compaction, which just summarizes the SAME session. buildPromptBlocks
+ *   and catchUpMessagesFor (ws/handler.js) both check this against an
+ *   agent's own last chat message to know a resumed session can no longer
+ *   be trusted to remember turns from before this point, the same way they
+ *   already treat an agent with no resumeId at all as having zero memory.
  * @property {string} createdAt - ISO 8601 timestamp
  */
 
@@ -269,6 +279,7 @@ CREATE TABLE IF NOT EXISTS agents (
   last_turn_cost_usd REAL,
   last_context_tokens INTEGER,
   session_limit_reset_at TEXT,
+  context_reset_at TEXT,
   created_at TEXT NOT NULL
 );
 
@@ -495,6 +506,18 @@ function migrateAgentsSessionLimitReset() {
 }
 
 /**
+ * Adds the `context_reset_at` column to `agents` if it's missing, same
+ * reasoning as migrateAgentsUsageStats above.
+ * @returns {void}
+ */
+function migrateAgentsContextResetAt() {
+  const columns = db.prepare("PRAGMA table_info(agents)").all().map((col) => col.name);
+  if (!columns.includes('context_reset_at')) {
+    db.exec('ALTER TABLE agents ADD COLUMN context_reset_at TEXT');
+  }
+}
+
+/**
  * Adds the `tool_calls` column to `messages` if it's missing — needed for
  * any database created before this column existed, since `CREATE TABLE IF
  * NOT EXISTS` in SCHEMA only applies to brand-new databases. A no-op (one
@@ -655,6 +678,7 @@ function rowToAgent(row) {
   if (row.last_turn_cost_usd != null) agent.lastTurnCostUsd = row.last_turn_cost_usd;
   if (row.last_context_tokens != null) agent.lastContextTokens = row.last_context_tokens;
   if (row.session_limit_reset_at) agent.sessionLimitResetAt = row.session_limit_reset_at;
+  if (row.context_reset_at) agent.contextResetAt = row.context_reset_at;
   return agent;
 }
 
@@ -807,6 +831,7 @@ export async function loadDb() {
   migrateAgentsUsageStats();
   migrateAgentsLastTurnCost();
   migrateAgentsSessionLimitReset();
+  migrateAgentsContextResetAt();
   migrateChatMembersUniqueAgent();
   migrateChatsRosterChangedAt();
   migrateChatsFreeRelay();
@@ -907,6 +932,31 @@ export async function updateAgent(id, updates) {
  */
 export async function setAgentResumeIdIfUnset(id, resumeId) {
   const result = db.prepare('UPDATE agents SET resume_id = ? WHERE id = ? AND resume_id IS NULL').run(resumeId, id);
+  return result.changes > 0 ? getAgent(id) : null;
+}
+
+/**
+ * Records a "/clear" local command's effect: overwrites resumeId
+ * unconditionally — unlike setAgentResumeIdIfUnset's "only if unset"
+ * semantics, a "/clear" always starts a genuinely NEW CLI session,
+ * replacing whatever session this agent was resuming before, so the old
+ * resumeId must be discarded rather than kept. Also stamps contextResetAt
+ * to now, so buildPromptBlocks/catchUpMessagesFor (ws/handler.js) know this
+ * agent's live session memory doesn't extend past this point and treat its
+ * next turn like a brand-new session (full system preamble + full catch-up
+ * window), rather than trusting stale --resume-backed memory that no
+ * longer exists on the CLI side.
+ * @param {string} id
+ * @param {string} resumeId - The new session_id the CLI reported once this
+ *   "/clear" turn's session actually rotated (see
+ *   agentProcessManager.js's conversation_reset handling).
+ * @returns {Promise<Agent | null>} the updated agent, or null if not found
+ */
+export async function recordContextClear(id, resumeId) {
+  const contextResetAt = new Date().toISOString();
+  const result = db.prepare(
+    'UPDATE agents SET resume_id = ?, context_reset_at = ? WHERE id = ?'
+  ).run(resumeId, contextResetAt, id);
   return result.changes > 0 ? getAgent(id) : null;
 }
 

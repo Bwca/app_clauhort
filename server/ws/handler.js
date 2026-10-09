@@ -6,7 +6,7 @@
 import { WebSocket, WebSocketServer } from 'ws';
 import { v4 as uuidv4 } from 'uuid';
 import { dirname } from 'path';
-import { getChat, getAgent, getAgentChatId, getMessages, addMessage, grantAgentPath, grantAgentToolPattern, setAgentResumeIdIfUnset, setAgentModel, setAgentUsage, setAgentSessionLimitReset, getUserDisplayName, createScheduledMessage, getScheduledMessages } from '../store/db.js';
+import { getChat, getAgent, getAgentChatId, getMessages, addMessage, grantAgentPath, grantAgentToolPattern, setAgentResumeIdIfUnset, recordContextClear, setAgentModel, setAgentUsage, setAgentSessionLimitReset, getUserDisplayName, createScheduledMessage, getScheduledMessages } from '../store/db.js';
 import { parseResponders, extractMentionedAgents, parseSkillInvocation } from '../services/messageRouter.js';
 import { runAgentStream, FILE_PATH_TOOLS, deriveToolPatterns, dedupePermissionDenials } from '../services/agentRunner.js';
 import { killAgent, onBackgroundTurn, onBackgroundCompaction, onBackgroundError } from '../services/agentProcessManager.js';
@@ -332,6 +332,13 @@ function renderHistoryLine(m) {
  * chat's history, `lastOwnIdx` stays -1 and the full window still goes out,
  * exactly as if it had no resumeId.
  *
+ * A past "/clear" (agent.contextResetAt — see its docs on the Agent
+ * typedef) gets the same "zero memory" treatment: a turn from before the
+ * reset doesn't count as a valid `lastOwnIdx` boundary, since the CLI
+ * session that actually ran it no longer exists. If this agent hasn't
+ * spoken again since clearing, that search comes up empty and the full
+ * window goes out, same as a never-resumed agent.
+ *
  * @param {import('../store/db.js').Agent} agent
  * @param {import('../store/db.js').Message[]} messages - Chronological (oldest first)
  * @returns {import('../store/db.js').Message[]}
@@ -348,7 +355,10 @@ export function catchUpMessagesFor(agent, messages) {
     // session's memory picks up from. isSystemNote messages (a compaction
     // report — see Message.isSystemNote's docs) are skipped for the same
     // reason: nothing the model said, so not a real "last turn" either.
-    if (messages[i].agentId === agent.id && !messages[i].isLocalCommandOnly && !messages[i].isSystemNote) { lastOwnIdx = i; break; }
+    if (
+      messages[i].agentId === agent.id && !messages[i].isLocalCommandOnly && !messages[i].isSystemNote
+      && (!agent.contextResetAt || messages[i].createdAt > agent.contextResetAt)
+    ) { lastOwnIdx = i; break; }
   }
   // isSystemNote messages are never catch-up content for anyone — they're a
   // UI-only aside about one agent, not information another agent needs.
@@ -481,7 +491,15 @@ export function buildPromptBlocks(agent, chat, members, newMessage, priorMessage
   // isLocalCommandOnly/isSystemNote messages don't count — see
   // catchUpMessagesFor's docs on why they can't be trusted as evidence the
   // model ever saw anything sent alongside them, preamble included.
-  const hasSpokenInChat = priorMessages.some((m) => m.agentId === agent.id && !m.isLocalCommandOnly && !m.isSystemNote);
+  const lastOwnMessage = [...priorMessages].reverse().find((m) => m.agentId === agent.id && !m.isLocalCommandOnly && !m.isSystemNote);
+  // A "/clear" since that last turn (agent.contextResetAt — see its docs on
+  // the Agent typedef) rotated this agent's live CLI session to a brand-new
+  // one with zero memory, same as an agent that's never spoken in this chat
+  // at all — so it gets the same full-preamble treatment rather than being
+  // treated as already introduced.
+  const clearedSinceLastTurn = Boolean(agent.contextResetAt && (!lastOwnMessage || agent.contextResetAt > lastOwnMessage.createdAt));
+  const hasSpokenInChat = !clearedSinceLastTurn
+    && priorMessages.some((m) => m.agentId === agent.id && !m.isLocalCommandOnly && !m.isSystemNote);
   const systemPreamble = hasSpokenInChat ? '' : buildSystemPreamble(agent, chat, members);
 
   const filteredPriorMessages = excludeMessageId
@@ -501,7 +519,6 @@ export function buildPromptBlocks(agent, chat, members, newMessage, priorMessage
   // (bumped in db.js's addChatMember/removeChatMember) catches that case:
   // if it's newer than this agent's own last turn in the chat, the roster
   // note goes out even with zero catch-up content.
-  const lastOwnMessage = [...priorMessages].reverse().find((m) => m.agentId === agent.id && !m.isLocalCommandOnly && !m.isSystemNote);
   const rosterStaleSinceLastTurn = Boolean(
     hasSpokenInChat && chat.rosterChangedAt && (!lastOwnMessage || chat.rosterChangedAt > lastOwnMessage.createdAt)
   );
@@ -975,7 +992,7 @@ async function runAgentsParallel(agents, allMembers, chat, userMessage, wss, pri
     log.info({ agentId: agent.id, chatId: chat.id, streamId }, 'turn started');
 
     try {
-      const { text: fullText, permissionDenials, sessionId, stopped, toolCalls, wasLocalCommand, usage, totalCostUsd, durationMs, model, compactions } = await runAgentStream({
+      const { text: fullText, permissionDenials, sessionId, stopped, toolCalls, wasLocalCommand, contextCleared, usage, totalCostUsd, durationMs, model, compactions } = await runAgentStream({
         agent,
         chatId: chat.id,
         content,
@@ -1008,7 +1025,16 @@ async function runAgentsParallel(agents, allMembers, chat, userMessage, wss, pri
       });
       logTranscript({ chatId: chat.id, agentId: agent.id, agentName: agent.name, streamId, direction: 'RECEIVED', content: fullText });
 
-      if (sessionId && !agent.resumeId) {
+      if (contextCleared && sessionId) {
+        // A "/clear" rotated this agent's CLI session to a brand-new
+        // session_id — recordContextClear overwrites resumeId
+        // unconditionally (unlike setAgentResumeIdIfUnset below, whose
+        // "only if unset" semantics would otherwise silently discard this)
+        // and stamps contextResetAt so buildPromptBlocks/catchUpMessagesFor
+        // know not to trust this agent's pre-clear session memory anymore.
+        const updated = await recordContextClear(agent.id, sessionId);
+        if (updated) broadcast(wss, { type: 'AGENT_UPDATED', agent: updated });
+      } else if (sessionId && !agent.resumeId) {
         const updated = await setAgentResumeIdIfUnset(agent.id, sessionId);
         if (updated) broadcast(wss, { type: 'AGENT_UPDATED', agent: updated });
       }
@@ -1039,17 +1065,28 @@ async function runAgentsParallel(agents, allMembers, chat, userMessage, wss, pri
         role: 'agent',
         agentId: agent.id,
         authorName: agent.name,
-        // A stop right at the very start (before any text streamed) would
-        // otherwise persist a blank message — fall back to a placeholder so
-        // the chat still shows something happened.
-        content: fullText || (stopped ? t('chat.stoppedEmptyPlaceholder') : ''),
+        // A "/clear" (contextCleared) never produces real assistant text —
+        // see agentProcessManager.js's conversation_reset handling — so
+        // this becomes a system note ("starting fresh"), the same way a
+        // context-compaction report does (postCompactionNotes), rather
+        // than a blank reply bubble. Otherwise, a stop right at the very
+        // start (before any text streamed) would otherwise persist a blank
+        // message — fall back to a placeholder so the chat still shows
+        // something happened.
+        content: contextCleared
+          ? '🧹 Context cleared — starting a fresh session'
+          : (fullText || (stopped ? t('chat.stoppedEmptyPlaceholder') : '')),
         attachments: [],
         toolCalls,
         createdAt: new Date().toISOString(),
       };
       if (wasLocalCommand) agentMessage.isLocalCommandOnly = true;
+      if (contextCleared) agentMessage.isSystemNote = true;
       await addMessage(agentMessage);
-      responded.set(agent.id, agentMessage);
+      // A context-clear note is informational, not a real reply — never
+      // relay-worthy, same reasoning postCompactionNotes gives for not
+      // touching `responded` either.
+      if (!contextCleared) responded.set(agent.id, agentMessage);
 
       const dedupedDenials = dedupePermissionDenials(permissionDenials);
       /** @type {AgentStreamEndEvent} */

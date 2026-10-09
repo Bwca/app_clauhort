@@ -140,6 +140,15 @@ export function dedupePermissionDenials(denials) {
  *   intercepted this turn before the model saw it — see
  *   agentProcessManager.js's createTurnAccumulator and
  *   db.js's Message.isLocalCommandOnly for why callers need this.
+ * @property {boolean} contextCleared - True if this turn was a bare
+ *   "/clear" the CLI's own local-command dispatcher intercepted — a
+ *   DIFFERENT wire shape than wasLocalCommand above (no synthetic assistant
+ *   message; a "system"/"conversation_reset" event instead), and one that
+ *   genuinely rotates `sessionId` to a brand-new CLI session rather than
+ *   just intercepting a turn within the existing one. See
+ *   agentProcessManager.js's createTurnAccumulator and
+ *   store/db.js's recordContextClear for why callers need this distinct
+ *   from wasLocalCommand.
  * @property {import('./agentProcessManager.js').TurnUsage | null} usage - Token
  *   accounting for this turn straight from the CLI's own `result` event.
  * @property {number | null} totalCostUsd - The CLI's own cost estimate for this turn.

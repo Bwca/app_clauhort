@@ -190,4 +190,33 @@ describe('buildPromptBlocks', () => {
     const blocks = buildPromptBlocks(agent, freshChat, members, newMessage, priorMessages);
     assert.equal(blocks.length, 1, `expected just the new message, no roster note, got: ${JSON.stringify(blocks)}`);
   });
+
+  test('an agent already spoken-to gets the full [System] preamble again after a "/clear" since its last real turn', () => {
+    // contextResetAt (stamped by store/db.js's recordContextClear once a
+    // "/clear" turn rotates the CLI's session) must be treated the same way
+    // a brand-new agent with no resumeId at all is — its live session
+    // genuinely forgot everything, so skipping the preamble because
+    // priorMessages contains an older reply would leave it with no idea who
+    // it is or who its teammates are.
+    const agent = { id: 'claudia', name: 'Claudia', workingDir: '/tmp/claudia', resumeId: 'sess-2', contextResetAt: '2026-08-13T12:00:00.000Z' };
+    const priorMessages = [
+      { id: 'm0', agentId: 'claudia', authorName: 'Claudia', content: 'earlier reply, before the clear', attachments: [], createdAt: '2026-08-13T11:00:00.000Z' },
+      { id: 'm1', agentId: 'claudia', authorName: 'Claudia', content: '🧹 Context cleared — starting a fresh session', attachments: [], isSystemNote: true, createdAt: '2026-08-13T12:00:00.000Z' },
+    ];
+    const blocks = buildPromptBlocks(agent, chat, members, newMessage, priorMessages);
+    const firstBlockText = blocks[0].text;
+    assert.match(firstBlockText, /\[System\]/, 'a cleared agent must be re-introduced, same as a never-yet-spoken one');
+    assert.match(firstBlockText, /under the name "Claudia"/);
+  });
+
+  test('an agent that has already spoken AGAIN after the "/clear" correctly skips the preamble a second time', () => {
+    const agent = { id: 'claudia', name: 'Claudia', workingDir: '/tmp/claudia', resumeId: 'sess-2', contextResetAt: '2026-08-13T12:00:00.000Z' };
+    const priorMessages = [
+      { id: 'm0', agentId: 'claudia', authorName: 'Claudia', content: '🧹 Context cleared — starting a fresh session', attachments: [], isSystemNote: true, createdAt: '2026-08-13T12:00:00.000Z' },
+      { id: 'm1', agentId: 'claudia', authorName: 'Claudia', content: 'hi again, freshly introduced', attachments: [], createdAt: '2026-08-13T12:05:00.000Z' },
+    ];
+    const blocks = buildPromptBlocks(agent, chat, members, newMessage, priorMessages);
+    assert.equal(blocks.length, 1, `expected just the new message, no preamble, got: ${JSON.stringify(blocks)}`);
+    assert.equal(blocks[0].text, 'hello there');
+  });
 });
