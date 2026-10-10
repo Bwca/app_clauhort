@@ -336,19 +336,26 @@ describe('Chat management', () => {
     assert.equal(text, 'done', 'the finished reply should render once the user is back on its chat');
   });
 
-  test('selecting a chat never touches the URL, but persists via sessionStorage — refreshing returns to that same chat', async () => {
+  test('selecting a chat mirrors its id into the URL and persists via sessionStorage — refreshing returns to that same chat', async () => {
+    // Deliberately changed since this test was first written: a chat's id
+    // now mirrors into the URL as ?chat=<id> (see CHAT_URL_PARAM/
+    // syncChatIdToUrl in app.js) so the address bar can be copied and
+    // pasted elsewhere to reopen that exact chat — sessionStorage remains
+    // in play too (restores whichever chat was active when the URL itself
+    // carries no ?chat, e.g. a plain reload after only ever navigating via
+    // the sidebar).
     await createChat(page, 'Chat A');
     await createChat(page, 'Chat B'); // ends up active — createChat selects what it creates
 
-    assert.equal(new URL(page.url()).search, '', 'the chat id must never be exposed as a URL query param');
     const storedId = await page.evaluate((key) => sessionStorage.getItem(key), 'app.activeChatId');
     assert.ok(storedId, 'expected the active chat id to be persisted in sessionStorage');
+    assert.equal(new URL(page.url()).search, `?chat=${storedId}`, 'the active chat id should be mirrored into the URL');
 
     await reloadAndWaitForConnection(page);
 
     const topbarText = await page.$eval(tid('chat-topbar-name'), (el) => el.textContent.trim());
     assert.ok(topbarText.includes('Chat B'), `expected to land back on Chat B after reload, topbar: "${topbarText}"`);
-    assert.equal(new URL(page.url()).search, '', 'the URL must still have no query params after the reload restores the chat');
+    assert.equal(new URL(page.url()).search, `?chat=${storedId}`, 'the URL should still carry the same chat id after the reload restores it');
   });
 
   test('deleting the active chat clears its sessionStorage entry', async () => {
