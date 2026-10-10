@@ -3950,7 +3950,11 @@ async function openSettingsModal() {
   settingsError.hidden = true;
   settingsError.textContent = '';
   settingsSave.disabled = false;
-  settingsOverlay.hidden = false;
+  // Shown only once every field below is populated — showing it first and
+  // filling fields in after the fetch resolves left a window where the
+  // modal was visible but still stale, and a selection made in that window
+  // (e.g. picking a new language right after opening) got silently
+  // clobbered the moment the fetch finally landed and overwrote it back.
   try {
     const res = await fetch('/api/settings');
     const settings = /** @type {Settings} */ (await res.json());
@@ -3965,6 +3969,7 @@ async function openSettingsModal() {
     settingsThemeSelect.value = userSettings.theme ?? 'dark';
   }
   renderColorGrid(settingsColorGrid, selectedUserColor, (c) => { selectedUserColor = c; });
+  settingsOverlay.hidden = false;
   settingsDisplayNameInput.focus();
 }
 
