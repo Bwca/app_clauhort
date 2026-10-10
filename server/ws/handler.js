@@ -890,13 +890,13 @@ async function postCompactionNotes(chat, agent, compactions, wss) {
 }
 
 /**
- * Who took a roster-changing action (removed an agent from a chat, or
- * deleted one outright) — the only two surfaces that can do either are a
- * REST call from the browser tab ('user' — the app has no auth, so this is
- * always the single local operator, see CLAUDE.md) or an external Claude
- * instance driving Clauhort over /mcp ('mcp' — see mcp/tools.js). An MCP
- * caller has no finer-grained identity than the bearer token it connected
- * with, so 'mcp' is as specific as this can get.
+ * Who took a roster-changing action (added or removed an agent from a
+ * chat, or deleted one outright) — the only two surfaces that can do any
+ * of these are a REST call from the browser tab ('user' — the app has no
+ * auth, so this is always the single local operator, see CLAUDE.md) or an
+ * external Claude instance driving Clauhort over /mcp ('mcp' — see
+ * mcp/tools.js). An MCP caller has no finer-grained identity than the
+ * bearer token it connected with, so 'mcp' is as specific as this can get.
  * @typedef {'user' | 'mcp'} RosterActor
  */
 
@@ -924,6 +924,42 @@ export async function postAgentRemovedNote(chat, agent, actor, wss) {
     agentId: agent.id,
     authorName: 'System',
     content: `🚪 ${actorLabel} removed ${agent.name} from the chat`,
+    attachments: [],
+    toolCalls: [],
+    isSystemNote: true,
+    createdAt: new Date().toISOString(),
+  };
+  await addMessage(noteMessage);
+  /** @type {MessageSavedEvent} */
+  broadcast(wss, { type: 'MESSAGE_SAVED', chatId: chat.id, message: noteMessage });
+}
+
+/**
+ * Persists and broadcasts one isSystemNote message recording that `agent`
+ * was added to `chat` — symmetric with postAgentRemovedNote just above,
+ * same reasoning (a visible, searchable record of who/what changed the
+ * roster, and telling a REST/UI add apart from one made by an external
+ * Claude instance over /mcp). Deliberately not wired into bulk-membership
+ * paths (create_chat's initial memberAgentIds, say) — same scope
+ * postAgentRemovedNote itself keeps by staying out of delete_chat — this
+ * is for the single add_agent_to_chat/POST .../members action a human or
+ * an MCP client takes against an already-existing chat.
+ * @param {import('../store/db.js').Chat} chat
+ * @param {import('../store/db.js').Agent} agent - the agent that was added
+ * @param {RosterActor} actor
+ * @param {WebSocketServer} wss
+ * @returns {Promise<void>}
+ */
+export async function postAgentAddedNote(chat, agent, actor, wss) {
+  const actorLabel = actor === 'mcp' ? 'An MCP client' : 'You';
+  /** @type {import('../store/db.js').Message} */
+  const noteMessage = {
+    id: uuidv4(),
+    chatId: chat.id,
+    role: 'agent',
+    agentId: agent.id,
+    authorName: 'System',
+    content: `➕ ${actorLabel} added ${agent.name} to the chat`,
     attachments: [],
     toolCalls: [],
     isSystemNote: true,

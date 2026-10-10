@@ -38,7 +38,7 @@ import {
 } from '../store/db.js';
 import { verifyClaudeBinAvailable } from '../services/agentRunner.js';
 import { spawnForAgent, killAgent } from '../services/agentProcessManager.js';
-import { handleUserMessage, broadcast, postAgentRemovedNote } from '../ws/handler.js';
+import { handleUserMessage, broadcast, postAgentRemovedNote, postAgentAddedNote } from '../ws/handler.js';
 import { t } from '../i18n/t.js';
 
 /** @returns {{ content: [{ type: 'text', text: string }] }} */
@@ -227,6 +227,7 @@ export function registerTools(mcpServer, wss) {
       const agent = getAgent(agentId);
       if (agent) spawnForAgent(agent);
       broadcast(wss, { type: 'CHAT_UPDATED', chat });
+      if (agent) await postAgentAddedNote(chat, agent, 'mcp', wss);
       return ok(chat);
     }
   );

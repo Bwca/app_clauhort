@@ -31,7 +31,7 @@ import {
 } from '../store/db.js';
 import { scheduleTimer, cancelScheduledMessage, fireScheduledMessage } from '../services/scheduler.js';
 import { spawnForAgent, killAgent } from '../services/agentProcessManager.js';
-import { postAgentRemovedNote } from '../ws/handler.js';
+import { postAgentRemovedNote, postAgentAddedNote } from '../ws/handler.js';
 import { t } from '../i18n/t.js';
 
 /**
@@ -205,7 +205,10 @@ export default function createChatsRouter(wss) {
     const chat = await addChatMember(req.params.id, agentId);
     if (!chat) return res.status(404).json({ error: t('errors.chatNotFound') });
     const agent = getAgent(agentId);
-    if (agent) spawnForAgent(agent);
+    if (agent) {
+      spawnForAgent(agent);
+      await postAgentAddedNote(chat, agent, 'user', wss);
+    }
     res.json(chat);
   });
 
