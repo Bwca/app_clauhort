@@ -645,6 +645,20 @@ export async function handleUserMessage(event, wss) {
   let roundMessages = respondedMessages;
   let round = 0;
   while (roundMessages.size > 0) {
+    // Re-read chat/members fresh each round instead of reusing the outer
+    // `chat`/`members` snapshot taken before ANY turn ran. Reported live: a
+    // responder can itself call the MCP add_agent_to_chat tool mid-turn and
+    // then @mention that same just-added teammate in its own reply — by the
+    // time that reply is scanned here, DB membership already includes the
+    // new agent, but the stale `members` list doesn't, so
+    // extractMentionedAgents never recognizes the mention as a valid target
+    // and the relay silently never fires (the mentioned agent's cost stays
+    // $0 — it never even saw the message). Cheap (one more getChat/getAgent
+    // pass per round) and correct for the opposite case too (a teammate
+    // removed mid-chain stops being a valid relay target immediately).
+    const currentChat = getChat(chatId) ?? chat;
+    const currentMembers = currentChat.memberAgentIds.map((id) => getAgent(id)).filter(Boolean);
+
     // Scans only the messages produced by the PREVIOUS round, not a
     // re-fetched window from the DB — an agent's message from an earlier,
     // unrelated turn can still be among the chat's most recent rows (e.g. it
@@ -653,17 +667,17 @@ export async function handleUserMessage(event, wss) {
     // relay trigger.
     const relayTargets = new Map(); // targetAgentId -> { agent, message } — first mention wins per round, so a target relays once per round even if multiple messages that round mention it
     for (const msg of roundMessages.values()) {
-      for (const target of extractMentionedAgents(msg.content, members)) {
+      for (const target of extractMentionedAgents(msg.content, currentMembers)) {
         if (target.id === msg.agentId) continue; // an agent mentioning itself doesn't relay to itself
-        if (!chat.freeRelay && respondedMessages.has(target.id)) continue; // bounded mode: never relay back to an original responder
+        if (!currentChat.freeRelay && respondedMessages.has(target.id)) continue; // bounded mode: never relay back to an original responder
         if (relayTargets.has(target.id)) continue;
         relayTargets.set(target.id, { agent: target, message: msg });
       }
     }
     if (relayTargets.size === 0) break;
-    if (!chat.freeRelay && round >= 1) break; // bounded mode: exactly one relay round total
-    if (chat.freeRelay && round >= FREE_RELAY_MAX_ROUNDS) {
-      log.warn({ chatId: chat.id, rounds: round }, 'free relay hit its safety ceiling, stopping the chain');
+    if (!currentChat.freeRelay && round >= 1) break; // bounded mode: exactly one relay round total
+    if (currentChat.freeRelay && round >= FREE_RELAY_MAX_ROUNDS) {
+      log.warn({ chatId: currentChat.id, rounds: round }, 'free relay hit its safety ceiling, stopping the chain');
       break;
     }
 
@@ -686,8 +700,8 @@ export async function handleUserMessage(event, wss) {
       [...relayGroups.values()].map(({ message, agents }) =>
         runAgentsParallel(
           agents,
-          members,
-          chat,
+          currentMembers,
+          currentChat,
           { content: message.content, attachments: message.attachments },
           wss,
           relayPriorMessages,
