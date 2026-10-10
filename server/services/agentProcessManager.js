@@ -954,25 +954,57 @@ function runOneTurn(proc, content, { onChunk, onStatus, signal }) {
  * the old, dying-but-not-yet-reaped process in the registry and write the
  * new turn's stdin message into it instead of a correctly-flagged fresh
  * spawn.
+ *
+ * By default (`immediate: false`) this waits for `proc.queue` — i.e. any
+ * turn currently running against this process — to finish BEFORE sending
+ * the signal, rather than cutting it off mid-stream. Reported live: an
+ * MCP client (another agent in the same chat, managing its own teammates)
+ * removed an agent from the chat — and this function fired — while that
+ * agent's own turn was still mid-flight, truncating its reply and
+ * surfacing as an error. For an idle agent (the overwhelmingly common
+ * case — a flag change or removal normally happens between turns) `queue`
+ * is already resolved, so this adds no delay at all; it only matters when
+ * a removal/flag-change genuinely races a live turn. Growing an
+ * in-flight turn to full completion before tearing the process down costs
+ * nothing structurally since nothing here depends on timely teardown
+ * except shutdown (see killAll below, which opts out via
+ * `immediate: true` — the process is going down regardless, so waiting
+ * out a live turn there would only make shutdown hang).
  * @param {string} agentId
+ * @param {{ immediate?: boolean }} [options]
  * @returns {Promise<void>}
  */
-export function killAgent(agentId) {
+export function killAgent(agentId, { immediate = false } = {}) {
   const proc = processes.get(agentId);
   if (!proc) return Promise.resolve();
-  return new Promise((resolve) => {
-    proc.child.once('exit', () => resolve());
-    killTree(proc.child, 'SIGTERM', agentId);
-  });
+
+  const sendKill = () => {
+    // Re-read from the registry rather than closing over `proc`: while we
+    // were waiting on its queue, that process could already have exited on
+    // its own (crash) and been replaced by a freshly-spawned one — the
+    // thing we actually want gone is whatever this agent is CURRENTLY
+    // running, not the specific object captured above.
+    const live = processes.get(agentId);
+    if (!live || !isAlive(live)) return Promise.resolve();
+    return new Promise((resolve) => {
+      live.child.once('exit', () => resolve());
+      killTree(live.child, 'SIGTERM', agentId);
+    });
+  };
+
+  return immediate ? sendKill() : proc.queue.then(sendKill, sendKill);
 }
 
 /**
  * Kills every live agent process and waits for them all to actually exit
  * — used for graceful server shutdown, so a plain `kill <pid>` on the
  * Node process (which does NOT forward to children not in their own
- * process group) doesn't orphan them.
+ * process group) doesn't orphan them. Passes `immediate: true` to
+ * killAgent: the whole server is going down regardless, so waiting out
+ * whatever turn happens to be running (killAgent's normal, safer default)
+ * would just make shutdown hang on it instead of actually being graceful.
  * @returns {Promise<void>}
  */
 export async function killAll() {
-  await Promise.all([...processes.keys()].map((agentId) => killAgent(agentId)));
+  await Promise.all([...processes.keys()].map((agentId) => killAgent(agentId, { immediate: true })));
 }

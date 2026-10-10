@@ -195,7 +195,12 @@ export function registerTools(mcpServer, wss) {
       const memberAgentIds = getChat(chatId)?.memberAgentIds ?? [];
       const deleted = await deleteChat(chatId);
       if (!deleted) return fail(t('errors.chatNotFound'));
-      await Promise.all(memberAgentIds.map((agentId) => killAgent(agentId)));
+      // Not awaited: killAgent (by default) waits out any turn a member is
+      // still mid-stream on before actually tearing its process down,
+      // which could take a while — the chat is already gone from the
+      // caller's perspective the moment this returns, and nothing past
+      // this point needs the process to have actually exited yet.
+      for (const agentId of memberAgentIds) killAgent(agentId).catch(() => {});
       broadcast(wss, { type: 'CHAT_DELETED', chatId });
       if (deleteAgents) {
         await Promise.all(memberAgentIds.map((agentId) => deleteAgent(agentId)));
@@ -244,7 +249,14 @@ export function registerTools(mcpServer, wss) {
       if (!chat) return fail(t('errors.chatNotFound'));
       broadcast(wss, { type: 'CHAT_UPDATED', chat });
       if (wasMember) {
-        await killAgent(agentId);
+        // Not awaited — see delete_chat's comment just above for why: this
+        // tool responds (and the agent disappears from the chat) the
+        // moment membership is gone, rather than blocking on killAgent's
+        // graceful wait for whatever turn this agent might currently be
+        // mid-stream on. Reported live: an MCP client removed a teammate
+        // via this tool while its reply was still streaming, truncating it
+        // and surfacing as an error — this is the fix for that.
+        killAgent(agentId).catch(() => {});
         // removeChatMember() already cleared the agent's resumeId — surface
         // that too, same reasoning as delete_chat above.
         const agent = getAgent(agentId);
@@ -360,7 +372,11 @@ export function registerTools(mcpServer, wss) {
       if (chatBeforeDelete && agent) await postAgentRemovedNote(chatBeforeDelete, agent, 'mcp', wss);
       const deleted = await deleteAgent(agentId);
       if (!deleted) return fail(t('errors.agentNotFound'));
-      await killAgent(agentId);
+      // Not awaited — same reasoning as remove_agent_from_chat above: this
+      // tool responds the moment the agent's DB row is gone, rather than
+      // blocking on killAgent's graceful wait for whatever turn it might
+      // currently be mid-stream on.
+      killAgent(agentId).catch(() => {});
       broadcast(wss, { type: 'AGENT_DELETED', agentId });
       // Deleting an agent cascade-deletes its chat_members row (see the
       // schema's ON DELETE CASCADE) — surface the chat's now-shorter

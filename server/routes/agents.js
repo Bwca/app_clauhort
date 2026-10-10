@@ -226,7 +226,14 @@ export default function createAgentsRouter(wss) {
     if (chat && agent) await postAgentRemovedNote(chat, agent, 'user', wss);
     const deleted = await deleteAgent(req.params.id);
     if (!deleted) return res.status(404).json({ error: t('errors.agentNotFound') });
-    await killAgent(req.params.id);
+    // Not awaited: killAgent (by default) waits out any turn this agent is
+    // still mid-stream on before actually tearing its process down, which
+    // could take a while — the agent is already gone from the caller's
+    // perspective (and the DB) the moment this responds, unlike
+    // POST /:id/restart above, which genuinely needs the old process gone
+    // before spawnForAgent runs or it'd just no-op against the still-alive
+    // one.
+    killAgent(req.params.id).catch(() => {});
     res.status(204).end();
   });
 

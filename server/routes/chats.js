@@ -183,8 +183,15 @@ export default function createChatsRouter(wss) {
     const deleted = await deleteChat(req.params.id);
     if (!deleted) return res.status(404).json({ error: t('errors.chatNotFound') });
     // Mirrors deleteChat's own resumeId reset (db.js) — the live process is
-    // the other place that session now lives.
-    await Promise.all(memberAgentIds.map((agentId) => killAgent(agentId)));
+    // the other place that session now lives. Not awaited: killAgent (by
+    // default) waits out any turn a member is still mid-stream on before
+    // actually tearing its process down, which could take a while — the
+    // chat is already gone from the caller's perspective the moment this
+    // responds, and nothing past this point needs the process to have
+    // actually exited yet (unlike --deleteAgents' deleteAgent call just
+    // below, which only touches these agents' DB rows, not their
+    // processes).
+    for (const agentId of memberAgentIds) killAgent(agentId).catch(() => {});
     if (req.query.deleteAgents === 'true') {
       await Promise.all(memberAgentIds.map((agentId) => deleteAgent(agentId)));
     }
@@ -227,7 +234,11 @@ export default function createChatsRouter(wss) {
     const chat = await removeChatMember(req.params.id, req.params.agentId);
     if (!chat) return res.status(404).json({ error: t('errors.chatNotFound') });
     if (wasMember) {
-      await killAgent(req.params.agentId);
+      // Not awaited — see DELETE /:id's comment just above for why: this
+      // call responds (and the agent disappears from the chat) the moment
+      // membership is gone, rather than blocking on killAgent's graceful
+      // wait for whatever turn this agent might currently be mid-stream on.
+      killAgent(req.params.agentId).catch(() => {});
       const agent = getAgent(req.params.agentId);
       if (agent) await postAgentRemovedNote(chat, agent, 'user', wss);
     }
